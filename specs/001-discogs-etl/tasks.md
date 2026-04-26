@@ -43,27 +43,27 @@ clarification narrowed scope to Fase 1 only.
 manifest, base config, gitignore rules, and the curated test
 fixtures referenced throughout this spec.
 
-- [ ] T001 Create the `etl/` directory tree exactly as specified in
+- [X] T001 Create the `etl/` directory tree exactly as specified in
   `plan.md` Project Structure (subfolders only; no Python source
   yet): `etl/configs/`, `etl/src/discogs_etl/{pipeline,steps,parsers,transforms,io,quality}/`,
   `etl/tests/{unit,integration,fixtures}/`. Add empty
   `__init__.py` to every Python package directory under
   `etl/src/discogs_etl/`.
-- [ ] T002 Create `etl/pyproject.toml` declaring the component as a
+- [X] T002 Create `etl/pyproject.toml` declaring the component as a
   package named `discogs_etl` with dependencies pinned to working
   major versions: `lxml>=5`, `pyarrow>=15`, `duckdb>=1.0`,
   `click>=8.1`, `PyYAML>=6.0`. Test extras under `[project.optional-dependencies].test`:
   `pytest>=8`. Build backend: `setuptools` or `hatchling` (pick one).
   Source layout points at `etl/src/`.
-- [ ] T003 [P] Create `etl/configs/base.yml` with the schema from
+- [X] T003 [P] Create `etl/configs/base.yml` with the schema from
   `research.md` R-05: `snapshot_id`, `paths.{raw_dir,staging_dir,clean_dir,analytics_dir,published_duckdb,manifests_dir,logs_dir}`,
   `limits.{parser_batch_size: 50000, log_progress_every: 10000}`.
   Default `snapshot_id: discogs-2026-04`.
-- [ ] T004 [P] Update repo-root `.gitignore` to add `data/` so
+- [X] T004 [P] Update repo-root `.gitignore` to add `data/` so
   pipeline runtime outputs are never committed. Test fixtures
   remain trackable because they live under `etl/tests/fixtures/`,
   not `data/`.
-- [ ] T005 [P] Create
+- [X] T005 [P] Create
   `etl/tests/fixtures/releases_sample.xml` — a curated XML
   containing ≈5–10 `<release>` elements wrapped in a single
   `<releases>...</releases>` root, parseable end-to-end by
@@ -87,7 +87,7 @@ fixtures referenced throughout this spec.
   mid-release at line 10000 (404 closing tags vs 405 opening) — it
   is a reference / development resource, not a parseable fixture.
   Do not iterate it end-to-end without `recover=True`.
-- [ ] T006 [P] Create
+- [X] T006 [P] Create
   `etl/tests/fixtures/releases_sample_bad.xml` — derived from 2–3
   well-formed releases (cherry-picked from `releases_sample_raw.xml`
   or copied from `releases_sample.xml`) wrapped in
@@ -115,13 +115,13 @@ helpers, and the I/O wrappers. No pipeline-specific logic here.
 **⚠️ CRITICAL**: User Story 1 implementation cannot begin until this
 phase is complete.
 
-- [ ] T007 [P] Implement
+- [X] T007 [P] Implement
   `etl/src/discogs_etl/io/file_utils.py`: `make_run_id()` returning
   a sortable timestamp (`YYYY-MM-DDTHH-MM-SS` UTC), `sha256_file(path)`
   for streaming checksum without loading the file, and a small
   `atomic_replace(src, dst)` wrapper around `os.replace` with a
   same-filesystem assertion.
-- [ ] T008 [P] Implement
+- [X] T008 [P] Implement
   `etl/src/discogs_etl/pipeline/context.py`: a `RunConfig`
   dataclass shaped per `research.md` R-05 (loaded from YAML), a
   `RunContext` dataclass holding `run_id`, `snapshot_id`,
@@ -129,7 +129,7 @@ phase is complete.
   `configure_logging(run_id, config)` per `research.md` R-06
   (file handler at `data/logs/{run_id}.log` + stderr stream
   handler with the spec'd format).
-- [ ] T009 [P] Implement
+- [X] T009 [P] Implement
   `etl/src/discogs_etl/pipeline/manifest.py`: a `Manifest` class
   whose JSON shape matches `contracts/manifest.md` exactly. Methods:
   `Manifest.create(path, run_id, snapshot_id, etl_version, started_at)`,
@@ -138,14 +138,14 @@ phase is complete.
   `record_check_result(result)` (taking a `CheckResult` from
   `quality.checks`), `set_quality_status(status)`,
   `finalize(finished_at)`, `save()` (atomic write).
-- [ ] T010 [P] Implement
+- [X] T010 [P] Implement
   `etl/src/discogs_etl/io/parquet_writer.py`: a `BatchedParquetWriter`
   context manager wrapping `pyarrow.parquet.ParquetWriter`. Accepts
   an explicit `pyarrow.Schema` (per `data-model.md`'s type-mapping
   notes), buffers rows up to `parser_batch_size`, flushes one row
   group per buffer via `Table.from_pylist(rows, schema=schema)` and
   `writer.write_table(table)`. Closes the writer on `__exit__`.
-- [ ] T011 Implement
+- [X] T011 Implement
   `etl/src/discogs_etl/io/duckdb_publisher.py`: a `publish(ctx,
   analytics_dir)` function that writes a DuckDB at
   `{paths.published_duckdb}.new`, runs `CREATE TABLE ... AS SELECT
@@ -154,7 +154,7 @@ phase is complete.
   with the column list from `contracts/duckdb-schema.md` /
   `data-model.md`, closes the connection, and only then calls
   `file_utils.atomic_replace(.new, canonical)`. Depends on T007.
-- [ ] T012 Implement
+- [X] T012 Implement
   `etl/src/discogs_etl/pipeline/runner.py`: `run_pipeline(ctx,
   steps, *, skip_existing: bool, force: bool)` where `steps` is a
   list of `Step` callables (each a `(ctx) -> StepOutcome`).
@@ -196,7 +196,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
 > a non-TDD path can land tests alongside or just after the
 > implementation tasks they cover.
 
-- [ ] T013 [P] [US1] Implement
+- [X] T013 [P] [US1] Implement
   `etl/tests/unit/test_date_normalization.py` covering each rule
   in source spec §11.1: `YYYY-MM-DD` → `precision=day`;
   `YYYY-MM-00` → `precision=month`, `day=NULL`,
@@ -205,7 +205,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   `precision=unknown`; unparseable → `precision=invalid`; year
   outside `[1850, current_year+1]` → `precision=invalid`. Verify
   `decade = (year // 10) * 10` when year is set.
-- [ ] T014 [P] [US1] Implement
+- [X] T014 [P] [US1] Implement
   `etl/tests/unit/test_format_normalization.py` covering the
   source spec §11.2 mapping (each `format_name_raw` →
   `format_group`), and the `is_*_format` derivation rules from
@@ -213,7 +213,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   descriptions imply `is_vinyl_format`). Include an unmapped value
   test asserting `format_group = "Other"` or `"Unknown"` plus a
   warning side-channel.
-- [ ] T015 [P] [US1] Implement
+- [X] T015 [P] [US1] Implement
   `etl/tests/unit/test_release_fact_builder.py` taking in-memory
   pylist inputs for `clean_releases`, `clean_release_artists`
   (with primary flags), `clean_release_labels` (with primary
@@ -223,12 +223,12 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   `style_order=0`, `style=NULL`); asserts that joining is via the
   enumerated path (no `clean_release_formats`); asserts column set
   matches source spec §9.1.
-- [ ] T016 [P] [US1] Implement
+- [X] T016 [P] [US1] Implement
   `etl/tests/unit/test_quality_checks.py` covering each function
   in `quality/checks.py`. For each check: a `passed=True` case and
   at least one `passed=False` case. Verify severity matches
   `data-model.md`'s critical/warning split (FR-021).
-- [ ] T017 [P] [US1] Implement
+- [X] T017 [P] [US1] Implement
   `etl/tests/integration/test_sample_pipeline.py`:
   - happy path: invoke the `run` CLI subcommand against
     `releases_sample.xml`, assert all expected Parquet outputs
@@ -251,18 +251,18 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
 
 #### Transforms, parser, quality library (parallel — no inter-deps)
 
-- [ ] T018 [P] [US1] Implement
+- [X] T018 [P] [US1] Implement
   `etl/src/discogs_etl/transforms/text_normalization.py`: strip,
   empty-to-null, NFKC normalization (sparingly), and a small
   `clean_text(value: str | None) -> str | None` plus a
   `clean_int(value: str | None) -> int | None` for staging-clean
   conversions.
-- [ ] T019 [P] [US1] Implement
+- [X] T019 [P] [US1] Implement
   `etl/src/discogs_etl/transforms/date_normalization.py` per source
   spec §11.1: `parse_released(raw: str | None) -> ParsedDate`
   returning `(year, month, day, released_date, released_date_precision,
   decade)`. Pure function, no I/O.
-- [ ] T020 [P] [US1] Implement
+- [X] T020 [P] [US1] Implement
   `etl/src/discogs_etl/transforms/format_normalization.py` per
   source spec §11.2: `derive_format_group(name_raw)` →
   `format_group`; `derive_is_vinyl_format(format_group, descriptions)`,
@@ -270,7 +270,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   `derive_is_digital_format(...)`, `derive_is_box_set_format(...)`.
   Pure functions; emit a `FormatNormalizationWarning` for unmapped
   values that the caller can collect.
-- [ ] T021 [P] [US1] Implement
+- [X] T021 [P] [US1] Implement
   `etl/src/discogs_etl/parsers/releases_parser.py`:
   `iter_releases(path) -> Iterator[ReleaseRecord]` using
   `lxml.etree.iterparse(path, events=("end",), tag="release")` per
@@ -280,14 +280,14 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   format_descriptions, genres, styles, tracks). Calls `elem.clear()`
   and ancestor-walk-back after each release. Emits raw text — no
   normalization here.
-- [ ] T022 [P] [US1] Implement
+- [X] T022 [P] [US1] Implement
   `etl/src/discogs_etl/quality/checks.py`: one function per check
   in source spec §12.1–§12.7. Each function takes a `pyarrow.Table`
   (loaded from the just-written Parquet) and returns a `CheckResult`
   dataclass (`name`, `layer`, `table`, `severity`, `passed`,
   `details`). Severity classification per `data-model.md`
   (critical-vs-warning section).
-- [ ] T023 [P] [US1] Implement
+- [X] T023 [P] [US1] Implement
   `etl/src/discogs_etl/quality/report.py`: helpers to aggregate
   `CheckResult` lists into the manifest's
   `quality_checks.{status, warnings, results}` shape per
@@ -296,29 +296,29 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
 
 #### Pipeline steps (parallel — different files; runner sequences them at runtime)
 
-- [ ] T024 [P] [US1] Implement
+- [X] T024 [P] [US1] Implement
   `etl/src/discogs_etl/steps/init_run.py` (Step 0): generate /
   validate `run_id`, ensure all per-run output directories exist,
   create the manifest with `Manifest.create`, configure logging.
-- [ ] T025 [P] [US1] Implement
+- [X] T025 [P] [US1] Implement
   `etl/src/discogs_etl/steps/prepare_sources.py` (Step 1): assert
   `releases.xml` exists at the snapshot path, record `size_bytes`
   and SHA-256 checksum into `manifest.source_files.releases`. No
   copy/move in Fase 1; gzip handling deferred to Fase 3.
-- [ ] T026 [P] [US1] Implement
+- [X] T026 [P] [US1] Implement
   `etl/src/discogs_etl/steps/parse_releases.py` (Step 2): drive
   `parsers.releases_parser.iter_releases(...)` and write all eight
   staging Parquet outputs via `BatchedParquetWriter` per
   `data-model.md`. Honors `--limit-releases` by stopping after N
   records.
-- [ ] T027 [P] [US1] Implement
+- [X] T027 [P] [US1] Implement
   `etl/src/discogs_etl/steps/normalize_releases.py` (Step 5):
   load `stg_releases.parquet`, apply `text_normalization` and
   `date_normalization`, derive per-release counts (`track_count`,
   `artist_count`, `label_count`, `genre_count`, `style_count`,
   `format_count` — counted by joining the staging counts), write
   `clean_releases.parquet` with the schema from source spec §7.1.
-- [ ] T028 [P] [US1] Implement
+- [X] T028 [P] [US1] Implement
   `etl/src/discogs_etl/steps/normalize_release_entities.py`
   (Step 6): produce `clean_release_artists`,
   `clean_release_labels`, `clean_release_formats`,
@@ -327,13 +327,13 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   `is_primary_*` (= `*_order = 1`), apply the §7.3 dedup rule for
   labels, derive `is_*_format` flags for formats via
   `format_normalization`.
-- [ ] T029 [P] [US1] Implement
+- [X] T029 [P] [US1] Implement
   `etl/src/discogs_etl/steps/build_release_format_summary.py`
   (Step 7): aggregate `clean_release_formats` to release grain;
   derive `primary_format_*` (from `is_primary_format=true`),
   `format_count`, `has_*` flags via `any(is_*_format)`. Output
   `release_format_summary.parquet` per source spec §8.1.
-- [ ] T030 [P] [US1] Implement
+- [X] T030 [P] [US1] Implement
   `etl/src/discogs_etl/steps/build_release_fact.py` (Step 8):
   build `release_fact` per source spec §9.1 using the explicit
   join graph from `data-model.md` (`clean_releases` + primary
@@ -346,7 +346,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   Record
   `outputs.analytics.release_fact.distinct_release_count` in the
   manifest.
-- [ ] T031 [P] [US1] Implement
+- [X] T031 [P] [US1] Implement
   `etl/src/discogs_etl/steps/quality_checks.py` (Step 10):
   iterate over the registered `quality/checks` functions per
   layer, load each Parquet output as a `pyarrow.Table`, run the
@@ -354,14 +354,14 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
   feed results into the manifest. Sets the run-level
   quality status; the runner uses this to decide whether to
   proceed to publish.
-- [ ] T032 [P] [US1] Implement
+- [X] T032 [P] [US1] Implement
   `etl/src/discogs_etl/steps/publish_duckdb.py` (Step 9):
   guarded by the runner — only invoked when
   `quality_checks.status ∈ {passed, passed_with_warnings}`.
   Calls `io.duckdb_publisher.publish(ctx, analytics_dir)`.
   Records `outputs.published.duckdb.{path, published_at,
   tables, views}` in the manifest after the atomic rename.
-- [ ] T033 [P] [US1] Implement
+- [X] T033 [P] [US1] Implement
   `etl/src/discogs_etl/steps/finalize_manifest.py` (Step 11):
   set `finished_at`, ensure `step_durations` are populated,
   reconcile `quality_checks.status` (e.g., promote unrecorded
@@ -369,7 +369,7 @@ python -m discogs_etl.cli run --config etl/configs/base.yml
 
 #### CLI wiring (depends on all steps existing)
 
-- [ ] T034 [US1] Implement
+- [X] T034 [US1] Implement
   `etl/src/discogs_etl/cli.py` and
   `etl/src/discogs_etl/__main__.py` per `contracts/cli.md`.
   `cli.py`: a `click.Group` with `run` and `step` subcommands,
@@ -392,17 +392,17 @@ test (T017) passes both the happy and failure paths.
 add component-level documentation, and run end-to-end smoke as a
 human would.
 
-- [ ] T035 [P] Walk through `specs/001-discogs-etl/quickstart.md`
+- [X] T035 [P] Walk through `specs/001-discogs-etl/quickstart.md`
   by hand on a fresh shell (no prior `data/`), recording any
   step that doesn't behave as documented. File any deviations as
   fixes against the implementation, NOT changes to quickstart.md
   unless the doc itself is wrong.
-- [ ] T036 [P] Add `etl/README.md` summarizing the component (one
+- [X] T036 [P] Add `etl/README.md` summarizing the component (one
   paragraph), pointing at `specs/001-discogs-etl/` for the
   authoritative design docs and at the repo-root constitution for
   the binding principles. Include the `pip install -e etl/` and
   `python -m discogs_etl.cli --help` quickstart-of-quickstart.
-- [ ] T037 Run the full unit + integration test suite end-to-end:
+- [X] T037 Run the full unit + integration test suite end-to-end:
   `pytest etl/tests/`. All pass. Record wall-clock to verify
   SC-004 (sample-slice time-to-DuckDB < 60s). Record peak RSS
   (informational, not a Fase 1 gate).
