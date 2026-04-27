@@ -48,7 +48,7 @@ tests will assert against. The real raw fixtures
 committed; this phase builds the small curated siblings whose row
 counts and master-id mappings are predictable.
 
-- [ ] T001 [P] Create `etl/tests/fixtures/masters_sample.xml` —
+- [X] T001 [P] Create `etl/tests/fixtures/masters_sample.xml` —
   5 hand-crafted `<master>` elements wrapped in `<masters>...</masters>`,
   parseable by `lxml.iterparse`. Master ids and `main_release`
   values designed to align with the existing
@@ -76,7 +76,7 @@ counts and master-id mappings are predictable.
     9006, 9007 are referenced by `releases_sample.xml` but
     intentionally NOT included here, so master_fact gets 4
     additional rows with NULL metadata and `release_count = 1`.
-- [ ] T002 [P] Create `etl/tests/fixtures/artists_sample.xml` —
+- [X] T002 [P] Create `etl/tests/fixtures/artists_sample.xml` —
   5 hand-crafted `<artist>` elements wrapped in
   `<artists>...</artists>`, parseable by `lxml.iterparse`.
   Required entries:
@@ -100,7 +100,7 @@ counts and master-id mappings are predictable.
     </artist>` — verifies the parser tolerates nested
     `<aliases>` / `<members>` / `<groups>` blocks even though
     we don't extract their contents in this spec (Q1=B).
-- [ ] T003 [P] Create `etl/tests/fixtures/masters_sample_bad.xml`
+- [X] T003 [P] Create `etl/tests/fixtures/masters_sample_bad.xml`
   — 2 hand-crafted `<master>` elements sharing `id="9001"`
   wrapped in `<masters>...</masters>`. Used to validate FR-022
   failure-path inheritance: critical DQ violation
@@ -125,7 +125,7 @@ new step can run.
 **⚠️ CRITICAL**: User Story 1 implementation cannot begin until
 this phase is complete.
 
-- [ ] T004 [P] Refactor `etl/src/discogs_etl/io/input.py` per
+- [X] T004 [P] Refactor `etl/src/discogs_etl/io/input.py` per
   `research.md` R-01: rename the existing
   `open_releases_input(snapshot_dir)` to a generalized
   `open_xml_input(snapshot_dir, basename)` that resolves
@@ -141,7 +141,7 @@ this phase is complete.
   `ReleasesInput` dataclass becomes a generalized `XmlInput` (or
   add an alias); existing callers must continue to work
   unchanged.
-- [ ] T005 [P] Add five new schemas to
+- [X] T005 [P] Add five new schemas to
   `etl/src/discogs_etl/io/schemas.py` per
   `data-model.md` "New table contracts":
   - `STG_MASTERS` (source spec §6.9): `master_id` (int64,
@@ -164,7 +164,7 @@ this phase is complete.
     `earliest_year` (int32), `latest_year` (int32),
     `primary_genre` (string), `primary_style` (string),
     `run_id` (string, NOT NULL).
-- [ ] T006 Update `etl/src/discogs_etl/steps/prepare_sources.py`
+- [X] T006 Update `etl/src/discogs_etl/steps/prepare_sources.py`
   per `research.md` R-08: in addition to the existing releases
   resolution, call `open_xml_input(snapshot_dir, "masters")`
   inside a `try / except FileNotFoundError`. On success, record
@@ -203,7 +203,7 @@ snapshot with releases + masters + artists fixtures) and §3
 
 ### Tests for User Story 1 (recommended)
 
-- [ ] T007 [P] [US1] Add
+- [X] T007 [P] [US1] Add
   `etl/tests/unit/test_master_parser.py` — feed an inline
   `<masters>` fixture (~3 entries) to `MasterStream`, assert
   iteration completes cleanly, the yielded records carry the
@@ -211,7 +211,7 @@ snapshot with releases + masters + artists fixtures) and §3
   `year_raw`), Unicode round-trips, and a deliberately
   truncated input populates
   `stream.truncation_info.last_master_id`.
-- [ ] T008 [P] [US1] Add
+- [X] T008 [P] [US1] Add
   `etl/tests/unit/test_artist_parser.py` — feed an inline
   `<artists>` fixture covering: an artist with full fields
   (id, name, realname, profile), an artist with missing
@@ -219,7 +219,7 @@ snapshot with releases + masters + artists fixtures) and §3
   `<members>` / `<groups>` (verify the parser advances past
   them without extracting contents). Assert `truncation_info`
   on a deliberately truncated input.
-- [ ] T009 [P] [US1] Add
+- [X] T009 [P] [US1] Add
   `etl/tests/unit/test_master_fact_builder.py` — construct
   synthetic `clean_releases.parquet`, `clean_masters.parquet`,
   `release_fact.parquet` in a tmp dir, run
@@ -230,7 +230,7 @@ snapshot with releases + masters + artists fixtures) and §3
   (resolved + unresolved + style_order=0 corner cases), and the
   `outputs.analytics.master_fact.distinct_master_count` field
   in the manifest.
-- [ ] T010 [P] [US1] Extend
+- [X] T010 [P] [US1] Extend
   `etl/tests/unit/test_dq_check_parity.py` with parity cases
   for the new SQL siblings introduced in T021:
   `_check_unique` already exists for releases; add explicit
@@ -239,7 +239,7 @@ snapshot with releases + masters + artists fixtures) and §3
   identifier-quoting path). Add a test for the new standalone
   `_check_sum_release_count_equals` helper (pass + fail
   cases).
-- [ ] T011 [P] [US1] Add
+- [X] T011 [P] [US1] Add
   `etl/tests/integration/test_masters_artists_pipeline.py` —
   stage a snapshot dir with `releases_sample.xml`,
   `masters_sample.xml`, `artists_sample.xml`. Invoke the `run`
@@ -268,7 +268,7 @@ snapshot with releases + masters + artists fixtures) and §3
   - `outputs.published.duckdb.tables` includes `master_fact`.
   - `outputs.clean.clean_artists` is present in the manifest
     with row_count = 5.
-- [ ] T012 [P] [US1] Add
+- [X] T012 [P] [US1] Add
   `etl/tests/integration/test_real_masters_artists_pipeline.py`
   — stage `releases_sample_raw.xml`,
   `masters_sample_raw.xml`, `artists_sample_raw.xml` in a
@@ -279,7 +279,7 @@ snapshot with releases + masters + artists fixtures) and §3
   the cross-table sum-equals consistency holds; UTF-8
   round-trip on artist `realname` (e.g., the `Jesper Dahlbäck`
   entry from artist id=1).
-- [ ] T013 [P] [US1] Add
+- [X] T013 [P] [US1] Add
   `etl/tests/integration/test_release_only_snapshot.py` —
   stage ONLY `releases_sample.xml` (no masters / artists XML).
   Run the pipeline. Assertions: exit 0; manifest contains
@@ -295,7 +295,7 @@ snapshot with releases + masters + artists fixtures) and §3
 
 #### Parsers (parallel — different files)
 
-- [ ] T014 [P] [US1] Add
+- [X] T014 [P] [US1] Add
   `etl/src/discogs_etl/parsers/masters_parser.py` per
   `research.md` R-02. Define
   `class MasterStream(path, *, limit=None)` that mirrors
@@ -316,7 +316,7 @@ snapshot with releases + masters + artists fixtures) and §3
   are NOT extracted. Provide an `iter_masters(path, *,
   limit=None) -> MasterStream` thin wrapper for symmetry with
   the releases parser.
-- [ ] T015 [P] [US1] Add
+- [X] T015 [P] [US1] Add
   `etl/src/discogs_etl/parsers/artists_parser.py` per
   `research.md` R-02 / R-07. Define
   `class ArtistStream(path, *, limit=None)` mirroring
@@ -334,7 +334,7 @@ snapshot with releases + masters + artists fixtures) and §3
 
 #### Pipeline steps (parallel — different files; runner sequences them at runtime)
 
-- [ ] T016 [P] [US1] Add
+- [X] T016 [P] [US1] Add
   `etl/src/discogs_etl/steps/parse_masters.py` —
   `class ParseMastersStep` mirroring `ParseReleasesStep`.
   `name = "parse_masters"`. Inside `run()`: try
@@ -353,14 +353,14 @@ snapshot with releases + masters + artists fixtures) and §3
   `masters_per_sec` — but use the same `releases_per_sec` key
   to keep the manifest schema additive and consistent).
   Record `outputs.staging.stg_masters.{path,row_count}`.
-- [ ] T017 [P] [US1] Add
+- [X] T017 [P] [US1] Add
   `etl/src/discogs_etl/steps/parse_artists.py` —
   `class ParseArtistsStep` mirroring T016 but for artists.
   Drives `ArtistStream`. Drops rows with NULL `artist_id`
   with a `parse_artists.dropped_no_artist_id` warning. Emits
   `parse_artists.truncated_xml` warning on truncation.
   Records `outputs.staging.stg_artists.{path,row_count}`.
-- [ ] T018 [P] [US1] Add
+- [X] T018 [P] [US1] Add
   `etl/src/discogs_etl/steps/normalize_masters.py` —
   `class NormalizeMastersStep`. `name = "normalize_masters"`.
   Inside `run()`: skip if `stg_masters.parquet` doesn't exist
@@ -374,7 +374,7 @@ snapshot with releases + masters + artists fixtures) and §3
   `clean_masters.parquet` via `BatchedParquetWriter` with
   `CLEAN_MASTERS`. Record output. No progress reporter
   needed (small step in practice).
-- [ ] T019 [P] [US1] Add
+- [X] T019 [P] [US1] Add
   `etl/src/discogs_etl/steps/normalize_artists.py` —
   `class NormalizeArtistsStep`. `name = "normalize_artists"`.
   Skip if `stg_artists.parquet` doesn't exist. Otherwise:
@@ -387,7 +387,7 @@ snapshot with releases + masters + artists fixtures) and §3
   newly-written `clean_artists`; if non-zero, emit
   `normalize_artists.bridge_unresolved_artists` warning with
   the count.
-- [ ] T020 [US1] Add
+- [X] T020 [US1] Add
   `etl/src/discogs_etl/steps/build_master_fact.py` per
   `research.md` R-04. `class BuildMasterFactStep`.
   `name = "build_master_fact"`. Skip if `clean_masters.parquet`
@@ -413,7 +413,7 @@ snapshot with releases + masters + artists fixtures) and §3
 
 #### Quality + publish + CLI wiring
 
-- [ ] T021 [US1] Update
+- [X] T021 [US1] Update
   `etl/src/discogs_etl/quality/checks.py` per `data-model.md`
   "DQ classification" and `research.md` R-05. Add:
   - **In-memory + SQL siblings** for `_check_no_null` already
@@ -449,7 +449,7 @@ snapshot with releases + masters + artists fixtures) and §3
     helper.
   Depends on T005 (schemas) and T020 (master_fact existence
   semantics).
-- [ ] T022 [US1] Update
+- [X] T022 [US1] Update
   `etl/src/discogs_etl/steps/quality_checks.py` to compute the
   `clean_releases_row_count` once and pass through; the layer
   entrypoints from T021 take care of the rest. Verify the
@@ -457,7 +457,7 @@ snapshot with releases + masters + artists fixtures) and §3
   invokes `derive_status` with
   `has_freestanding_warnings=...` per Fase 2's logic. Depends
   on T021.
-- [ ] T023 [US1] Update
+- [X] T023 [US1] Update
   `etl/src/discogs_etl/io/duckdb_publisher.py` per
   `research.md` R-09: split tables into `core_tables`
   (release_fact, release_artist_bridge, release_label_bridge —
@@ -467,7 +467,7 @@ snapshot with releases + masters + artists fixtures) and §3
   tables are conditionally created. The `release_unique_view`
   is created on `release_fact` as in Fase 1. The atomic-rename
   pattern is preserved unchanged.
-- [ ] T024 [US1] Update
+- [X] T024 [US1] Update
   `etl/src/discogs_etl/cli.py`'s `_build_steps()` to extend
   the `STEPS` list with the new steps in the order pinned by
   `contracts/cli.md`:
@@ -501,16 +501,16 @@ snapshot with releases + masters + artists fixtures) and §3
 **Purpose**: Validate the whole spec end-to-end and refresh
 component docs.
 
-- [ ] T025 Run the full test suite from the repo root:
+- [X] T025 Run the full test suite from the repo root:
   `pytest etl/tests/`. Expected: all 70 prior tests + the new
   Fase 4 tests (parsers + master_fact builder + DQ parity +
   three integration tests) pass. Record total wall-clock —
   typical target is ~1–2 seconds for the always-on suite.
-- [ ] T026 [P] Optional: re-run with `DISCOGS_BIG_FIXTURE=1
+- [X] T026 [P] Optional: re-run with `DISCOGS_BIG_FIXTURE=1
   pytest etl/tests/integration/test_big_sample_pipeline.py`
   to confirm no scale regression for the Fase 3 path. Should
   still pass in ~7-8 s with peak RSS comfortably under 1 GiB.
-- [ ] T027 [P] Update `etl/README.md` to mention the Fase 4
+- [X] T027 [P] Update `etl/README.md` to mention the Fase 4
   features (auto-detect masters/artists XML, `master_fact`
   table in the published DuckDB with the Q3=C field set,
   artists pipeline foundation for the future `artist_dim`

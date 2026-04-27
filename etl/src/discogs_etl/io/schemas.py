@@ -249,3 +249,54 @@ RELEASE_LABEL_BRIDGE = pa.schema([
     pa.field("is_primary_label", pa.bool_(), nullable=False),
     pa.field("run_id", pa.string(), nullable=False),
 ])
+
+
+# ----- Fase 4: masters and artists (source spec §6.9, §6.10; spec 003) -----
+
+STG_MASTERS = pa.schema([
+    pa.field("master_id", pa.int64(), nullable=False),
+    pa.field("title", pa.string(), nullable=True),
+    pa.field("main_release_id", pa.int64(), nullable=True),
+    pa.field("year_raw", pa.string(), nullable=True),
+    pa.field("run_id", pa.string(), nullable=False),
+])
+
+STG_ARTISTS = pa.schema([
+    pa.field("artist_id", pa.int64(), nullable=False),
+    pa.field("artist_name", pa.string(), nullable=True),
+    pa.field("realname", pa.string(), nullable=True),
+    pa.field("profile", pa.string(), nullable=True),
+    pa.field("run_id", pa.string(), nullable=False),
+])
+
+CLEAN_MASTERS = pa.schema([
+    pa.field("master_id", pa.int64(), nullable=False),
+    pa.field("title", pa.string(), nullable=True),
+    pa.field("main_release_id", pa.int64(), nullable=True),
+    pa.field("year", pa.int32(), nullable=True),
+    pa.field("decade", pa.int32(), nullable=True),
+    pa.field("year_precision", pa.string(), nullable=False),
+    pa.field("run_id", pa.string(), nullable=False),
+])
+
+CLEAN_ARTISTS = pa.schema([
+    pa.field("artist_id", pa.int64(), nullable=False),
+    pa.field("artist_name", pa.string(), nullable=True),
+    pa.field("realname", pa.string(), nullable=True),
+    pa.field("profile", pa.string(), nullable=True),
+    pa.field("run_id", pa.string(), nullable=False),
+])
+
+MASTER_FACT = pa.schema([
+    pa.field("master_id", pa.int64(), nullable=False),
+    pa.field("title", pa.string(), nullable=True),
+    pa.field("main_release_id", pa.int64(), nullable=True),
+    pa.field("year", pa.int32(), nullable=True),
+    pa.field("decade", pa.int32(), nullable=True),
+    pa.field("release_count", pa.int32(), nullable=False),
+    pa.field("earliest_year", pa.int32(), nullable=True),
+    pa.field("latest_year", pa.int32(), nullable=True),
+    pa.field("primary_genre", pa.string(), nullable=True),
+    pa.field("primary_style", pa.string(), nullable=True),
+    pa.field("run_id", pa.string(), nullable=False),
+])
