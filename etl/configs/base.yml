@@ -10,3 +10,7 @@ paths:
 limits:
   parser_batch_size: 50000
   log_progress_every: 10000
+  # Peak RSS cap (informational; exceeding emits a manifest warning, not a failure).
+  peak_rss_cap_gib: 4
+  # Above this row count per Parquet, DQ checks switch from in-memory to DuckDB SQL.
+  dq_check_in_memory_threshold: 10000000

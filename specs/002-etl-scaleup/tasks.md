@@ -43,12 +43,12 @@ MVP increment.
 `etl/configs/base.yml` schema and the `LimitConfig` dataclass so
 every later task can rely on them being present.
 
-- [ ] T001 [P] Update `etl/configs/base.yml`: add
+- [X] T001 [P] Update `etl/configs/base.yml`: add
   `limits.peak_rss_cap_gib: 4` and
   `limits.dq_check_in_memory_threshold: 10000000` to the existing
   `limits:` block. Preserve the existing keys
   (`parser_batch_size`, `log_progress_every`).
-- [ ] T002 [P] Extend the `LimitConfig` dataclass in
+- [X] T002 [P] Extend the `LimitConfig` dataclass in
   `etl/src/discogs_etl/pipeline/context.py` with two new fields:
   `peak_rss_cap_gib: int = 4` and
   `dq_check_in_memory_threshold: int = 10_000_000`. Update
@@ -72,13 +72,13 @@ opener.
 **⚠️ CRITICAL**: User stories cannot begin until this phase is
 complete.
 
-- [ ] T003 [P] Add `etl/src/discogs_etl/pipeline/runtime.py` with
+- [X] T003 [P] Add `etl/src/discogs_etl/pipeline/runtime.py` with
   `peak_rss_bytes() -> int`. Implementation: call
   `resource.getrusage(resource.RUSAGE_SELF).ru_maxrss` and
   normalize to bytes — on macOS (`sys.platform == "darwin"`) the
   value is already bytes; on Linux it is kilobytes (multiply by
   1024). Per `research.md` R-03.
-- [ ] T004 [P] Add `etl/src/discogs_etl/pipeline/progress.py` with
+- [X] T004 [P] Add `etl/src/discogs_etl/pipeline/progress.py` with
   `class ProgressReporter`. Constructor:
   `__init__(self, logger, step_name: str, cadence: int)`. Methods:
   `report_iteration(self, n_done: int) -> None` (logs at the
@@ -87,14 +87,14 @@ complete.
   `final(self) -> dict` (returns `{"releases_per_sec": float,
   "elapsed_seconds": float}` for the manifest, and emits a final
   summary log line). Per `research.md` R-04.
-- [ ] T005 Update `etl/src/discogs_etl/pipeline/manifest.py`:
+- [X] T005 Update `etl/src/discogs_etl/pipeline/manifest.py`:
   (a) initialize `step_metrics: dict = {}` at the top level inside
   `Manifest.create()`; (b) add a method
   `record_step_metrics(self, step_name: str, **metrics: Any) ->
   None` that writes into `self._data["step_metrics"][step_name]`,
   merging if a partial entry already exists. Shape per
   `contracts/manifest.md` (this spec) and `data-model.md`.
-- [ ] T006 Update `etl/src/discogs_etl/pipeline/runner.py`: at the
+- [X] T006 Update `etl/src/discogs_etl/pipeline/runner.py`: at the
   end of every step (in both the success path and the
   exception-handler path), call `runtime.peak_rss_bytes()` and
   `manifest.record_step_metrics(step.name,
@@ -103,7 +103,7 @@ complete.
   `runtime.peak_rss_exceeds_cap` warning to the manifest with
   details `f"step={step.name} peak={value} cap={cap_bytes}"`.
   Depends on T003 + T005.
-- [ ] T007 [P] Add `etl/src/discogs_etl/io/input.py` with
+- [X] T007 [P] Add `etl/src/discogs_etl/io/input.py` with
   `open_releases_input(snapshot_dir: Path) -> ReleasesInput` (a
   small dataclass with `file_obj: BinaryIO`, `source_path: Path`,
   `is_gzipped: bool`, `gz_and_plain_present: bool`). Detection:
@@ -143,14 +143,14 @@ duckdb data/published/duckdb/discogs.duckdb -c \
 
 ### Tests for User Story 1 (recommended)
 
-- [ ] T008 [P] [US1] Add
+- [X] T008 [P] [US1] Add
   `etl/tests/unit/test_truncation_warning.py`: feed a small
   inline-truncated XML to the parser, assert iteration completes
   cleanly (no exception escapes), and the parser exposes a
   `truncation_info` (or equivalent) attribute populated with the
   last successfully-emitted `release_id` and the underlying
   `XMLSyntaxError` message.
-- [ ] T009 [P] [US1] Add
+- [X] T009 [P] [US1] Add
   `etl/tests/integration/test_real_sample_pipeline.py`: invoke
   the `run` CLI subcommand against
   `etl/tests/fixtures/releases_sample_raw.xml`. Assertions:
@@ -165,7 +165,7 @@ duckdb data/published/duckdb/discogs.duckdb -c \
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Update
+- [X] T010 [US1] Update
   `etl/src/discogs_etl/parsers/releases_parser.py`: convert
   `iter_releases(path, *, limit=None)` from a free function into
   a stateful object (e.g., `class ReleaseStream`) so the caller
@@ -176,7 +176,7 @@ duckdb data/published/duckdb/discogs.duckdb -c \
   return cleanly. The existing memory-cleanup pattern
   (`elem.clear()` + walk-back-siblings) MUST stay intact. Per
   `research.md` R-01.
-- [ ] T011 [US1] Update
+- [X] T011 [US1] Update
   `etl/src/discogs_etl/steps/parse_releases.py` to use the new
   `ReleaseStream` API. After iteration ends, check
   `stream.truncation_info`; if non-None, call
@@ -184,7 +184,7 @@ duckdb data/published/duckdb/discogs.duckdb -c \
   details=f"last_release_id={info.last_release_id};
   error={info.error_message}")`. The existing dropped-no-id
   warning behavior (FR-005) is preserved unchanged.
-- [ ] T012 [US1] Update
+- [X] T012 [US1] Update
   `etl/src/discogs_etl/steps/prepare_sources.py` to call
   `io.input.open_releases_input(ctx.raw_snapshot_dir)` instead of
   hard-coding `releases.xml`. Use the returned `ReleasesInput`
@@ -225,7 +225,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
 
 ### Tests for User Story 2 (recommended)
 
-- [ ] T013 [P] [US2] Add `etl/tests/unit/test_gzip_input.py`:
+- [X] T013 [P] [US2] Add `etl/tests/unit/test_gzip_input.py`:
   given a tiny in-memory XML, write both an uncompressed and a
   gzipped copy to a tmp dir, call
   `io.input.open_releases_input` for each, assert: (a) the
@@ -234,7 +234,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
   `is_gzipped=True`; (c) bytes read from the file_obj match the
   uncompressed source byte-for-byte in both cases; (d)
   `FileNotFoundError` when neither exists.
-- [ ] T014 [P] [US2] Add
+- [X] T014 [P] [US2] Add
   `etl/tests/unit/test_dq_check_parity.py`: for each of the
   dispatch-aware checks
   (`unique`, `unique_pair`, `at_most_one_primary`,
@@ -244,7 +244,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
   force the SQL path). Assert that
   `(name, layer, table, severity, passed)` are identical. Run
   both pass and fail cases per check.
-- [ ] T015 [P] [US2] Add
+- [X] T015 [P] [US2] Add
   `etl/tests/integration/test_big_sample_pipeline.py`: gated by
   `os.environ.get("DISCOGS_BIG_FIXTURE") == "1"` AND the file
   existing (skip otherwise per `research.md` R-06). Stage
@@ -259,7 +259,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Update
+- [X] T016 [US2] Update
   `etl/src/discogs_etl/parsers/releases_parser.py` so it opens
   its own file via `io.input.open_releases_input(path.parent)`
   (or accepts a `Path` and dispatches internally). Pass the
@@ -267,7 +267,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
   `lxml.etree.iterparse(file_obj, events=("end",), tag="release")`.
   The truncation handling from T010 is preserved unchanged.
   Compatible with the path-only API used by Fase 1 tests.
-- [ ] T017 [US2] Update
+- [X] T017 [US2] Update
   `etl/src/discogs_etl/steps/parse_releases.py` to instantiate a
   `ProgressReporter(ctx.logger, "parse_releases",
   ctx.config.limits.log_progress_every)`. Call
@@ -277,24 +277,24 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
   `metrics = reporter.final()` and call
   `manifest.record_step_metrics("parse_releases",
   releases_per_sec=metrics["releases_per_sec"])`.
-- [ ] T018 [P] [US2] Update
+- [X] T018 [P] [US2] Update
   `etl/src/discogs_etl/steps/normalize_releases.py` to integrate
   `ProgressReporter` over the per-release loop (same pattern as
   T017). Record `releases_per_sec` via
   `manifest.record_step_metrics`.
-- [ ] T019 [P] [US2] Update
+- [X] T019 [P] [US2] Update
   `etl/src/discogs_etl/steps/normalize_release_entities.py` to
   integrate `ProgressReporter` over the largest sub-loop (the
   format normalization is typically the largest; the helper can
   be applied to any of the inner loops). Record
   `releases_per_sec` via `manifest.record_step_metrics`.
-- [ ] T020 [P] [US2] Update
+- [X] T020 [P] [US2] Update
   `etl/src/discogs_etl/steps/build_release_format_summary.py` to
   integrate `ProgressReporter` over the per-release output loop.
-- [ ] T021 [P] [US2] Update
+- [X] T021 [P] [US2] Update
   `etl/src/discogs_etl/steps/build_release_fact.py` to integrate
   `ProgressReporter` over the per-row release_fact write loop.
-- [ ] T022 [US2] Add `etl/src/discogs_etl/quality/dispatch.py`:
+- [X] T022 [US2] Add `etl/src/discogs_etl/quality/dispatch.py`:
   `def run_check(parquet_path: Path, in_memory_fn: Callable,
   sql_fn: Callable, threshold: int, **kwargs) -> CheckResult`.
   Read row count via
@@ -302,7 +302,7 @@ DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -
   `num_rows <= threshold`, call
   `in_memory_fn(pq.read_table(parquet_path), **kwargs)`; else
   call `sql_fn(parquet_path, **kwargs)`. Per `research.md` R-05.
-- [ ] T023 [US2] Update
+- [X] T023 [US2] Update
   `etl/src/discogs_etl/quality/checks.py` to add SQL siblings:
   `_check_unique_sql(parquet_path, col, *, name, layer, table_name)`,
   `_check_unique_pair_sql(parquet_path, c1, c2, ...)`,
@@ -333,13 +333,13 @@ fixture on disk and `DISCOGS_BIG_FIXTURE=1` set, T015 passes
 **Purpose**: Validate the whole spec end-to-end and refresh
 component docs.
 
-- [ ] T024 Run the full test suite from the repo root:
+- [X] T024 Run the full test suite from the repo root:
   `pytest etl/tests/`. Expected: all 54 Fase 1 tests still pass
   (SC-003) plus the new Fase 2/3 tests pass. Record total wall
   clock — typical target is ~1 second on a developer laptop for
   the unit + Fase 2 integration set (the Fase 3 integration test
   is gated and skipped here).
-- [ ] T025 If the big fixture
+- [X] T025 If the big fixture
   (`etl/tests/fixtures/releases_sample_big_raw.xml`) is on disk
   locally, run
   `DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py -v`
@@ -349,7 +349,7 @@ component docs.
   total wall clock. Compare against SC-011 (peak RSS < 4 GiB)
   and target wall clock (~3 minutes). Record findings in the
   PR / merge-request description.
-- [ ] T026 [P] Update `etl/README.md` to mention the Fase 2+3
+- [X] T026 [P] Update `etl/README.md` to mention the Fase 2+3
   features (gzipped input via `releases.xml.gz`, progress logs
   with elapsed + rate, peak-RSS-per-step in the manifest, the
   `DISCOGS_BIG_FIXTURE` env-var-gated big-fixture integration
