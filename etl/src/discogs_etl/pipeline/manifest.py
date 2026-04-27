@@ -67,6 +67,7 @@ class Manifest:
                 "warnings": [],
                 "results": [],
             },
+            "step_metrics": {},
         }
         m = cls(data, Path(path))
         m.save()
@@ -94,6 +95,18 @@ class Manifest:
 
     def record_step_duration(self, step_name: str, seconds: float) -> None:
         self._data["step_durations"][step_name] = round(float(seconds), 4)
+
+    def record_step_metrics(self, step_name: str, **metrics: Any) -> None:
+        """Merge per-step runtime metrics (peak_rss_bytes, releases_per_sec, ...).
+
+        Idempotent and additive: calling this twice for the same step merges
+        the metrics dicts (later values overwrite earlier ones for the same
+        key). See specs/002-etl-scaleup/contracts/manifest.md for the shape.
+        """
+        bucket = self._data.setdefault("step_metrics", {})
+        existing = bucket.get(step_name, {})
+        existing.update({k: v for k, v in metrics.items() if v is not None})
+        bucket[step_name] = existing
 
     def record_output(
         self,

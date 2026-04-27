@@ -9,6 +9,7 @@ from ..io import schemas
 from ..io.parquet_writer import BatchedParquetWriter
 from ..pipeline.context import RunContext
 from ..pipeline.manifest import Manifest
+from ..pipeline.progress import ProgressReporter
 from ..transforms.format_normalization import (
     derive_format_group,
     derive_is_box_set,
@@ -70,8 +71,16 @@ class NormalizeReleaseEntitiesStep:
                                path=paths["clean_release_labels"],
                                row_count=_count_rows(paths["clean_release_labels"]))
 
+        reporter = ProgressReporter(
+            ctx.logger, self.name, ctx.config.limits.log_progress_every,
+        )
         n_unmapped = self._normalize_formats(
             ctx=ctx, run_id=run_id, batch_size=batch_size, paths=paths,
+            reporter=reporter,
+        )
+        metrics = reporter.final()
+        manifest.record_step_metrics(
+            self.name, releases_per_sec=metrics.releases_per_sec,
         )
         manifest.record_output("clean", "clean_release_formats",
                                path=paths["clean_release_formats"],
@@ -172,7 +181,10 @@ class NormalizeReleaseEntitiesStep:
                 })
 
     @staticmethod
-    def _normalize_formats(*, ctx: RunContext, run_id, batch_size, paths) -> int:
+    def _normalize_formats(
+        *, ctx: RunContext, run_id, batch_size, paths,
+        reporter: ProgressReporter | None = None,
+    ) -> int:
         """Join staging format rows with their descriptions and derive flags."""
         fmt_path = ctx.staging_dir / "stg_release_formats.parquet"
         desc_path = ctx.staging_dir / "stg_release_format_descriptions.parquet"
@@ -188,7 +200,9 @@ class NormalizeReleaseEntitiesStep:
         with BatchedParquetWriter(paths["clean_release_formats"],
                                   schemas.CLEAN_RELEASE_FORMATS,
                                   batch_size=batch_size) as w:
-            for row in pq.read_table(fmt_path).to_pylist():
+            for n, row in enumerate(pq.read_table(fmt_path).to_pylist(), start=1):
+                if reporter is not None:
+                    reporter.report_iteration(n)
                 rid = row["release_id"]
                 order = int(row["format_order"])
                 name_raw = clean_text(row["format_name"])

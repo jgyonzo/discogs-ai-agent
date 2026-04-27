@@ -15,6 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from .context import RunContext
 from .manifest import Manifest, QualityStatus
+from .runtime import peak_rss_bytes
 
 
 @runtime_checkable
@@ -38,6 +39,21 @@ QUALITY_STEP_NAME = "quality_checks"
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _record_peak_rss(
+    ctx: RunContext, manifest: Manifest, step_name: str
+) -> int:
+    """Capture peak RSS, record it on the manifest, and warn if over the cap."""
+    peak = peak_rss_bytes()
+    manifest.record_step_metrics(step_name, peak_rss_bytes=peak)
+    cap_bytes = ctx.config.limits.peak_rss_cap_gib * (1 << 30)
+    if peak > cap_bytes:
+        manifest.warn(
+            "runtime.peak_rss_exceeds_cap",
+            f"step={step_name} peak={peak} cap={cap_bytes}",
+        )
+    return peak
 
 
 def run_pipeline(
@@ -83,14 +99,19 @@ def run_pipeline(
         except Exception:
             log.exception("Step %s: failed with uncaught exception", step.name)
             manifest.record_step_duration(step.name, time.monotonic() - t0)
+            _record_peak_rss(ctx, manifest, step.name)
             manifest.set_quality_status("incomplete")
             manifest.finalize(_utc_now_iso())
             manifest.save()
             return RunResult(final_status="incomplete", exit_code=1)
         dt = time.monotonic() - t0
         manifest.record_step_duration(step.name, dt)
+        peak = _record_peak_rss(ctx, manifest, step.name)
         manifest.save()
-        log.info("Step %s: done in %.2fs", step.name, dt)
+        log.info(
+            "Step %s: done in %.2fs (peak_rss=%.1f MiB)",
+            step.name, dt, peak / (1 << 20),
+        )
 
         if step.name == QUALITY_STEP_NAME and manifest.quality_status == "failed":
             log.error(

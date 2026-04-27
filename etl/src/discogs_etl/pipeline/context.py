@@ -26,6 +26,8 @@ class PathConfig:
 class LimitConfig:
     parser_batch_size: int = 50000
     log_progress_every: int = 10000
+    peak_rss_cap_gib: int = 4
+    dq_check_in_memory_threshold: int = 10_000_000
 
 
 @dataclass
@@ -57,6 +59,10 @@ class RunConfig:
             limits=LimitConfig(
                 parser_batch_size=int(limits_data.get("parser_batch_size", 50000)),
                 log_progress_every=int(limits_data.get("log_progress_every", 10000)),
+                peak_rss_cap_gib=int(limits_data.get("peak_rss_cap_gib", 4)),
+                dq_check_in_memory_threshold=int(
+                    limits_data.get("dq_check_in_memory_threshold", 10_000_000)
+                ),
             ),
             config_path=p,
             config_sha256=sha256_file(p),

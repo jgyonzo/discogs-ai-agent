@@ -7,6 +7,7 @@ from ..io import schemas
 from ..io.parquet_writer import BatchedParquetWriter
 from ..pipeline.context import RunContext
 from ..pipeline.manifest import Manifest
+from ..pipeline.progress import ProgressReporter
 
 
 class BuildReleaseFormatSummaryStep:
@@ -87,8 +88,12 @@ class BuildReleaseFormatSummaryStep:
         finally:
             con.close()
 
+        reporter = ProgressReporter(
+            ctx.logger, self.name, ctx.config.limits.log_progress_every,
+        )
         with BatchedParquetWriter(out, schemas.RELEASE_FORMAT_SUMMARY, batch_size=batch_size) as w:
-            for row in rows:
+            for n, row in enumerate(rows, start=1):
+                reporter.report_iteration(n)
                 d = dict(zip(cols, row))
                 d["run_id"] = run_id
                 # DuckDB returns ints for format_quantity already; ensure int32 fits.
@@ -108,4 +113,8 @@ class BuildReleaseFormatSummaryStep:
                 })
             row_count = w.row_count
 
+        metrics = reporter.final()
+        manifest.record_step_metrics(
+            self.name, releases_per_sec=metrics.releases_per_sec,
+        )
         manifest.record_output("clean", "release_format_summary", path=out, row_count=row_count)

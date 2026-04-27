@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from ..io import schemas
 from ..io.parquet_writer import BatchedParquetWriter
-from ..parsers.releases_parser import iter_releases
+from ..parsers.releases_parser import ReleaseStream
 from ..pipeline.context import RunContext
 from ..pipeline.manifest import Manifest
+from ..pipeline.progress import ProgressReporter
 from ..transforms.text_normalization import clean_bool_attr, clean_int
 
 
@@ -60,7 +61,9 @@ class ParseReleasesStep:
              BatchedParquetWriter(paths["stg_release_styles"], schemas.STG_RELEASE_STYLES, batch_size=batch_size) as w_sty, \
              BatchedParquetWriter(paths["stg_release_tracks"], schemas.STG_RELEASE_TRACKS, batch_size=batch_size) as w_trk:
 
-            for record in iter_releases(source_path, limit=self.limit_releases):
+            reporter = ProgressReporter(log, self.name, progress_every)
+            stream = ReleaseStream(source_path, limit=self.limit_releases)
+            for record in stream:
                 n_in += 1
                 rel = record["release"]
                 rid = clean_int(rel["release_id_raw"])
@@ -153,8 +156,13 @@ class ParseReleasesStep:
                     })
 
                 n_emitted += 1
-                if n_emitted % progress_every == 0:
-                    log.info("parse_releases: %d releases emitted", n_emitted)
+                reporter.report_iteration(n_emitted)
+
+            metrics = reporter.final()
+            manifest.record_step_metrics(
+                self.name,
+                releases_per_sec=metrics.releases_per_sec,
+            )
 
             row_counts = {
                 "stg_releases": w_rel.row_count,
@@ -176,6 +184,18 @@ class ParseReleasesStep:
                 f"{n_dropped} of {n_in} <release> elements had no parseable id; dropped",
             )
 
+        if stream.truncation_info is not None:
+            info = stream.truncation_info
+            manifest.warn(
+                "parse_releases.truncated_xml",
+                f"last_release_id={info.last_release_id}; error={info.error_message}",
+            )
+            log.warning(
+                "parse_releases: truncated after release_id=%s; %s",
+                info.last_release_id, info.error_message,
+            )
+
         log.info(
-            "parse_releases done: in=%d emitted=%d dropped=%d", n_in, n_emitted, n_dropped
+            "parse_releases done: in=%d emitted=%d dropped=%d truncated=%s",
+            n_in, n_emitted, n_dropped, stream.truncation_info is not None,
         )

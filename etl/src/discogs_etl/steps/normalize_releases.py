@@ -7,6 +7,7 @@ from ..io import schemas
 from ..io.parquet_writer import BatchedParquetWriter
 from ..pipeline.context import RunContext
 from ..pipeline.manifest import Manifest
+from ..pipeline.progress import ProgressReporter
 from ..transforms.date_normalization import parse_released
 
 
@@ -66,12 +67,16 @@ class NormalizeReleasesStep:
             con.close()
 
         n_invalid_dates = 0
+        reporter = ProgressReporter(
+            ctx.logger, self.name, ctx.config.limits.log_progress_every,
+        )
         with BatchedParquetWriter(out, schemas.CLEAN_RELEASES, batch_size=batch_size) as w:
-            for row in rows:
+            for n, row in enumerate(rows, start=1):
                 d = dict(zip(cols, row))
                 pd = parse_released(d["released_raw"])
                 if pd.released_date_precision == "invalid":
                     n_invalid_dates += 1
+                reporter.report_iteration(n)
                 w.write({
                     "release_id": d["release_id"],
                     "title": d["title"],
@@ -98,6 +103,10 @@ class NormalizeReleasesStep:
                 })
             row_count = w.row_count
 
+        metrics = reporter.final()
+        manifest.record_step_metrics(
+            self.name, releases_per_sec=metrics.releases_per_sec,
+        )
         manifest.record_output("clean", "clean_releases", path=out, row_count=row_count)
         if n_invalid_dates > 0:
             manifest.warn(

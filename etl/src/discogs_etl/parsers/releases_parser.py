@@ -2,50 +2,124 @@
 
 Yields one structured dict per ``<release>`` element. Memory-bounded via the
 canonical lxml iterparse + clear() + walk-back-siblings idiom.
+
+Per spec ``002-etl-scaleup`` (Fase 2 robustness, FR-001/FR-002), a
+truncated XML stream that fails ``lxml.iterparse`` *after* at least one
+fully-formed release has been emitted does NOT propagate the
+``XMLSyntaxError`` to the runner. Instead the stream stops cleanly and
+exposes ``ReleaseStream.truncation_info`` for the caller to surface as
+a manifest warning.
 """
 from __future__ import annotations
 
+import gzip
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, BinaryIO, Iterator
 
 from lxml import etree
+
+from ..io.input import open_releases_input
+
+
+@dataclass
+class TruncationInfo:
+    """Metadata captured when iterparse fails after a partial parse."""
+    last_release_id: int | None
+    error_message: str
+
+
+class ReleaseStream:
+    """Iterable streaming parser for Discogs releases XML.
+
+    Construct once, then iterate; after iteration ends, inspect
+    ``.truncation_info`` (None on a clean parse, populated on a
+    mid-stream parse error). Memory bound is preserved across the
+    truncation-handling path.
+    """
+
+    def __init__(self, path: str | Path, *, limit: int | None = None) -> None:
+        self.path = path
+        self.limit = limit
+        self.truncation_info: TruncationInfo | None = None
+        self._n_emitted = 0
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        return self._iterate()
+
+    def _iterate(self) -> Iterator[dict[str, Any]]:
+        parsed_at = datetime.now(timezone.utc)
+        last_release_id: int | None = None
+        file_obj = _resolve_input(Path(self.path))
+
+        try:
+            context = etree.iterparse(file_obj, events=("end",), tag="release")
+            for _event, elem in context:
+                try:
+                    record = _release_to_record(elem, parsed_at)
+                    rid_raw = record["release"]["release_id_raw"]
+                    if rid_raw is not None:
+                        try:
+                            last_release_id = int(rid_raw)
+                        except (TypeError, ValueError):
+                            pass
+                    yield record
+                    self._n_emitted += 1
+                finally:
+                    elem.clear()
+                    parent = elem.getparent()
+                    while elem.getprevious() is not None:
+                        if parent is None:
+                            break
+                        del parent[0]
+                if self.limit is not None and self._n_emitted >= self.limit:
+                    break
+        except etree.XMLSyntaxError as e:
+            self.truncation_info = TruncationInfo(
+                last_release_id=last_release_id,
+                error_message=str(e)[:200],
+            )
+        finally:
+            try:
+                file_obj.close()
+            except Exception:  # noqa: BLE001 — close is best-effort
+                pass
+
+
+def _resolve_input(path: Path) -> BinaryIO:
+    """Resolve a parser input path into an open binary file-object.
+
+    Accepts:
+    - a directory containing ``releases.xml`` or ``releases.xml.gz`` →
+      delegates to :func:`open_releases_input`;
+    - a file path that exists → opens directly (gzip-decoded if ``.gz``);
+    - a non-existent path whose parent directory exists →
+      delegates to :func:`open_releases_input` against the parent.
+    """
+    if path.is_dir():
+        return open_releases_input(path).file_obj
+    if path.is_file():
+        if path.suffix == ".gz":
+            return gzip.GzipFile(filename=str(path), mode="rb")
+        return open(path, "rb")
+    if path.parent.is_dir():
+        return open_releases_input(path.parent).file_obj
+    raise FileNotFoundError(f"no releases input at {path}")
 
 
 def iter_releases(
     path: str | Path,
     *,
     limit: int | None = None,
-) -> Iterator[dict[str, Any]]:
-    """Stream releases from a Discogs releases.xml file.
+) -> ReleaseStream:
+    """Backward-compatible wrapper that returns an iterable ReleaseStream.
 
-    Each yielded dict has keys: ``release``, ``artists``, ``labels``,
-    ``formats``, ``format_descriptions``, ``genres``, ``styles``,
-    ``tracks``. ``release`` is a single dict; the rest are lists of dicts
-    in XML document order. Field values are raw text (or attribute values)
-    — no normalization is performed here. Subsequent clean steps apply
-    text/date/format normalization.
+    Existing callers using ``for record in iter_releases(...)`` keep
+    working unchanged. New callers can use ``ReleaseStream`` directly
+    and inspect ``.truncation_info`` after iteration.
     """
-    p = str(path)
-    parsed_at = datetime.now(timezone.utc)
-    n_emitted = 0
-
-    context = etree.iterparse(p, events=("end",), tag="release")
-    for _event, elem in context:
-        try:
-            yield _release_to_record(elem, parsed_at)
-            n_emitted += 1
-        finally:
-            elem.clear()
-            parent = elem.getparent()
-            while elem.getprevious() is not None:
-                if parent is None:
-                    break
-                del parent[0]
-        if limit is not None and n_emitted >= limit:
-            break
-
-    del context
+    return ReleaseStream(path, limit=limit)
 
 
 def _txt(el) -> str | None:

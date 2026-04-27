@@ -8,6 +8,7 @@ from ..io import schemas
 from ..io.parquet_writer import BatchedParquetWriter
 from ..pipeline.context import RunContext
 from ..pipeline.manifest import Manifest
+from ..pipeline.progress import ProgressReporter
 
 
 _OUTPUTS = ("release_fact", "release_artist_bridge", "release_label_bridge")
@@ -119,8 +120,12 @@ class BuildReleaseFactStep:
             con.close()
 
         distinct_release_ids: set[int] = set()
+        reporter = ProgressReporter(
+            ctx.logger, self.name, ctx.config.limits.log_progress_every,
+        )
         with BatchedParquetWriter(paths["release_fact"], schemas.RELEASE_FACT, batch_size=batch_size) as w:
-            for row in rows:
+            for n, row in enumerate(rows, start=1):
+                reporter.report_iteration(n)
                 d = dict(zip(cols, row))
                 distinct_release_ids.add(d["release_id"])
                 w.write({
@@ -162,6 +167,10 @@ class BuildReleaseFactStep:
                 })
             rf_row_count = w.row_count
 
+        metrics = reporter.final()
+        manifest.record_step_metrics(
+            self.name, releases_per_sec=metrics.releases_per_sec,
+        )
         manifest.record_output(
             "analytics", "release_fact",
             path=paths["release_fact"],
