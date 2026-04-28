@@ -121,6 +121,141 @@ New `step` subcommand names (Fase 4):
   `release_unique_view` keep their Fase 1 shapes byte-for-byte
   (FR-018).
 
+## Running on the full Discogs dump
+
+The Quickstart above covers the curated 7-release fixture. This
+section is for the real thing — the full monthly Discogs XML
+dumps (`releases.xml.gz` ≈ 10 GB, `masters.xml.gz` ≈ 600 MB,
+`artists.xml.gz` ≈ 500 MB; ~30 M releases, ~2 M masters, ~9 M
+artists). Expect **a 2–3 hour run on a developer laptop** plus
+**60–120 GB of intermediate disk usage** under `data/`.
+
+### 1. Drop the dumps in `etl/datasets/`
+
+`etl/datasets/` is tracked but its contents are gitignored
+(`etl/datasets/.gitignore` whitelists itself). Drop the three
+gzipped XMLs there; any name is fine:
+
+```bash
+ls etl/datasets/
+# discogs_<YYYYMMDD>_releases.xml.gz
+# discogs_<YYYYMMDD>_masters.xml.gz
+# discogs_<YYYYMMDD>_artists.xml.gz
+```
+
+### 2. Symlink the canonical filenames into a snapshot dir
+
+The pipeline auto-detects `releases.xml(.gz)` / `masters.xml(.gz)` /
+`artists.xml(.gz)` in `data/raw/discogs/{snapshot_id}/`. Symlinks
+keep the dumps in one place without duplicating the 11 GB:
+
+```bash
+SNAP=discogs-2026-04   # match snapshot_id in etl/configs/base.yml
+mkdir -p "data/raw/discogs/$SNAP"
+ln -sf "$PWD/etl/datasets/discogs_20260401_releases.xml.gz" "data/raw/discogs/$SNAP/releases.xml.gz"
+ln -sf "$PWD/etl/datasets/discogs_20260401_masters.xml.gz"  "data/raw/discogs/$SNAP/masters.xml.gz"
+ln -sf "$PWD/etl/datasets/discogs_20260401_artists.xml.gz"  "data/raw/discogs/$SNAP/artists.xml.gz"
+```
+
+The default `etl/configs/base.yml` already has
+`snapshot_id: discogs-2026-04` — change the SNAP variable above
+(and `etl/configs/base.yml` if needed) to match the actual dump
+date you're using.
+
+### 3. Run inside tmux + caffeinate (laptop runbook)
+
+```bash
+# Plug the laptop in.
+tmux new -s discogs-etl
+```
+
+Inside tmux:
+
+```bash
+cd /path/to/genai-pathway-final-project-yonzo
+caffeinate -i .venv/bin/python -m discogs_etl.cli run \
+    --config etl/configs/base.yml \
+    --run-id full-dump-$(date +%Y%m%d)
+```
+
+Detach: `Ctrl-b d`. Reattach: `tmux attach -t discogs-etl`.
+Watch progress without attaching:
+
+```bash
+tail -f data/logs/full-dump-*.log
+```
+
+### 4. Recovering from a mid-run failure
+
+The runner catches per-step exceptions and finalizes the manifest
+as `incomplete`; the published DuckDB stays untouched per FR-022.
+Resume the same run by re-running with `--skip-existing` and the
+**same `--run-id`**:
+
+```bash
+caffeinate -i .venv/bin/python -m discogs_etl.cli run \
+    --config etl/configs/base.yml \
+    --run-id <existing-run-id> \
+    --skip-existing
+```
+
+Steps whose outputs are already on disk are skipped; the failed
+step (and everything downstream) re-runs from scratch.
+
+### 5. Verifying success
+
+```bash
+# Pick the manifest for your run.
+jq '.quality_checks.status, .outputs.published.duckdb.tables' \
+   data/manifests/full-dump-*.json
+```
+
+Expected: `"passed_with_warnings"` and a `tables` list containing
+`release_fact`, `release_artist_bridge`, `release_label_bridge`,
+`master_fact`. Real-data warnings you should expect (none of them
+fail the run):
+
+- `parse_releases.truncated_xml` / `parse_masters.truncated_xml` /
+  `parse_artists.truncated_xml` — only if the dumps are truncated.
+  Genuine Discogs dumps are well-formed; head-extracted samples
+  aren't.
+- `normalize_release_entities.unmapped_format_names` — Discogs
+  has format names not in the source spec §11.2 mapping. Mapped
+  to `Other` and counted.
+- `normalize_release_entities.format_quantity_overflow` — Discogs
+  data contains `<format qty>` typo values (we've seen 60-digit
+  integer literals) that exceed even int64. Stored as NULL.
+- `build_master_fact.unknown_master_ids` — releases reference
+  master_ids absent from masters.xml (dump skew between files).
+- `build_master_fact.main_release_unresolved` — some masters'
+  `<main_release>` doesn't resolve to a release in the same dump.
+
+Smoke-query the published DuckDB:
+
+```bash
+duckdb data/published/duckdb/discogs.duckdb <<'SQL'
+SELECT COUNT(*) AS unique_releases FROM release_unique_view;
+SELECT COUNT(*) AS unique_masters  FROM master_fact;
+-- "Top techno works by reissue count" — Q3=C agent canonical query.
+SELECT title, release_count
+FROM master_fact
+WHERE primary_style = 'Techno'
+ORDER BY release_count DESC
+LIMIT 10;
+SQL
+```
+
+### 6. Cleanup between full runs
+
+Per-run intermediates can be removed safely without disturbing
+the published DuckDB:
+
+```bash
+rm -rf data/staging data/clean data/analytics
+# Keep data/published/duckdb/discogs.duckdb (the agent surface).
+# Keep data/manifests/ and data/logs/ as the audit trail.
+```
+
 ## Tests
 
 ```bash
