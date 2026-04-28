@@ -126,9 +126,21 @@ New `step` subcommand names (Fase 4):
 The Quickstart above covers the curated 7-release fixture. This
 section is for the real thing — the full monthly Discogs XML
 dumps (`releases.xml.gz` ≈ 10 GB, `masters.xml.gz` ≈ 600 MB,
-`artists.xml.gz` ≈ 500 MB; ~30 M releases, ~2 M masters, ~9 M
-artists). Expect **a 2–3 hour run on a developer laptop** plus
+`artists.xml.gz` ≈ 500 MB; ~19 M releases, ~2.5 M masters, ~10 M
+artists in the April 2026 dump we ground-truthed against).
+Expect **~1 hour of CPU time on a developer laptop** (budget
+~2 hours total to allow for one mid-run hiccup) plus
 **60–120 GB of intermediate disk usage** under `data/`.
+
+> **Peak RSS at full scale**: the default `limits.peak_rss_cap_gib = 4`
+> is intentionally tight; on the April 2026 dump we observed peak
+> RSS settling around **14 GiB** during the in-memory normalize
+> and DuckDB-join steps, which fires ~10 informational
+> `runtime.peak_rss_exceeds_cap` warnings (FR-013). They are not
+> failures — peak RSS is recorded as a high-water mark and is
+> shared across all subsequent steps once it's reached. To silence
+> the noise, raise `limits.peak_rss_cap_gib` to `16` in your run
+> config; to keep it as an early-warning sentinel, leave it at `4`.
 
 ### 1. Drop the dumps in `etl/datasets/`
 
@@ -244,6 +256,32 @@ ORDER BY release_count DESC
 LIMIT 10;
 SQL
 ```
+
+#### Reference row counts (April 2026 dump)
+
+So you know what "right" looks like — the run we used to
+ground-truth this README produced:
+
+| Layer | Table | Rows |
+|---|---|---|
+| staging | `stg_releases` | 19,035,253 |
+| staging | `stg_release_tracks` | 169,469,025 |
+| staging | `stg_masters` | 2,541,388 |
+| staging | `stg_artists` | 9,999,883 |
+| clean | `clean_releases` | 19,035,253 |
+| clean | `release_format_summary` | 19,035,253 |
+| clean | `clean_masters` | 2,541,388 |
+| clean | `clean_artists` | 9,999,883 |
+| analytics | **`release_fact`** | **31,719,048** (1.67× release count due to style multiplication; `distinct_release_count = 19,035,253`) |
+| analytics | `release_artist_bridge` | 23,143,793 |
+| analytics | `release_label_bridge` | 22,094,829 |
+| analytics | **`master_fact`** | **2,541,466** (78 orphan-from-releases ids on top of the 2,541,388 from `clean_masters`) |
+
+Step durations (sum to ~56 min of CPU on the laptop we tested):
+`parse_releases` 33.1 min · `build_release_fact` 11.3 min ·
+`normalize_release_entities` 5.8 min · `normalize_releases` 1.8 min ·
+`parse_artists` 1.0 min · `quality_checks` 1.0 min · everything
+else under 1 min each.
 
 ### 6. Cleanup between full runs
 
