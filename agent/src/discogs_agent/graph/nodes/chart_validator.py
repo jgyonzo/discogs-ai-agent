@@ -31,6 +31,13 @@ def chart_validator_node(state: AgentState) -> AgentState:
         )
 
     out = result.model_dump()
+    # 005: a valid run with zero rows is a clean terminal state — no retry.
+    if result.valid and result.reason == "empty_result":
+        out["should_retry"] = False
+        state["validation_result"] = out
+        state["terminal_status"] = "succeeded_empty"
+        return state
+
     out["should_retry"] = (not result.valid) and (
         int(state.get("retry_count", 0)) < int(state.get("max_retries", 2))
     )
@@ -40,6 +47,8 @@ def chart_validator_node(state: AgentState) -> AgentState:
 
 def validation_edge(state: AgentState) -> str:
     """Returns the next node name."""
+    if state.get("terminal_status") == "succeeded_empty":
+        return "response_synthesizer"
     validation = state.get("validation_result") or {}
     if validation.get("valid"):
         return "response_synthesizer"

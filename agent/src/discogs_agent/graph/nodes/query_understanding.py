@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from discogs_agent.config import settings
 from discogs_agent.graph.state import AgentState
 from discogs_agent.llm.client import get_chat_client
+from discogs_agent.llm.parse import parse_json_response
 from discogs_agent.observability import logging as obslog
 from discogs_agent.observability.tracing import now_ms, use_node
 from discogs_agent.tools.cost_logger import CostInput, cost_logger
@@ -23,17 +24,6 @@ logger = obslog.get_logger(__name__)
 PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "query_understanding.md"
 
 
-def _summarize_schema(schema_context: dict) -> str:
-    tables = schema_context.get("tables", {})
-    if not isinstance(tables, dict):
-        return "(none)"
-    lines = []
-    for tbl, cols in tables.items():
-        col_list = ", ".join(c["name"] if isinstance(c, dict) else c.name for c in cols)
-        lines.append(f"- {tbl}: {col_list}")
-    return "\n".join(lines) if lines else "(none)"
-
-
 def query_understanding_node(state: AgentState) -> AgentState:
     schema_context = state["schema_context"]
     route = state.get("route") or {}
@@ -41,8 +31,7 @@ def query_understanding_node(state: AgentState) -> AgentState:
 
     template = PROMPT_PATH.read_text(encoding="utf-8")
     system_body = template.format(
-        tables_summary=_summarize_schema(schema_context),
-        has_master_fact=str(bool(schema_context.get("has_master_fact"))).lower(),
+        schema_context_block=schema_context.get("rendered_block") or "",
         carryover_block="",  # US4 TODO — wire in from agent_runs prior turns
         user_query="(see user message below)",
     )
@@ -68,7 +57,7 @@ def query_understanding_node(state: AgentState) -> AgentState:
         )
 
     try:
-        plan = json.loads(response.content)
+        plan = parse_json_response(response.content)
     except (json.JSONDecodeError, ValidationError) as exc:
         logger.warning("query_plan_parse_failed", error=str(exc))
         plan = {"_parse_error": str(exc), "raw": response.content}

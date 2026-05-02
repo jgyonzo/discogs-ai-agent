@@ -1,26 +1,32 @@
 <!-- SPECKIT START -->
-Active feature: **004-agent-v1** — the V1 of Component B
-(Constitution Principle VI), the conversational analytics agent
-that consumes the published DuckDB produced by the ETL. This
-is the **first feature for the `agent/` top-level directory**;
-all prior specs (001/002/003) belong to the `etl/` component.
+Active feature: **005-agent-schema-context** — bug-fix &
+enrichment for the V1 agent (`004-agent-v1`). The agent's
+prompts received column NAMES only; the LLM had no way to know
+that "Techno" is a `style` value, not a `primary_genre` value,
+so style queries silently returned zero rows and rendered
+blank charts. This feature enriches the schema-context payload
+with sample values + a domain glossary, adds a "trend → prefer
+decade" hint, and adds a zero-row guardrail (`succeeded_empty`)
+so empty results surface as a clear "no matching releases"
+reply instead of a blank chart with `status: succeeded`.
+
 Read this feature's plan and its phase-1 artifacts:
 
-- Plan: `specs/004-agent-v1/plan.md`
-- Spec: `specs/004-agent-v1/spec.md`
-- Research (technical decisions: sandbox shape, LangGraph
-  checkpointer, test database strategy, etc.):
-  `specs/004-agent-v1/research.md`
-- Data model (entities + Postgres schema + LangGraph state):
-  `specs/004-agent-v1/data-model.md`
-- Contracts: `specs/004-agent-v1/contracts/`
-  - `api.md` — FastAPI endpoint shapes
-  - `graph.md` — LangGraph nodes + edges + retry semantics
-  - `tools.md` — tool I/O + node-tool allowlist
-  - `sql-safety.md` — allowed/forbidden SQL + two-pass check
-  - `code-generation.md` — generated-code shape + sandbox
-  - `postgres-schema.md` — DDL for the six `agent_*` tables
-- Quickstart: `specs/004-agent-v1/quickstart.md`
+- Plan: `specs/005-agent-schema-context/plan.md`
+- Spec: `specs/005-agent-schema-context/spec.md`
+- Research: `specs/005-agent-schema-context/research.md`
+- Data model: `specs/005-agent-schema-context/data-model.md`
+- Contracts: `specs/005-agent-schema-context/contracts/`
+  - `schema-context.md` — enriched payload shape + token budget
+  - `empty-result.md` — `succeeded_empty` status + chart_validator wiring
+- Quickstart: `specs/005-agent-schema-context/quickstart.md`
+
+Prior agent spec (still authoritative for graph, API, sandbox,
+SQL safety, generated-code shape):
+
+- `specs/004-agent-v1/plan.md` and its `contracts/` (api.md,
+  graph.md, tools.md, sql-safety.md, code-generation.md,
+  postgres-schema.md). 005 is an additive overlay on 004.
 
 The published DuckDB contract — produced by the ETL component
 — remains authoritative for everything the agent reads:

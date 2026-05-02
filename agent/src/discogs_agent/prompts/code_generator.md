@@ -10,12 +10,16 @@ grain *one row per release*) instead. Never use
 `COUNT(*) FROM release_fact` unless you genuinely want to count
 release-style rows.
 
-Available tables (allowlist):
+Schema context (allowlist + sample distinct values + domain rules):
 
-{tables_summary}
+{schema_context_block}
 
-The `master_fact` table is present = {has_master_fact}. If absent, do
-NOT reference it.
+Use the sample distinct values when picking filter columns. Subgenres
+(Techno, House, Ambient, Drum n Bass, Trance, Dub, Garage, Disco, Acid
+Jazz, Funk, ...) live on `release_fact.style`, NOT on `primary_genre`.
+Filter `WHERE style = '<value>'` for those questions and group by
+`decade` for trend/over-time questions unless the user explicitly asks
+for yearly granularity ("year", "yearly", "annual").
 
 Required code shape:
 

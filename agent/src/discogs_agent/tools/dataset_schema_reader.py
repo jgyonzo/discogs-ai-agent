@@ -6,9 +6,9 @@ through the @traced_tool persistence shim.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from discogs_agent.duckdb_layer.schema import SchemaContext, get_schema_context
@@ -30,6 +30,15 @@ class SchemaReaderOutput(BaseModel):
     duckdb_path: str
     captured_at: str
     warnings: list[str] = []
+    # 005-agent-schema-context: pass the enriched fields through so
+    # the prompt-rendering nodes can use the pre-rendered block.
+    sample_values: dict[str, dict[str, list[dict[str, Any]]]] = Field(
+        default_factory=dict
+    )
+    domain_glossary: list[str] = Field(default_factory=list)
+    published_run_id: str | None = None
+    rendered_block: str = ""
+    rendered_token_count: int = 0
 
 
 def _build(session_provider: Callable[[], Session | None] | None = None) -> Callable[[SchemaReaderInput], SchemaReaderOutput]:
@@ -45,6 +54,11 @@ def _build(session_provider: Callable[[], Session | None] | None = None) -> Call
             duckdb_path=ctx["duckdb_path"],
             captured_at=ctx["captured_at"],
             warnings=list(ctx.get("warnings", [])),
+            sample_values=ctx.get("sample_values", {}),
+            domain_glossary=list(ctx.get("domain_glossary", [])),
+            published_run_id=ctx.get("published_run_id"),
+            rendered_block=ctx.get("rendered_block", ""),
+            rendered_token_count=int(ctx.get("rendered_token_count", 0)),
         )
 
     return dataset_schema_reader

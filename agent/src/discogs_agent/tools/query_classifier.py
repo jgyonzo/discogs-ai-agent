@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from discogs_agent.config import settings
 from discogs_agent.llm.client import get_chat_client
+from discogs_agent.llm.parse import parse_json_response
 from discogs_agent.tools.base import traced_tool
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "router.md"
@@ -31,27 +32,16 @@ class ClassifierOutput(BaseModel):
     rationale: str
 
 
-def _summarize_schema(schema_context: dict[str, object]) -> str:
-    tables = schema_context.get("tables", {})
-    if not isinstance(tables, dict):
-        return "(none)"
-    lines = []
-    for tbl, cols in tables.items():
-        col_list = ", ".join(c["name"] if isinstance(c, dict) else c.name for c in cols)
-        lines.append(f"- {tbl}: {col_list}")
-    return "\n".join(lines) if lines else "(none)"
-
-
 def _render_prompt(payload: ClassifierInput) -> list[dict[str, str]]:
     """Split the rendered prompt into (system, user) so the stub can
     pattern-match the actual user query — not boilerplate that may
     happen to contain example phrases like "best labels"."""
     template = PROMPT_PATH.read_text(encoding="utf-8")
+    schema_block = payload.schema_context.get("rendered_block") or ""
     # Stub-out the user_query slot in the system body so the template
     # still renders cleanly; the real user query goes in the user msg.
     system_body = template.format(
-        tables_summary=_summarize_schema(payload.schema_context),
-        has_master_fact=str(bool(payload.schema_context.get("has_master_fact"))).lower(),
+        schema_context_block=schema_block,
         cheap_model=settings.CHEAP_MODEL,
         strong_model=settings.STRONG_MODEL,
         user_query="(see user message below)",
@@ -72,7 +62,7 @@ def _build(
         response = client.invoke(messages)
 
         try:
-            data = json.loads(response.content)
+            data = parse_json_response(response.content)
             return ClassifierOutput.model_validate(data)
         except (json.JSONDecodeError, ValidationError) as exc:
             # Defensive fallback: classify as unsupported with the

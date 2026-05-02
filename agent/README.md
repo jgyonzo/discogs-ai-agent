@@ -5,9 +5,29 @@ a containerized FastAPI + LangGraph service that answers
 natural-language analytical questions about the Discogs catalog
 by reading the published DuckDB produced by the ETL.
 
-The full design lives in [`specs/004-agent-v1/`](../specs/004-agent-v1/).
-This README is the operator-facing quickstart; for the whole
-runbook see [`specs/004-agent-v1/quickstart.md`](../specs/004-agent-v1/quickstart.md).
+The full design lives in [`specs/004-agent-v1/`](../specs/004-agent-v1/),
+extended by [`specs/005-agent-schema-context/`](../specs/005-agent-schema-context/)
+(schema-context enrichment + `succeeded_empty` empty-result
+guardrail). This README is the operator-facing quickstart; for
+the whole runbook see [`specs/004-agent-v1/quickstart.md`](../specs/004-agent-v1/quickstart.md)
+and [`specs/005-agent-schema-context/quickstart.md`](../specs/005-agent-schema-context/quickstart.md).
+
+### 005 schema-context enrichment (this branch)
+
+The agent's prompts now receive a pre-rendered schema block that
+includes column names + sample distinct values for the low-
+cardinality categorical columns (`primary_genre`,
+`primary_format_group`, `decade`, `country` top-20,
+`release_fact.style` top-50) plus a small domain glossary.
+Without this, the LLM had no way to know that "Techno" is a
+`style` value (on `release_fact`), not a `primary_genre` value
+on `release_unique_view` — so style queries silently returned
+zero rows.
+
+A new terminal status `succeeded_empty` covers the case where
+SQL runs cleanly but returns no rows: the API surfaces a
+"no matching releases" message with the SQL preserved, instead
+of shipping a blank chart with `status: succeeded`.
 
 ---
 

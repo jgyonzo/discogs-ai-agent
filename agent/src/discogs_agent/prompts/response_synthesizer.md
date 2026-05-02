@@ -28,6 +28,12 @@ Rules:
   or keyword.
 - For `failed_validation`: say something like "I generated code but
   couldn't produce a valid chart after retrying. Try rephrasing."
+- For `succeeded_empty`: in one short paragraph (a) say no releases
+  match the query, (b) include the SQL that ran (verbatim, fenced as
+  ```sql ... ```), and (c) suggest the user check whether the filter
+  value belongs to `style` (on release_fact) or `primary_genre` (on
+  release_unique_view). Do NOT mention a chart — the result is empty
+  so no chart is being shown.
 - **NEVER** include raw tracebacks, stack traces, file paths from
   errors, or secret-shaped strings (`OPENAI_API_KEY`, etc.).
 

@@ -249,16 +249,25 @@ def post_query(payload: QueryRequest) -> QueryResponse:
         latency_ms=latency_ms,
     )
 
-    # Pull the primary chart artifact (if any).
+    # Pull the primary chart artifact (if any). For empty-result runs,
+    # suppress the artifact reference: the chart file may exist on
+    # disk (the sandbox produced it before validation) but it's blank
+    # and shipping it confuses the user.
     chart_ref: ChartArtifactRef | None = None
-    artifacts = ArtifactRepo(session).list_by_run(UUID(run_id))
-    if artifacts:
-        a = artifacts[0]
-        chart_ref = ChartArtifactRef(
-            artifact_id=str(a.artifact_id),
-            url=f"/artifacts/{a.artifact_id}",
-            type=a.artifact_type,
-        )
+    if status != "succeeded_empty":
+        artifacts = ArtifactRepo(session).list_by_run(UUID(run_id))
+        if artifacts:
+            a = artifacts[0]
+            chart_ref = ChartArtifactRef(
+                artifact_id=str(a.artifact_id),
+                url=f"/artifacts/{a.artifact_id}",
+                type=a.artifact_type,
+            )
+
+    if status == "succeeded_empty":
+        dataframe_preview: list = []
+    else:
+        dataframe_preview = final_state.get("dataframe_preview") or []
 
     session.commit()
     session.close()
@@ -275,7 +284,7 @@ def post_query(payload: QueryRequest) -> QueryResponse:
         sql=sql,
         code=(final_state.get("generated_code") if payload.debug else None),
         chart_artifact=chart_ref,
-        dataframe_preview=final_state.get("dataframe_preview") or [],
+        dataframe_preview=dataframe_preview,
         row_count=int((final_state.get("validation_result") or {}).get("row_count") or 0),
         status=status,
         carryover=CarryoverInfo(

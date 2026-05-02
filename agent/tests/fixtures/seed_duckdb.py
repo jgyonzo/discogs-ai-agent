@@ -31,6 +31,17 @@ _RELEASES_BASE = [
     (1008, 2000, 2008, "UK", True, True),
     (1009, 2010, 2012, "US", True, False),
     (1010, 2010, 2015, "DE", False, True),
+    # 005-agent-schema-context: extra styles so the canonical-style
+    # golden suite has a non-empty result for each name in
+    # `agent/src/discogs_agent/llm/stub.py:_KNOWN_STYLES`.
+    (1011, 1990, 1995, "UK", True, True),  # Ambient
+    (1012, 2000, 2003, "UK", True, True),  # Drum n Bass
+    (1013, 1990, 1996, "DE", True, True),  # Trance
+    (1014, 1980, 1989, "JM", True, False), # Dub
+    (1015, 1990, 1994, "UK", True, False), # Garage
+    (1016, 1970, 1978, "US", True, False), # Disco
+    (1017, 1980, 1987, "UK", True, False), # Acid Jazz
+    (1018, 1970, 1973, "US", True, False), # Funk
 ]
 
 # (release_id, style, style_order)
@@ -49,6 +60,15 @@ _RELEASE_STYLES = [
     (1009, "House", 1),
     (1010, "Techno", 1),
     (1010, "Acid", 2),
+    # Each canonical style gets at least one release in the seed.
+    (1011, "Ambient", 1),
+    (1012, "Drum n Bass", 1),
+    (1013, "Trance", 1),
+    (1014, "Dub", 1),
+    (1015, "Garage", 1),
+    (1016, "Disco", 1),
+    (1017, "Acid Jazz", 1),
+    (1018, "Funk", 1),
 ]
 
 # (release_id, primary_genre)
@@ -63,6 +83,14 @@ _RELEASE_GENRES = {
     1008: "Electronic",
     1009: "Rock",
     1010: "Electronic",
+    1011: "Electronic",
+    1012: "Electronic",
+    1013: "Electronic",
+    1014: "Reggae",
+    1015: "Electronic",
+    1016: "Funk / Soul",
+    1017: "Jazz",
+    1018: "Funk / Soul",
 }
 
 # (release_id, master_id) — a few releases share masters.

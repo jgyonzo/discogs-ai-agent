@@ -147,7 +147,8 @@ class Run(Base):
             name="agent_runs_complexity_check",
         ),
         CheckConstraint(
-            "status IN ('running','succeeded','failed_safety','failed_validation',"
+            "status IN ('running','succeeded','succeeded_empty',"
+            "'failed_safety','failed_validation',"
             "'failed_unsupported','failed_clarification_needed','failed_internal')",
             name="agent_runs_status_check",
         ),

@@ -28,9 +28,9 @@ Failure details:
 
 {failure_details}
 
-Allowlisted tables in this snapshot:
+Schema context (allowlist + sample distinct values + domain rules):
 
-{tables_summary}
+{schema_context_block}
 
 Critical rules (unchanged from the original generator prompt):
 
@@ -40,6 +40,9 @@ Critical rules (unchanged from the original generator prompt):
 - Connect with `read_only=True`.
 - Produce `RESULT` with keys: `sql`, `chart_path`, `dataframe_preview`,
   `row_count`, `chart_type`.
+- Subgenre names (Techno, House, Ambient, ...) filter on
+  `release_fact.style`, not `primary_genre`. Use the sample distinct
+  values above to confirm the column.
 
 Return ONLY the corrected Python source code. No prose, no markdown
 fence.

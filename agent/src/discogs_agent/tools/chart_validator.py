@@ -37,6 +37,11 @@ class ValidatorOutput(BaseModel):
     chart_bytes: int | None = None
     chart_type: str | None = None
     row_count: int | None = None
+    # 005-agent-schema-context: a clean run that returns zero rows is
+    # `valid=True` but flagged with `reason="empty_result"`. The
+    # chart_validator_node maps this to terminal_status="succeeded_empty"
+    # without retrying.
+    reason: str | None = None
 
 
 def _validate(payload: ValidatorInput) -> ValidatorOutput:
@@ -99,13 +104,19 @@ def _validate(payload: ValidatorInput) -> ValidatorOutput:
     if chart_type and chart_type not in _ACCEPTED_CHART_TYPES:
         errors.append(ValidationError(rule="chart_type_unknown", detail=str(chart_type)))
 
+    valid = not errors
+    reason: str | None = None
+    if valid and isinstance(row_count, int) and row_count == 0:
+        reason = "empty_result"
+
     return ValidatorOutput(
-        valid=not errors,
+        valid=valid,
         errors=errors,
         chart_path=str(chart_path) if chart_path.exists() else None,
         chart_bytes=chart_bytes,
         chart_type=chart_type if isinstance(chart_type, str) else None,
         row_count=row_count if isinstance(row_count, int) else None,
+        reason=reason,
     )
 
 

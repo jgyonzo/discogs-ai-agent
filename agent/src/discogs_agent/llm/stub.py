@@ -99,14 +99,35 @@ class StubChatModel:
 # clear message rather than mysteriously. ─────────────────────────────
 
 
-_TECHNO_PATTERN = re.compile(r"\btechno\b", re.IGNORECASE)
 _PRICE_PATTERN = re.compile(r"\bprice\b", re.IGNORECASE)
 _BEST_LABEL_PATTERN = re.compile(r"\bbest\s+labels?\b", re.IGNORECASE)
+_YEARLY_PATTERN = re.compile(r"\b(year|yearly|annual)\b", re.IGNORECASE)
+
+# Known style values. Mirrors the values the agent's enriched
+# schema-context surfaces to the LLM in production. Keep the list
+# tight — these are the styles the test suites exercise.
+_KNOWN_STYLES: tuple[str, ...] = (
+    "Techno", "House", "Ambient", "Drum n Bass", "Trance",
+    "Dub", "Garage", "Disco", "Acid Jazz", "Funk",
+)
+
+
+def _detect_style(query: str) -> str | None:
+    """Find the first known style mentioned in the user query, with
+    a word-boundary match so 'House' doesn't accidentally fire on
+    'household'."""
+    q_lower = query.lower()
+    for style in _KNOWN_STYLES:
+        pattern = rf"\b{re.escape(style.lower())}\b"
+        if re.search(pattern, q_lower):
+            return style
+    return None
 
 
 def _fallback_for_node(node: str, user_query: str) -> str:
     """Sane defaults for the headline test queries."""
     q = user_query.lower()
+    style = _detect_style(user_query)
     if node == "router":
         if _PRICE_PATTERN.search(q):
             return _ROUTER_UNSUPPORTED
@@ -116,18 +137,71 @@ def _fallback_for_node(node: str, user_query: str) -> str:
             return _ROUTER_COMPLEX
         return _ROUTER_SIMPLE
     if node == "query_understanding":
-        if _TECHNO_PATTERN.search(q):
-            return _PLAN_TECHNO_TIME
-        if "decade" in q:
-            return _PLAN_BY_DECADE
+        if style:
+            return _plan_for_style(style, user_query)
         return _PLAN_BY_DECADE
     if node == "code_generator":
-        if _TECHNO_PATTERN.search(q):
-            return _CODE_TECHNO_TIME
+        if style:
+            return _code_for_style(style, user_query)
         return _CODE_BY_DECADE
     if node == "response_synthesizer":
         return "Generated a chart for your query."
     return f'{{"_stub_unhandled_node": "{node}"}}'
+
+
+def _plan_for_style(style: str, user_query: str) -> str:
+    grain = "year" if _YEARLY_PATTERN.search(user_query) else "decade"
+    return (
+        '{\n'
+        '  "analysis_intent": "trend",\n'
+        '  "tables": ["release_fact"],\n'
+        f'  "dimensions": ["{grain}"],\n'
+        '  "metrics": [{"name": "releases", "aggregation": "count_distinct", "column": "release_id"}],\n'
+        f'  "filters": [{{"column": "style", "operator": "=", "value": "{style}"}}],\n'
+        '  "chart_type": "line",\n'
+        '  "notes": "Style filter on release_fact + COUNT DISTINCT release_id."\n'
+        '}'
+    )
+
+
+def _code_for_style(style: str, user_query: str) -> str:
+    grain = "year" if _YEARLY_PATTERN.search(user_query) else "decade"
+    title = f"{style} releases over time"
+    return (
+        'import duckdb\n'
+        'import pandas as pd\n'
+        'import plotly.express as px\n'
+        'from pathlib import Path\n'
+        'import os\n'
+        '\n'
+        'DB_PATH = os.environ["ANALYTICS_DUCKDB_PATH"]\n'
+        'ARTIFACT_DIR = Path(os.environ["ARTIFACT_DIR"])\n'
+        'ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)\n'
+        '\n'
+        'con = duckdb.connect(DB_PATH, read_only=True)\n'
+        '\n'
+        'sql = """\n'
+        f'SELECT {grain}, COUNT(DISTINCT release_id) AS releases\n'
+        'FROM release_fact\n'
+        f"WHERE style = '{style}' AND {grain} IS NOT NULL\n"
+        f'GROUP BY {grain}\n'
+        f'ORDER BY {grain}\n'
+        '"""\n'
+        '\n'
+        'df = con.execute(sql).df()\n'
+        '\n'
+        f'fig = px.line(df, x="{grain}", y="releases", title="{title}")\n'
+        'chart_path = ARTIFACT_DIR / "chart.html"\n'
+        'fig.write_html(str(chart_path), include_plotlyjs="inline")\n'
+        '\n'
+        'RESULT = {\n'
+        '    "sql": sql,\n'
+        '    "chart_path": str(chart_path),\n'
+        '    "dataframe_preview": df.head(20).to_dict(orient="records"),\n'
+        '    "row_count": len(df),\n'
+        '    "chart_type": "line",\n'
+        '}\n'
+    )
 
 
 _ROUTER_SIMPLE = (
@@ -157,17 +231,6 @@ _PLAN_BY_DECADE = """{
   "chart_type": "bar",
   "notes": "Use release_unique_view (release-grain) for release counts."
 }"""
-
-_PLAN_TECHNO_TIME = """{
-  "analysis_intent": "trend",
-  "tables": ["release_fact"],
-  "dimensions": ["year"],
-  "metrics": [{"name": "releases", "aggregation": "count_distinct", "column": "release_id"}],
-  "filters": [{"column": "style", "operator": "=", "value": "Techno"}],
-  "chart_type": "line",
-  "notes": "Use COUNT(DISTINCT release_id) because release_fact is release x style."
-}"""
-
 
 _CODE_BY_DECADE = '''import duckdb
 import pandas as pd
@@ -205,42 +268,5 @@ RESULT = {
 '''
 
 
-_CODE_TECHNO_TIME = '''import duckdb
-import pandas as pd
-import plotly.express as px
-from pathlib import Path
-import os
-
-DB_PATH = os.environ["ANALYTICS_DUCKDB_PATH"]
-ARTIFACT_DIR = Path(os.environ["ARTIFACT_DIR"])
-ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-
-con = duckdb.connect(DB_PATH, read_only=True)
-
-sql = """
-SELECT year, COUNT(DISTINCT release_id) AS releases
-FROM release_fact
-WHERE style = 'Techno' AND year IS NOT NULL
-GROUP BY year
-ORDER BY year
-"""
-
-df = con.execute(sql).df()
-
-fig = px.line(df, x="year", y="releases", title="Techno releases over time")
-chart_path = ARTIFACT_DIR / "chart.html"
-fig.write_html(str(chart_path), include_plotlyjs="inline")
-
-RESULT = {
-    "sql": sql,
-    "chart_path": str(chart_path),
-    "dataframe_preview": df.head(20).to_dict(orient="records"),
-    "row_count": len(df),
-    "chart_type": "line",
-}
-'''
-
-
 # Expose the canned codegen strings so tests can match on them.
 CODE_BY_DECADE = _CODE_BY_DECADE
-CODE_TECHNO_TIME = _CODE_TECHNO_TIME

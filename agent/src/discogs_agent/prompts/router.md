@@ -18,13 +18,16 @@ Classify the user's question into exactly one of:
   to use. Examples: "What are the best labels?" "Which genres are most
   important?". Return `clarification_needed`.
 
-Available tables (allowlist):
+Schema context (allowlist + sample distinct values + domain rules):
 
-{tables_summary}
+{schema_context_block}
 
-`master_fact` is OPTIONAL — `has_master_fact = {has_master_fact}`. If
-the question requires `master_fact` and it is absent, classify as
-`unsupported`.
+Use the sample distinct values to decide whether a referenced filter
+value is in the catalog. If a user asks about "Techno" and the
+`release_fact.style` sample contains "Techno", classify as `simple` or
+`complex`, NOT `unsupported`. Only return `unsupported` when the
+required data category (prices, ratings, user counts, reviews) is
+genuinely absent.
 
 Return JSON exactly:
 

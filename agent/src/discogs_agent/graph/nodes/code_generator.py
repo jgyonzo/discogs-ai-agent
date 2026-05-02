@@ -18,17 +18,6 @@ from discogs_agent.tools.cost_logger import CostInput, cost_logger
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
-def _summarize_schema(schema_context: dict) -> str:
-    tables = schema_context.get("tables", {})
-    if not isinstance(tables, dict):
-        return "(none)"
-    lines = []
-    for tbl, cols in tables.items():
-        col_list = ", ".join(c["name"] if isinstance(c, dict) else c.name for c in cols)
-        lines.append(f"- {tbl}: {col_list}")
-    return "\n".join(lines) if lines else "(none)"
-
-
 def _strip_code_fence(text: str) -> str:
     """LLMs sometimes wrap code in ```python … ```. Strip if present."""
     t = text.strip()
@@ -51,11 +40,12 @@ def code_generator_node(state: AgentState) -> AgentState:
     route = state.get("route") or {}
     selected_model = route.get("selected_model") or settings.CHEAP_MODEL
 
+    schema_block = schema_context.get("rendered_block") or ""
+
     if retry_count == 0:
         template = (PROMPTS_DIR / "code_generator.md").read_text(encoding="utf-8")
         system_body = template.format(
-            tables_summary=_summarize_schema(schema_context),
-            has_master_fact=str(bool(schema_context.get("has_master_fact"))).lower(),
+            schema_context_block=schema_block,
             query_plan=json.dumps(plan, indent=2),
             user_query="(see user message below)",
         )
@@ -66,7 +56,7 @@ def code_generator_node(state: AgentState) -> AgentState:
         ) or "(no specific failure recorded)"
         template = (PROMPTS_DIR / "repair_code.md").read_text(encoding="utf-8")
         system_body = template.format(
-            tables_summary=_summarize_schema(schema_context),
+            schema_context_block=schema_block,
             query_plan=json.dumps(plan, indent=2),
             previous_code=state.get("generated_code") or "",
             previous_sql=state.get("generated_sql") or "",

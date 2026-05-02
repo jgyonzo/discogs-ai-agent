@@ -139,3 +139,94 @@ def test_unknown_chart_type(tmp_path: Path) -> None:
         ))
     assert out.valid is False
     assert any(e.rule == "chart_type_unknown" for e in out.errors)
+
+
+# ─── 005-agent-schema-context: zero-row guardrail ────────────────────
+
+
+def test_empty_result_is_valid_with_reason(tmp_path: Path) -> None:
+    """A clean run that returns zero rows is `valid=True` with
+    `reason="empty_result"`. The graph maps this to terminal_status
+    `succeeded_empty`, not a failure."""
+    chart = _make_chart(tmp_path)
+    er = _exec_result(result={
+        "sql": "SELECT * FROM release_fact WHERE style = 'Polka'",
+        "chart_path": str(chart),
+        "dataframe_preview": [],
+        "row_count": 0,
+        "chart_type": "line",
+    })
+    with use_node("chart_validator"):
+        out = chart_validator(ValidatorInput(
+            execution_result=er,
+            expected_chart_dir=str(tmp_path),
+        ))
+    assert out.valid is True
+    assert out.errors == []
+    assert out.reason == "empty_result"
+    assert out.row_count == 0
+
+
+def test_non_empty_result_has_no_reason(tmp_path: Path) -> None:
+    chart = _make_chart(tmp_path)
+    er = _exec_result(result={
+        "sql": "SELECT 1",
+        "chart_path": str(chart),
+        "dataframe_preview": [{"x": 1}],
+        "row_count": 1,
+        "chart_type": "bar",
+    })
+    with use_node("chart_validator"):
+        out = chart_validator(ValidatorInput(
+            execution_result=er,
+            expected_chart_dir=str(tmp_path),
+        ))
+    assert out.valid is True
+    assert out.reason is None
+
+
+def test_chart_validator_node_maps_empty_to_succeeded_empty(tmp_path: Path) -> None:
+    """The node sets terminal_status='succeeded_empty' and clears
+    should_retry when the tool reports empty_result."""
+    from discogs_agent.config import settings
+    from discogs_agent.graph.nodes.chart_validator import (
+        chart_validator_node,
+        validation_edge,
+    )
+
+    settings.ARTIFACTS_DIR = str(tmp_path)
+    chart_dir = tmp_path / "thread-x" / "run-y"
+    chart_dir.mkdir(parents=True)
+    chart = chart_dir / "chart.html"
+    chart.write_text("<html></html>")
+
+    state = {
+        "thread_id": "thread-x",
+        "run_id": "run-y",
+        "execution_result": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "duration_ms": 100,
+            "result": {
+                "sql": "SELECT * FROM release_fact WHERE style = 'Polka'",
+                "chart_path": str(chart),
+                "dataframe_preview": [],
+                "row_count": 0,
+                "chart_type": "line",
+            },
+            "exception_type": None,
+            "exception_message": None,
+        },
+        "retry_count": 0,
+        "max_retries": 2,
+    }
+
+    new_state = chart_validator_node(state)  # type: ignore[arg-type]
+    assert new_state["terminal_status"] == "succeeded_empty"
+    assert new_state["validation_result"]["should_retry"] is False
+    assert new_state["validation_result"]["reason"] == "empty_result"
+
+    # Edge must route to the synthesizer, never back to code_generator.
+    next_node = validation_edge(new_state)  # type: ignore[arg-type]
+    assert next_node == "response_synthesizer"

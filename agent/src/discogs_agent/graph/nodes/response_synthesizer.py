@@ -41,7 +41,9 @@ def response_synthesizer_node(state: AgentState) -> AgentState:
         else:
             validation = state.get("validation_result") or {}
             safety = state.get("safety_result") or {}
-            if validation.get("valid"):
+            if validation.get("valid") and validation.get("reason") == "empty_result":
+                status = "succeeded_empty"
+            elif validation.get("valid"):
                 status = "succeeded"
             elif validation:
                 # Validator ran and rejected — and the retry budget
@@ -95,7 +97,23 @@ def _build_result_block(state: AgentState) -> str:
     if sql:
         parts.append(f"SQL:\n{sql}")
     validation = state.get("validation_result") or {}
-    if validation.get("valid"):
+    is_empty = (
+        state.get("terminal_status") == "succeeded_empty"
+        or validation.get("reason") == "empty_result"
+    )
+    if is_empty:
+        parts.append(
+            "Result: no matching releases. The query ran successfully but "
+            "returned zero rows."
+        )
+        parts.append(
+            "Diagnostic hint: if you were filtering by a musical style "
+            "(Techno, House, Ambient, etc.), check whether the value is a "
+            "`style` (on release_fact) or a `primary_genre` (on "
+            "release_unique_view). The schema context's sample values "
+            "show which column carries which kind of value."
+        )
+    elif validation.get("valid"):
         artifact_paths = state.get("artifact_paths") or []
         if artifact_paths:
             parts.append(f"Chart artifact: {artifact_paths[0]}")
