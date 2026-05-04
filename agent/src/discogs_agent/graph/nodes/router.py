@@ -5,6 +5,7 @@ Calls the query_classifier tool, then logs the cost via cost_logger.
 
 from __future__ import annotations
 
+from discogs_agent.config import settings
 from discogs_agent.graph.state import AgentState
 from discogs_agent.observability.tracing import now_ms, use_node
 from discogs_agent.tools.cost_logger import CostInput, cost_logger
@@ -24,7 +25,7 @@ def router_node(state: AgentState) -> AgentState:
         cost_logger(
             CostInput(
                 node_name="router",
-                model_name="gpt-4o-mini",
+                model_name=settings.CHEAP_MODEL,
                 prompt_tokens=0,  # actual usage flows in via the model_usage trace
                 completion_tokens=0,
                 latency_ms=latency,
