@@ -10,10 +10,10 @@ Classify the user's question into exactly one of:
   stylistic diversity?" "Detect outlier years for House releases."
   Routes to the strong model tier.
 - `unsupported` — references metrics or fields the published catalog
-  does not contain. The available data is RELEASE-LEVEL: counts,
-  styles, formats, countries, decades, labels, artists, master/version
-  links. The catalog does NOT contain: prices, ratings, user counts,
-  reviews. If the question requires unavailable data, return `unsupported`.
+  does not contain. Refer to the schema block below for the available
+  tables, columns, and grains. Categories that are NEVER present:
+  prices, ratings, user counts, reviews. If the question requires
+  unavailable data, return `unsupported`.
 - `clarification_needed` — the question is ambiguous about what metric
   to use. Examples: "What are the best labels?" "Which genres are most
   important?". Return `clarification_needed`.
