@@ -289,7 +289,15 @@ def read_schema_context(duckdb_path: str | Path) -> SchemaContext:
     if not path.exists():
         raise FileNotFoundError(f"DuckDB not found at {path}")
 
-    con = duckdb.connect(str(path), read_only=True)
+    # The published DuckDB is mounted read-only, so DuckDB cannot
+    # create its default `<dbfile>.tmp/` spill dir adjacent to the file.
+    # Point it at a writable tmpfs dir instead so big GROUP BYs in
+    # _collect_sample_values don't fail with "Read-only file system".
+    con = duckdb.connect(
+        str(path),
+        read_only=True,
+        config={"temp_directory": "/tmp/duckdb"},
+    )
     try:
         rows = con.execute(
             """

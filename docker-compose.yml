@@ -27,6 +27,8 @@ services:
     volumes:
       - ./data/published/duckdb:/app/data/published/duckdb:ro
       - ./artifacts:/app/artifacts
+    tmpfs:
+      - /tmp/duckdb
     depends_on:
       postgres:
         condition: service_healthy

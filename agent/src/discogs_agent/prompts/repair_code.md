@@ -37,7 +37,9 @@ Critical rules (unchanged from the original generator prompt):
 - Use `COUNT(DISTINCT release_id)` (or `release_unique_view`) — never
   `COUNT(*) FROM release_fact` for release counts.
 - Only `SELECT` and `WITH ... SELECT`. No DDL/DML, no file functions.
-- Connect with `read_only=True`.
+- Connect with `read_only=True` and
+  `config={{"temp_directory": "/tmp/duckdb"}}` so spill writes land on
+  a writable tmpfs (the DuckDB file itself is on a read-only mount).
 - Produce `RESULT` with keys: `sql`, `chart_path`, `dataframe_preview`,
   `row_count`, `chart_type`.
 - Subgenre names (Techno, House, Ambient, ...) filter on
