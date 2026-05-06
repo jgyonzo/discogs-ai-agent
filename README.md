@@ -1,93 +1,219 @@
 # genai-pathway-final-project-yonzo
 
+A two-component system that turns the public Discogs XML dumps into a
+queryable analytics surface, then lets you ask natural-language
+questions over it.
 
+- **`etl/`** — local-first batch tool. Streams the monthly Discogs
+  `releases.xml` / `masters.xml` / `artists.xml` dumps, materializes
+  layered Parquet contracts (`staging` → `clean` → `analytics`), and
+  publishes a single DuckDB at
+  `data/published/duckdb/discogs.duckdb`.
+- **`agent/`** — containerized FastAPI + LangGraph service. Answers
+  natural-language questions over the published DuckDB by generating
+  + executing read-only Python/SQL inside a sandbox, then rendering a
+  Plotly chart.
 
-## Getting started
+The two halves are coupled **only** through the published DuckDB and
+the contracts in `specs/001-discogs-etl/contracts/duckdb-schema.md`
+and `specs/003-masters-artists/contracts/duckdb-schema.md`. They have
+their own dependency manifests, their own test suites, and run
+independently. This separation is governed by Principle VI
+("Two Components, One Contract") of the project constitution at
+[`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Architecture
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+```text
+   Discogs XML dumps                          natural-language question
+   (releases / masters / artists)                       │
+              │                                         ▼
+              ▼                                ┌────────────────────┐
+   ┌────────────────────┐                      │   agent (FastAPI   │
+   │      etl CLI       │     publishes        │   + LangGraph,     │
+   │  python -m         │  ──────────────────▶ │   sandboxed exec)  │
+   │  discogs_etl.cli   │   discogs.duckdb     │   :8000            │
+   └────────────────────┘    (read-only        └──────┬─────────────┘
+              │              contract)                │
+              ▼                                       ▼
+   data/{staging,clean,                       Plotly chart artifact
+   analytics}/{run_id}/                       + run trace in Postgres
 ```
-cd existing_repo
-git remote add origin https://gitlab.kdsoft.io/pluralit-ai-solutions/genai-pathway/cohort-02/teams-group-05/genai-pathway-final-project-yonzo.git
-git branch -M main
-git push -uf origin main
+
+The agent's LangGraph is a deterministic 8-node pipeline:
+
+```text
+load_schema → router → query_understanding → code_generator
+  → sql_safety_checker → sandbox_executor → chart_validator
+    → response_synthesizer → END
 ```
 
-## Integrate with your tools
+with retry edges from `sql_safety_checker` and `chart_validator` back
+to `code_generator`, capped at `MAX_RETRIES`. The compiled graph is
+checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 
-- [ ] [Set up project integrations](https://gitlab.kdsoft.io/pluralit-ai-solutions/genai-pathway/cohort-02/teams-group-05/genai-pathway-final-project-yonzo/-/settings/integrations)
+---
 
-## Collaborate with your team
+## Repository layout
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```text
+.
+├── etl/                  # ETL component (Python CLI, Parquet/DuckDB)
+├── agent/                # Agent component (FastAPI + LangGraph + sandbox)
+├── specs/                # Spec Kit feature specs (the SDD source of truth)
+│   ├── 001-discogs-etl/              # ETL Fase 1 — release_fact baseline
+│   ├── 002-etl-scaleup/              # ETL Fase 2+3 — real-data + scale
+│   ├── 003-masters-artists/          # ETL Fase 4 — master_fact + artists
+│   ├── 004-agent-v1/                 # Agent V1 — graph, API, sandbox, contracts
+│   ├── 005-agent-schema-context/     # Schema-context enrichment + empty-result guard
+│   ├── 006-bugfix-postmortem/        # Three-bug postmortem → Constitution v1.2.0
+│   └── 007-sandbox-fsize-budget/     # Active: raise RLIMIT_FSIZE for DuckDB spill
+├── docs/                 # Original design notes (pre-Spec Kit)
+├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
+├── docker-compose.yml    # agent-api + postgres for the agent stack
+├── .specify/             # Spec Kit configuration; constitution lives here
+└── CLAUDE.md             # Active-feature pointer for AI assistants
+```
 
-## Test and Deploy
+`data/` is gitignored except for any small fixtures explicitly added
+under `*/tests/fixtures/`.
 
-Use the built-in continuous integration in GitLab.
+---
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Quickstart
 
-***
+### 1. Run the ETL once
 
-# Editing this README
+The ETL produces the DuckDB the agent reads. The repo ships a
+7-release curated fixture so you can smoke-test the pipeline without
+downloading the real dumps.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+pip install -e 'etl/[test]'
 
-## Suggestions for a good README
+mkdir -p data/raw/discogs/discogs-2026-04
+cp etl/tests/fixtures/releases_sample.xml \
+   data/raw/discogs/discogs-2026-04/releases.xml
+# Optional — masters and artists are auto-detected:
+cp etl/tests/fixtures/masters_sample.xml  data/raw/discogs/discogs-2026-04/masters.xml
+cp etl/tests/fixtures/artists_sample.xml  data/raw/discogs/discogs-2026-04/artists.xml
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+python -m discogs_etl.cli run --config etl/configs/base.yml
 
-## Name
-Choose a self-explaining name for your project.
+duckdb data/published/duckdb/discogs.duckdb \
+  -c 'SELECT COUNT(DISTINCT release_id) FROM release_fact;'
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+For the full ~19M-release April-2026 dump (≈1 hour CPU on a laptop,
+60–120 GB intermediate disk), see
+[`etl/README.md`](etl/README.md) §"Running on the full Discogs dump".
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### 2. Bring up the agent stack
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```bash
+cp .env.example .env
+# edit .env to set OPENAI_API_KEY
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+# Drop the published DuckDB at:
+#   ./data/published/duckdb/discogs.duckdb
+# (produced by step 1 above)
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+docker compose up --build
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+until curl -fs http://localhost:8000/health | jq -e '.status == "ok"' > /dev/null
+do sleep 2
+done
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 3. Ask a question
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+curl -s -X POST http://localhost:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Show the evolution of Techno releases over time"}' | jq .
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+The response includes a `chart_artifact.url`; open it in a browser to
+see the Plotly chart. Files land at
+`./artifacts/<thread_id>/<run_id>/<chart>.html`.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+The full agent runbook (health endpoints, persistence across
+restart, admin endpoints, configuration knobs) lives in
+[`agent/README.md`](agent/README.md) and
+[`specs/004-agent-v1/quickstart.md`](specs/004-agent-v1/quickstart.md).
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+---
 
-## License
-For open source projects, say how it is licensed.
+## Development model
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+The project is governed by a written constitution and developed via
+the Spec Kit cycle (`/speckit-specify` → `/speckit-clarify` →
+`/speckit-plan` → `/speckit-tasks` → `/speckit-implement`). Every
+non-trivial change goes through a feature spec under `specs/`.
+
+- **Constitution** — [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
+  (v1.2.0). The constitution prevails on any conflict with this
+  README, with `CLAUDE.md`, or with a feature plan.
+- **Active feature** — pinned in `.specify/feature.json`. CLAUDE.md
+  always points at the currently in-flight feature.
+- **AI assistant guidance** — [`CLAUDE.md`](CLAUDE.md) (Claude Code
+  reads this as project instructions).
+
+Key correctness disciplines for the agent component (Principle VII,
+ratified after the 006 postmortem):
+
+1. **Configuration sources** — model IDs, paths, timeouts, token
+   budgets MUST come from `settings` (env via `pydantic-settings`)
+   or graph state. No hardcoded literals.
+2. **Prompt-authoring discipline** — schema information enters
+   prompts only via the dynamically-rendered
+   `{schema_context_block}` placeholder; static prose describing
+   tables/columns/values is forbidden.
+3. **Read-only runtime mechanics** — when something is mounted `:ro`
+   or jailed, its consequences must be documented next to the
+   constraint (e.g. DuckDB's spill location, RLIMIT side-effects).
+
+---
+
+## Tests
+
+```bash
+# ETL — unit + always-on integration (~84 tests, <1s)
+pytest etl/tests/
+
+# ETL — gated big-fixture (Fase 3 scale check)
+DISCOGS_BIG_FIXTURE=1 pytest etl/tests/integration/test_big_sample_pipeline.py
+
+# Agent — unit + graph-path (no Docker, no key)
+cd agent && pytest tests/unit tests/graph
+
+# Agent — integration (testcontainers Postgres for the durability test)
+cd agent && AGENT_USE_POSTGRES=1 pytest tests/integration/
+
+# Agent — golden suite (LLM-stub by default)
+cd agent && pytest tests/golden/
+
+# Agent — docker-compose smoke (gated, burns OpenAI credit)
+cd agent && AGENT_DOCKER_SMOKE=1 pytest tests/integration/test_docker_smoke.py
+```
+
+Component-specific test details live in
+[`etl/README.md`](etl/README.md) and [`agent/README.md`](agent/README.md).
+
+---
+
+## Out of scope (V1)
+
+- Automated download from Discogs (deferred to a future ETL phase).
+- AWS deployment of the agent (containerized service exists; the
+  deploy target is undecided).
+- Frontend UI; MCP wrappers; RAG; multi-tenant auth.
+- `artist_dim` table in DuckDB (`clean_artists.parquet` is produced
+  as foundation; surfacing waits on a future spec).
+- `release_genre_bridge`, `company_bridge`, and a `master_id` denorm
+  on `release_fact` (the last would require a constitution amendment).
+
+See `specs/<feature>/quickstart.md` §"Out of scope" for each
+feature's deferred list.
