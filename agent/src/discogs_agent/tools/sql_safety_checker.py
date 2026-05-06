@@ -322,21 +322,23 @@ def _scan_forbidden_tables(
     return violations
 
 
-_CTE_ALIAS_PATTERN = re.compile(
-    r"\bWITH\s+(?:RECURSIVE\s+)?(.+?)\bSELECT\b",
-    re.IGNORECASE | re.DOTALL,
+# `<ident> AS (` is an unambiguous CTE-definition shape. Other `AS`
+# uses in SQL (column aliases, type casts, lateral subqueries) are
+# never followed by an open paren on the right-hand side. Scanning
+# the whole statement avoids the trap of trying to bound the WITH
+# clause with a non-greedy regex — multi-CTE statements have an
+# inner SELECT inside the *first* CTE body, which would terminate a
+# `WITH … SELECT` non-greedy match prematurely and leave every CTE
+# after the first looking like a forbidden-table reference.
+_CTE_DEFINITION_PATTERN = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(",
+    re.IGNORECASE,
 )
 
 
 def _is_cte_alias(sql: str, name: str) -> bool:
-    """True iff `name` is defined as a CTE in the WITH clause."""
-    m = _CTE_ALIAS_PATTERN.search(sql)
-    if not m:
-        return False
-    cte_block = m.group(1)
-    # Match identifiers immediately followed by "AS (".
-    cte_pattern = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(", re.IGNORECASE)
-    aliases = {a.group(1) for a in cte_pattern.finditer(cte_block)}
+    """True iff `name` appears in the SQL as a CTE definition."""
+    aliases = {m.group(1) for m in _CTE_DEFINITION_PATTERN.finditer(sql)}
     return name in aliases
 
 

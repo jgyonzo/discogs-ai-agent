@@ -179,7 +179,7 @@ Plus a **structural assertion**: the code MUST contain a
 absent or `read_only` is `False` / missing, the safety check
 fails with rule `read_only_required`.
 
-### 3.2 Pass 2 — DuckDB EXPLAIN
+### 3.2 Pass 2 — DuckDB EXPLAIN (validity + forbidden functions)
 
 For each captured SQL string:
 
@@ -190,19 +190,30 @@ plan_rows = explain_con.execute("EXPLAIN " + sql).fetchall()
 plan_text = "\n".join(row[1] for row in plan_rows)    # explain_value column
 ```
 
-The plan text is then parsed for table references:
-- `SCAN <table>` → record table name.
-- `SEQ_SCAN <table>` likewise.
-- `READ_PARQUET`, `READ_CSV`, `READ_JSON` → automatic fail
-  with rule `forbidden_function`.
-- Any table name not in
-  `SchemaContext.tables.keys()` → fail with rule
-  `forbidden_table` and detail = the unknown table name.
+EXPLAIN against the in-memory schema-stub catalog (see §3.2.1)
+serves two purposes:
+
+1. **Syntactic + structural validity** — DuckDB raises if the
+   SQL is ill-formed or references a column that doesn't exist
+   in the stub schema. The error is recorded as
+   `rule=sql_invalid` with the DuckDB error string; the run
+   takes the safety-failure retry edge.
+2. **Forbidden-function pattern scan over the plan text** —
+   `read_csv`, `read_parquet`, `read_json`, `glob`,
+   `parquet_metadata`, `httpfs`, `s3_*`, etc. Catches any
+   forbidden function that snuck through the pre-explain raw-SQL
+   scan (e.g., wrapped inside a CTE body or a function alias).
 
 `EXPLAIN` itself does not execute the plan (per DuckDB
 semantics), so this pass has no risk of running the SQL
 against the published file (which it doesn't have access to
 anyway — the EXPLAIN connection is `:memory:`).
+
+Forbidden-table detection is a separate pass — see §3.2.2 — that
+runs **after** EXPLAIN succeeds. This split exists because EXPLAIN
+plan text doesn't reliably expose CTE alias names in a stable
+way across DuckDB versions, and the allowlist check needs
+predictable identifier extraction.
 
 **Caveat**: `EXPLAIN` requires the tables to *exist* in the
 connection's catalog. The agent works around this by
@@ -222,6 +233,82 @@ for tbl, cols in schema_context.tables.items():
 The setup cost is microseconds (no rows inserted). The benefit
 is that `EXPLAIN` understands the schema and produces a
 table-reference list we can validate.
+
+#### 3.2.2 Forbidden-table re-scan (regex on the SQL string)
+
+After EXPLAIN succeeds, the safety checker runs a regex pass over
+the **raw SQL string** (not the plan text) to enforce the
+runtime table allowlist. The raw SQL is the authoritative source
+because DuckDB's plan text representation of CTEs and table
+references varies across versions; identifier extraction directly
+from the SQL is stable.
+
+Algorithm:
+
+1. Find every `FROM <ident>` and `JOIN <ident>` reference:
+   `\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)`.
+2. For each referenced identifier:
+   - If it is a CTE alias defined in the same statement (see
+     §3.2.3), skip it — CTEs are local definitions, not
+     real tables, and the EXPLAIN pass already validated they
+     resolve.
+   - If it appears in `schema_context.tables.keys()` (the
+     runtime allowlist), allow.
+   - If it appears in the global `ALLOWED_TABLES` set but NOT
+     the runtime allowlist (e.g. `master_fact` when the
+     snapshot lacks it), reject with `rule=forbidden_table` +
+     a detail like `master_fact (not present in this
+     snapshot)`.
+   - Otherwise reject with `rule=forbidden_table`.
+
+This catches references to non-allowlisted tables (`stg_*`,
+`clean_*`, `release_format_summary`, etc.) without depending on
+DuckDB-specific plan-text scraping.
+
+#### 3.2.3 CTE-alias detection — multi-CTE caveat
+
+CTE aliases must be carved out of the forbidden-table check so
+that `WITH cte_a AS (...), cte_b AS (...) SELECT ... FROM cte_a
+JOIN cte_b ...` is not falsely flagged for referencing the
+local CTE names.
+
+The detection rule is intentionally simple:
+
+```python
+_CTE_DEFINITION_PATTERN = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(",
+    re.IGNORECASE,
+)
+
+def _is_cte_alias(sql: str, name: str) -> bool:
+    aliases = {m.group(1) for m in _CTE_DEFINITION_PATTERN.finditer(sql)}
+    return name in aliases
+```
+
+`<ident> AS (` is the unambiguous CTE-definition shape. Other
+SQL uses of `AS` — column aliases (`col AS alias`), type casts
+(`CAST(x AS INTEGER)`), lateral subqueries (`LATERAL (...) sub`)
+— are never followed by an open paren on the right-hand side,
+so a global scan over the whole statement is safe.
+
+**Why a global scan, not a bounded `WITH … SELECT` window**:
+multi-CTE statements have an inner `SELECT` inside the *first*
+CTE body. A bounded non-greedy regex like
+`WITH\s+(.+?)\s+SELECT` (DOTALL) terminates at that first inner
+`SELECT`, capturing only the first CTE alias and leaving every
+later CTE alias looking like an unallowlisted table reference.
+That defect was latent in the V1 implementation until the US4
+carry-over feature (Phase 6) made the LLM more likely to
+produce multi-CTE comparison shapes for follow-up questions like
+"now compare it to House"; the resulting `failed_safety` runs
+were the reproducer.
+
+The check is content-based: it accepts any identifier that
+appears as a CTE definition anywhere in the SQL. False-positive
+risk (a non-CTE identifier coincidentally followed by `AS (`)
+is acceptable in V1 — that shape doesn't exist in standard SQL
+outside CTE definitions, and a malicious literal would still
+have to defeat the §3.3 DDL/DML pre-pass.
 
 ### 3.3 Pre-pass — DDL/DML keyword scan
 
@@ -295,6 +382,7 @@ and avoids drift from the original analytical intent.
 | `test_safety_requires_read_only` | unit | Code without `read_only=True` fails with `read_only_required`. |
 | `test_safety_passes_techno_query` | unit | The "Techno over time" generated code passes. |
 | `test_safety_passes_label_diversity_query` | unit | The label-diversity generated code passes (CTE + JOIN). |
+| `test_safety_passes_multi_cte_comparison` | unit | A multi-CTE comparison query (Techno vs House by decade, joined via two CTEs) passes — anchors the §3.2.3 carve-out. |
 | `test_safety_blocks_master_fact_when_absent` | unit | When `has_master_fact=false`, `SELECT * FROM master_fact` fails with `forbidden_table`. |
 | `test_safety_explain_plan_recorded` | unit | On success, `explain_plan` is non-empty in the output. |
 | `test_safety_blocks_url_literal` | unit | `SELECT 's3://bucket'` fails with `forbidden_function` (URL filter). |

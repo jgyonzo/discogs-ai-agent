@@ -153,3 +153,35 @@ def test_safety_explain_plan_recorded(schema: dict) -> None:
     assert out.allowed is True
     assert out.explain_plan is not None
     assert len(out.explain_plan) > 0
+
+
+def test_safety_passes_multi_cte_comparison(schema: dict) -> None:
+    """Regression: multi-CTE WITH clauses must not have their later
+    CTE aliases misclassified as forbidden tables. The bound-the-
+    WITH-block regex used to stop at the first inner SELECT, which
+    is inside the *first* CTE body, leaving every later CTE alias
+    looking like an unallowlisted table reference.
+    """
+    sql = """
+WITH techno_releases AS (
+    SELECT decade, COUNT(DISTINCT release_id) AS release_count
+    FROM release_fact
+    WHERE style = 'Techno' AND decade >= 1980
+    GROUP BY decade
+),
+house_releases AS (
+    SELECT decade, COUNT(DISTINCT release_id) AS release_count
+    FROM release_fact
+    WHERE style = 'House' AND decade >= 1980
+    GROUP BY decade
+)
+SELECT
+    COALESCE(t.decade, h.decade) AS decade,
+    t.release_count AS techno_releases,
+    h.release_count AS house_releases
+FROM techno_releases t
+FULL OUTER JOIN house_releases h ON t.decade = h.decade
+ORDER BY decade
+""".strip()
+    out = _run(_wrap(sql), schema)
+    assert out.allowed is True, f"violations: {out.violations}"

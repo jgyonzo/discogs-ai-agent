@@ -132,6 +132,33 @@ class RunRepo:
         )
         return int(self.session.scalar(stmt) or 0)
 
+    def fetch_recent_for_thread(
+        self,
+        thread_id: UUID,
+        limit: int,
+        statuses: tuple[str, ...] | list[str],
+    ) -> list[Run]:
+        """Return up to `limit` most recent runs of `thread_id` whose
+        status is in `statuses`, ordered oldest-first within the
+        returned window. Used by US4 carry-over.
+
+        The two-step ordering — fetch DESC, return ASC — gives the
+        newest N rows but in chronological order so the carry-over
+        builder can prepend the most recent.
+        """
+        if limit <= 0 or not statuses:
+            return []
+        stmt = (
+            select(Run)
+            .where(Run.thread_id == thread_id)
+            .where(Run.status.in_(tuple(statuses)))
+            .order_by(Run.started_at.desc())
+            .limit(limit)
+        )
+        rows = list(self.session.scalars(stmt))
+        rows.reverse()  # oldest-first within the window
+        return rows
+
 
 # ─── Tool calls ───────────────────────────────────────────────────────
 
