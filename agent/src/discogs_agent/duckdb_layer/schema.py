@@ -91,6 +91,11 @@ _DOMAIN_GLOSSARY: tuple[str, ...] = (
     "user says 'year', 'yearly', or 'annual'.",
     "release_fact has grain release × style; counts of unique releases use "
     "COUNT(DISTINCT release_id) or query release_unique_view.",
+    "release_artist_bridge and release_label_bridge are NOT unique on "
+    "release_id. Each row is one (release × artist) or one (release × label). "
+    "For 'releases per artist' or 'releases per label' counts, GROUP BY the "
+    "artist/label and use COUNT(DISTINCT release_id) — naive COUNT(*) "
+    "double-counts.",
 )
 
 
@@ -114,13 +119,18 @@ def _collect_sample_values(
             continue
         limit_clause = f"LIMIT {cap}" if cap is not None else ""
         try:
+            # Tie-breaker on `v ASC` makes the result deterministic across
+            # runs when counts tie. Production benefit: stable prompt text
+            # → reliable LLM-side prompt caching. Test benefit: golden
+            # snapshots don't flap. (Folded in alongside 009; the bug was
+            # latent in 005.)
             rows = con.execute(
                 f"""
                 SELECT {column} AS v, COUNT(*) AS c
                 FROM {table}
                 WHERE {column} IS NOT NULL
                 GROUP BY 1
-                ORDER BY c DESC
+                ORDER BY c DESC, v ASC
                 {limit_clause}
                 """
             ).fetchall()
@@ -152,6 +162,73 @@ def _format_sample_value(v: Any) -> str:
     if isinstance(v, str):
         return v
     return repr(v)
+
+
+def _render_join_graph(has_master_fact: bool) -> list[str]:
+    """Render the "Join graph" section of the schema-context block.
+
+    Pinned by `specs/005-agent-schema-context/contracts/schema-context.md`
+    (amended by 009-schema-context-join-graph). Contract: contracts/
+    amendment-005-schema-context.md. The section is rendered unconditionally;
+    `master_fact`-referencing edges, the master-side traversal hint, and the
+    master-side forbidden-join lines are conditional on `has_master_fact`.
+
+    Returns lines (without trailing newlines), to be joined by the caller.
+    """
+    lines: list[str] = ["Join graph (foreign-key relationships between allowlisted tables):", ""]
+
+    # Edges sub-block.
+    lines.append("Edges:")
+    lines.append("- release_fact.release_id  ↔  release_unique_view.release_id")
+    lines.append("- release_fact.release_id  ↔  release_artist_bridge.release_id")
+    lines.append("- release_fact.release_id  ↔  release_label_bridge.release_id")
+    lines.append("- release_unique_view.release_id  ↔  release_artist_bridge.release_id")
+    lines.append("- release_unique_view.release_id  ↔  release_label_bridge.release_id")
+    if has_master_fact:
+        lines.append("- release_fact.master_id  ↔  master_fact.master_id")
+        lines.append("- release_unique_view.master_id  ↔  master_fact.master_id")
+    lines.append("")
+
+    # Cross-grain traversal hints sub-block.
+    lines.append("Cross-grain traversal hints:")
+    if has_master_fact:
+        lines.append(
+            "- master_id and release_id are DIFFERENT identifier namespaces. "
+            "They cannot be compared to each other."
+        )
+        lines.append(
+            "- To go from master_fact to artists or labels, traverse a release-grain table:"
+        )
+        lines.append(
+            "    master_fact -> release_unique_view (on master_id) "
+            "-> release_artist_bridge (on release_id)"
+        )
+    lines.append(
+        "- Prefer release_unique_view (one row per release) over release_fact "
+        "for cross-grain joins; release_fact is row-multiplied by style and "
+        "may inflate counts."
+    )
+    lines.append(
+        "- Bridges are NOT unique on release_id — one row per (release × "
+        "artist) in release_artist_bridge, one row per (release × label) in "
+        "release_label_bridge."
+    )
+    lines.append("")
+
+    # Forbidden joins sub-block (master-side only — when no master_fact, no
+    # forbidden joins of this class are reachable).
+    if has_master_fact:
+        lines.append("Forbidden joins (will return semantically wrong rows even if the SQL runs):")
+        lines.append("- master_fact.master_id  =  release_artist_bridge.release_id")
+        lines.append("- master_fact.master_id  =  release_label_bridge.release_id")
+        lines.append(
+            "- master_fact.main_release_id  =  release_*_bridge.release_id  "
+            "(use the master_id traversal instead unless you specifically "
+            "want only the primary release of the master)"
+        )
+        lines.append("")
+
+    return lines
 
 
 def render_schema_block(
@@ -192,6 +269,16 @@ def render_schema_block(
                 count_note = f"(top {len(values)})" if len(values) > 0 else "(none)"
                 lines.append(f"- {table}.{column} {count_note}: {preview}.")
         lines.append("")
+
+    # Join graph — added by 009-schema-context-join-graph. Documents
+    # foreign-key relationships between allowlisted tables, cross-grain
+    # traversal hints, and forbidden joins that silently return wrong
+    # rows. The section is rendered unconditionally; master-side content
+    # is conditional on `has_master_fact`. NOT eligible for truncation
+    # under `_TRUNCATION_STEPS` per
+    # specs/005-agent-schema-context/contracts/schema-context.md
+    # "Token budget interaction" (post-009 amendment).
+    lines.extend(_render_join_graph(has_master_fact))
 
     if glossary:
         lines.append("Domain glossary:")

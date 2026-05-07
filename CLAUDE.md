@@ -30,6 +30,13 @@ Read this feature's plan and its phase-1 artifacts:
     their spread coverage requirement
 - Quickstart: `specs/008-agent-frontend-v1/quickstart.md`
 
+Status: phases 1+2+3 (US1 MVP), phase 4 (US2 curated questions),
+and phase 5 (US3 multi-turn + reset) all merged on the branch
+`008-agent-frontend-v1`. Remaining: phase 6 (US4 — SQL viewer +
+data preview + run metadata), phase 7 (US5 — Docker compose
+service), phase 8 (Polish). The branch was rebased over `main`
+on 2026-05-07 to pull in 009's schema-context join-graph fix.
+
 Prior 004-family work (still authoritative):
 
 - `specs/004-agent-v1/` — V1 baseline (graph, API, sandbox, SQL
@@ -37,12 +44,19 @@ Prior 004-family work (still authoritative):
   consumption shape is anchored against `004/contracts/api.md`.
 - `specs/005-agent-schema-context/` — schema enrichment + sample
   values + glossary + the `succeeded_empty` zero-row guardrail.
+  Amended by 009 with a new "Join graph" section.
 - `specs/006-bugfix-postmortem/` — three-bug postmortem and
   Constitution v1.2.0 amendment (Principle VII: Implementation
   Discipline).
 - `specs/007-sandbox-fsize-budget/` — sandbox `RLIMIT_FSIZE`
   raised to 2 GiB; `004/contracts/code-generation.md §3.1.1`
   amended.
+- `specs/009-schema-context-join-graph/` — silent wrong-answer
+  bugfix: extends `render_schema_block` with a join-graph section
+  delivering FK relationships, cross-grain traversal hints, and
+  forbidden-join anti-patterns. Closes the
+  `master_fact.master_id = release_artist_bridge.release_id`
+  class of LLM hallucination. Merged to main 2026-05-07.
 
 The published DuckDB contract — produced by the ETL component —
 remains authoritative for everything the agent reads:
@@ -51,12 +65,15 @@ remains authoritative for everything the agent reads:
   (`release_fact`, `release_unique_view`, `release_artist_bridge`,
   `release_label_bridge`).
 - `specs/003-masters-artists/contracts/duckdb-schema.md` — optional
-  `master_fact`.
+  `master_fact`. The "Counting / joining rules" section of this
+  contract is the source of truth for the join graph 009 renders
+  into the LLM-facing schema-context block.
 
 The agent does NOT import code from `etl/` and does NOT read
-non-published artifacts. The frontend does NOT import code from
-either `etl/` or `agent/`, and physically cannot read `data/`
-because it never has the volume mounted.
+non-published artifacts. Statically enforced by
+`agent/tests/unit/test_no_etl_imports.py`. The frontend does NOT
+import code from either `etl/` or `agent/`, and physically cannot
+read `data/` because it never has the volume mounted.
 
 Resolved scope decisions still in force:
 
@@ -65,6 +82,10 @@ Resolved scope decisions still in force:
   user-query *text* (capped at 4 turns / 512 tokens) flows into
   `query_understanding`. No prior SQL/code carry-over.
 - **Sandbox file-size budget = 2 GiB** (007 decision).
+- **Schema-context join graph** (009 decision; merged to main).
+  The rendered block delivers FK edges + cross-grain traversal
+  hints + forbidden-join anti-patterns. The 005 contract is
+  amended to make the section normative.
 - **Frontend stack = React 18 + Vite + TypeScript + Tailwind**
   (008 decision; matches the source brief at
   `docs/discogs_frontend_initial_spec.md`).
