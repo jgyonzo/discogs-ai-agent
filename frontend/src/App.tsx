@@ -6,19 +6,30 @@ import { ResultPanel } from "./components/ResultPanel";
 import { LoadingState } from "./components/LoadingState";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { SuggestedQuestions } from "./components/SuggestedQuestions";
+import { ThreadControls } from "./components/ThreadControls";
 import { useAgentQuery } from "./hooks/useAgentQuery";
 
 export function App() {
-  const { state, submit } = useAgentQuery();
+  const { state, submit, newConversation } = useAgentQuery();
   const [inputText, setInputText] = useState("");
 
   const handleSubmit = (message: string) => {
     void submit(message);
   };
 
+  const handleNewConversation = () => {
+    setInputText("");
+    newConversation();
+  };
+
   return (
     <div className="flex flex-col h-screen">
-      <Header />
+      <Header>
+        <ThreadControls
+          threadId={state.threadId}
+          onNewConversation={handleNewConversation}
+        />
+      </Header>
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[20rem_1fr_1fr] overflow-hidden">
         <aside
           aria-label="Suggested questions"

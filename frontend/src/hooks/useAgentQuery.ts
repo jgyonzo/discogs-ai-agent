@@ -20,8 +20,30 @@ import type {
   UserMessage,
 } from "../api/types";
 
+// Built lazily inside the hook (via useReducer's third argument) so that
+// localStorage is read at component-mount time, not at module-load time.
+// This preserves the US3.3 acceptance scenario: a browser refresh mid-
+// conversation must leave the active thread_id discoverable.
+export function buildInitialState(): AppState {
+  return {
+    threadId: getCurrentThreadId(),
+    messages: [],
+    current: {
+      artifact: null,
+      sql: null,
+      dataframePreview: [],
+      metadata: null,
+    },
+    pending: false,
+    error: null,
+  };
+}
+
+// Kept for backwards compatibility / type ergonomics in tests that just
+// want a representative AppState. Always reflects an empty localStorage —
+// the runtime hook calls `buildInitialState()` lazily instead.
 export const initialState: AppState = {
-  threadId: getCurrentThreadId(),
+  threadId: null,
   messages: [],
   current: {
     artifact: null,
@@ -147,7 +169,7 @@ export type UseAgentQueryResult = {
 };
 
 export function useAgentQuery(): UseAgentQueryResult {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
 
   const submit = useCallback(
     async (message: string) => {
