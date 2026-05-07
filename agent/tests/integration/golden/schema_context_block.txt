@@ -1,0 +1,53 @@
+Available tables (allowlist):
+
+- release_fact (grain: release × style):
+  release_id, decade, year, country, has_vinyl, has_cd, style, style_order, primary_genre, master_id
+
+- release_unique_view (grain: one row per release):
+  release_id, decade, year, country, has_vinyl, has_cd, primary_genre, master_id
+
+- release_artist_bridge (grain: release × main artist):
+  release_id, artist_name, artist_order
+
+- release_label_bridge (grain: release × label):
+  release_id, label_name, label_order
+
+- master_fact (grain: master release):
+  master_id, title, main_release_id, year, primary_genre, primary_style, release_count
+
+Sample distinct values for low-cardinality columns:
+
+- release_unique_view.primary_genre (top 5): Electronic, Funk / Soul, Jazz, Reggae, Rock.
+- release_unique_view.decade (top 5): 1990, 1980, 2000, 1970, 2010.
+- release_unique_view.country (top 5): UK, DE, US, JM, JP.
+- release_fact.style (top 11): Techno, House, Acid, Acid Jazz, Ambient, Disco, Drum n Bass, Dub, Funk, Garage, Trance.
+
+Join graph (foreign-key relationships between allowlisted tables):
+
+Edges:
+- release_fact.release_id  ↔  release_unique_view.release_id
+- release_fact.release_id  ↔  release_artist_bridge.release_id
+- release_fact.release_id  ↔  release_label_bridge.release_id
+- release_unique_view.release_id  ↔  release_artist_bridge.release_id
+- release_unique_view.release_id  ↔  release_label_bridge.release_id
+- release_fact.master_id  ↔  master_fact.master_id
+- release_unique_view.master_id  ↔  master_fact.master_id
+
+Cross-grain traversal hints:
+- master_id and release_id are DIFFERENT identifier namespaces. They cannot be compared to each other.
+- To go from master_fact to artists or labels, traverse a release-grain table:
+    master_fact -> release_unique_view (on master_id) -> release_artist_bridge (on release_id)
+- Prefer release_unique_view (one row per release) over release_fact for cross-grain joins; release_fact is row-multiplied by style and may inflate counts.
+- Bridges are NOT unique on release_id — one row per (release × artist) in release_artist_bridge, one row per (release × label) in release_label_bridge.
+
+Forbidden joins (will return semantically wrong rows even if the SQL runs):
+- master_fact.master_id  =  release_artist_bridge.release_id
+- master_fact.master_id  =  release_label_bridge.release_id
+- master_fact.main_release_id  =  release_*_bridge.release_id  (use the master_id traversal instead unless you specifically want only the primary release of the master)
+
+Domain glossary:
+
+1) primary_genre is the coarse bucket (Rock, Electronic, Pop, Jazz, ...). style is the granular subgenre (Techno, House, Ambient, ...). Filter by 'style' on release_fact for subgenre questions; filter by 'primary_genre' on release_unique_view only when the value literally appears in the primary_genre sample below.
+2) For 'evolution / over time / trend' questions WITHOUT explicit yearly granularity, group by `decade` not `year`. Override only when the user says 'year', 'yearly', or 'annual'.
+3) release_fact has grain release × style; counts of unique releases use COUNT(DISTINCT release_id) or query release_unique_view.
+4) release_artist_bridge and release_label_bridge are NOT unique on release_id. Each row is one (release × artist) or one (release × label). For 'releases per artist' or 'releases per label' counts, GROUP BY the artist/label and use COUNT(DISTINCT release_id) — naive COUNT(*) double-counts.

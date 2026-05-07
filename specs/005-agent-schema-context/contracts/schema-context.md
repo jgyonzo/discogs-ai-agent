@@ -101,6 +101,8 @@ Available tables (allowlist):
 
 - release_artist_bridge: release_id, artist_id, ...
 - release_label_bridge: release_id, label_id, ...
+- master_fact (grain: master release): master_id, title,
+  main_release_id, year, decade, release_count, ...
 
 Sample distinct values for low-cardinality columns:
 
@@ -120,6 +122,37 @@ Sample distinct values for low-cardinality columns:
 - release_fact.style (top-50 by release count): House, Techno,
   Pop Rock, Ambient, Trance, Drum n Bass, Acid Jazz, ...
 
+Join graph (foreign-key relationships between allowlisted tables):
+
+Edges:
+- release_fact.release_id  ↔  release_unique_view.release_id
+- release_fact.release_id  ↔  release_artist_bridge.release_id
+- release_fact.release_id  ↔  release_label_bridge.release_id
+- release_unique_view.release_id  ↔  release_artist_bridge.release_id
+- release_unique_view.release_id  ↔  release_label_bridge.release_id
+- release_fact.master_id  ↔  master_fact.master_id
+- release_unique_view.master_id  ↔  master_fact.master_id
+
+Cross-grain traversal hints:
+- master_id and release_id are DIFFERENT identifier namespaces.
+  They cannot be compared to each other.
+- To go from master_fact to artists or labels, traverse a
+  release-grain table:
+    master_fact -> release_unique_view (on master_id) ->
+    release_artist_bridge (on release_id)
+- Prefer release_unique_view (one row per release) over
+  release_fact for cross-grain joins; release_fact is
+  row-multiplied by style and may inflate counts.
+- Bridges are NOT unique on release_id — one row per
+  (release × artist) in release_artist_bridge, one row per
+  (release × label) in release_label_bridge.
+
+Forbidden joins (will return semantically wrong rows even if the
+SQL runs):
+- master_fact.master_id  =  release_artist_bridge.release_id
+- master_fact.master_id  =  release_label_bridge.release_id
+- master_fact.main_release_id  =  release_*_bridge.release_id
+
 Domain glossary:
 
 1) primary_genre is the coarse bucket (Rock, Electronic, ...).
@@ -136,7 +169,117 @@ Domain glossary:
 3) release_fact has grain release × style; counts of unique
    releases use COUNT(DISTINCT release_id) or
    release_unique_view.
+
+4) release_artist_bridge and release_label_bridge are NOT unique
+   on release_id — one row per (release × artist) or
+   (release × label). For "releases per artist" or "releases per
+   label", GROUP BY the artist/label and use COUNT(DISTINCT
+   release_id); naive COUNT(*) double-counts.
 ```
+
+## Join graph
+
+*Added 2026-05-07 by `009-schema-context-join-graph`. Closes the
+silent wrong-answer class of bug where the LLM hallucinated joins
+between unrelated identifier namespaces (e.g.,
+`master_fact.master_id = release_artist_bridge.release_id` —
+two different identifier spaces, both BIGINT, so the join compiled
+and returned semantically wrong rows). The 003 contract has the
+correct guidance ("Use `release_unique_view.master_id` for
+release-grain joins") but Constitution VII.b explicitly forbids
+embedding schema info in static prompt prose; the only legitimate
+surface is the rendered block. This section makes that delivery
+mechanical.*
+
+The rendered block carries a "Join graph" section listing the
+foreign-key relationships between allowlisted tables. The section
+is derived from the published-DuckDB contracts
+(`001-discogs-etl/contracts/duckdb-schema.md` and
+`003-masters-artists/contracts/duckdb-schema.md`); the renderer
+does NOT invent edges.
+
+### Position in the rendered output
+
+After the table/grain block and the sample-values block, BEFORE
+the domain glossary. The order in the rendered output is:
+
+1. Available tables (allowlist) + grains
+2. (optional) `master_fact is NOT present in this catalog` line
+3. Sample distinct values
+4. **Join graph** ← this section
+5. Domain glossary
+
+### Required sub-blocks
+
+The "Join graph" section MUST contain three sub-blocks, in order:
+
+1. **Edges** — a flat list of foreign-key pairs in
+   `table.column ↔ table.column` form. Edges that reference
+   `master_fact` are emitted only when `has_master_fact = true`.
+   Minimum edges (when all tables are present):
+
+   - `release_fact.release_id ↔ release_unique_view.release_id`
+   - `release_fact.release_id ↔ release_artist_bridge.release_id`
+   - `release_fact.release_id ↔ release_label_bridge.release_id`
+   - `release_unique_view.release_id ↔ release_artist_bridge.release_id`
+   - `release_unique_view.release_id ↔ release_label_bridge.release_id`
+   - `release_fact.master_id ↔ master_fact.master_id` (master-side, conditional)
+   - `release_unique_view.master_id ↔ master_fact.master_id` (master-side, conditional)
+
+2. **Cross-grain traversal hints** — at minimum:
+
+   - A line stating that `master_id` and `release_id` are
+     different identifier namespaces and cannot be compared to
+     each other (master-side, conditional on `has_master_fact`).
+   - A worked example showing the master → release → bridge
+     traversal (master-side, conditional).
+   - A note preferring `release_unique_view` over `release_fact`
+     for cross-grain joins (because `release_fact` is
+     row-multiplied by style).
+   - A note that bridges are NOT unique on `release_id` (one row
+     per release × artist or release × label).
+
+3. **Forbidden joins** — at minimum (when `has_master_fact = true`):
+
+   - `master_fact.master_id = release_artist_bridge.release_id`
+     (the canonical bug)
+   - `master_fact.master_id = release_label_bridge.release_id`
+     (the same class of error on the label side)
+   - `master_fact.main_release_id = release_*_bridge.release_id`
+     (a related plausible-but-wrong join — `main_release_id` IS
+     a release_id but its use should be deliberate, not the
+     default cross-grain path)
+
+   When `has_master_fact = false`, the "Forbidden joins"
+   sub-block MAY be omitted entirely (no master-side joins are
+   reachable on a release-only catalog).
+
+### Catalog-conditional rendering
+
+- When `has_master_fact = false`, the renderer MUST omit all
+  `master_fact`-referencing edges, the master-side traversal
+  hint, and the master-side forbidden-join lines. It MAY still
+  render the section with the release-side edges only.
+- When the catalog has fewer than two allowlisted tables (a
+  degenerate case never produced by a valid published DuckDB),
+  the renderer MAY skip the section entirely.
+
+### Token budget interaction
+
+The "Join graph" section is rendered unconditionally within the
+existing `_TOKEN_BUDGET = 1200`. Empirically (April 2026 full
+catalog) the section adds ~220 tokens. If the rendered block
+exceeds the budget, the truncation order in `_TRUNCATION_STEPS`
+MUST drop sample values BEFORE any join-graph content.
+Join-graph content is NOT eligible for truncation.
+
+### Backwards compatibility
+
+The `SchemaContext` TypedDict shape is unchanged by this
+amendment. The new content is inside the existing `rendered_block`
+string. Consumers that read only `tables`, `has_master_fact`,
+`sample_values`, or `domain_glossary` continue to work without
+modification.
 
 ## Token budget
 
@@ -213,6 +356,23 @@ Reviewers MUST reject prompt edits that re-introduce static
 schema prose, even if the prose happens to be correct on the
 day it was written. The "happens to be correct" property does
 not survive the next ETL change that adds or removes a table.
+
+The "Join graph" section (added 2026-05-07 by
+`009-schema-context-join-graph`) is also subject to the
+consumer-rule constraint above: prompt templates MUST NOT
+contain static prose that lists table relationships,
+foreign-key pairs, or cross-grain traversal advice. All such
+information flows only through the rendered block. Specifically
+forbidden in prompt files:
+
+- enumerations of foreign keys ("release_fact joins to bridges
+  on release_id");
+- statements about which join paths are correct or wrong
+  ("don't join master_fact directly to bridges");
+- worked SQL examples that demonstrate cross-grain joins.
+
+These belong in the "Join graph" section of the rendered block,
+where they can stay in sync with the published-DuckDB contracts.
 
 ## Backwards compatibility
 
