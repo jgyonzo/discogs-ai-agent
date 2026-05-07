@@ -1,37 +1,48 @@
 <!-- SPECKIT START -->
-Active feature: **007-sandbox-fsize-budget** — production-data
-bugfix for the V1 agent. The sandbox set `RLIMIT_FSIZE = 64 MiB`,
-which was sized for the chart HTML alone but caps **every** file
-the subprocess writes — including DuckDB's `/tmp/duckdb/duckdb_temp_storage_*.tmp`
-spill file. Any aggregation against the full published catalog hit
-`IO Error: File too large` and fell through to the controlled-failure
-path. 007 raises the cap to 2 GiB (sized against the full-catalog
-GROUP BY spill estimate), amends `004/contracts/code-generation.md
-§3.1` to make the chart-vs-spill conflation explicit, and adds a
-regression test.
+Active feature: **008-agent-frontend-v1** — Demo Day frontend. A
+React + Vite + TypeScript single-page app that turns the existing
+agent into a demoable product: type or click a question, see a
+chart inline, plus collapsible SQL, a small data preview, and
+routing badges. The frontend ships as a **third** component in
+this monorepo (alongside `etl/` and `agent/`), runs as a service
+in the existing local docker-compose stack, and depends only on
+the agent's already-shipped HTTP API plus a single CORS allowance
+added to the agent. The frontend never touches DuckDB, Postgres,
+ETL files, or local artifacts directly, and never executes
+agent-generated Python or SQL. The chart artifact is rendered as
+opaque HTML inside a sandboxed `<iframe>` (`sandbox="allow-scripts"`,
+no `allow-same-origin`).
 
 Read this feature's plan and its phase-1 artifacts:
 
-- Plan: `specs/007-sandbox-fsize-budget/plan.md`
-- Spec: `specs/007-sandbox-fsize-budget/spec.md`
-- Research: `specs/007-sandbox-fsize-budget/research.md` (sizing decision + alternatives)
-- Contracts: `specs/007-sandbox-fsize-budget/contracts/`
-  - `amendment-004-code-generation.md` — exact prose for the §3.1.1 insertion in 004's contract
-- Quickstart: `specs/007-sandbox-fsize-budget/quickstart.md`
+- Plan: `specs/008-agent-frontend-v1/plan.md`
+- Spec: `specs/008-agent-frontend-v1/spec.md`
+- Research: `specs/008-agent-frontend-v1/research.md` (packaging,
+  CORS, iframe sandbox, error mapping, state management)
+- Data model: `specs/008-agent-frontend-v1/data-model.md`
+  (frontend domain types + reducer state + localStorage shape)
+- Contracts: `specs/008-agent-frontend-v1/contracts/`
+  - `api-consumption.md` — which agent `/query` fields the frontend
+    reads, ignores, or maps
+  - `amendment-004-api-cors.md` — exact prose for a new §8
+    "Cross-origin policy" in `004/contracts/api.md`
+  - `curated-questions.md` — the V1 set of 7 demo questions and
+    their spread coverage requirement
+- Quickstart: `specs/008-agent-frontend-v1/quickstart.md`
 
 Prior 004-family work (still authoritative):
 
 - `specs/004-agent-v1/` — V1 baseline (graph, API, sandbox, SQL
-  safety, generated-code shape, persistence). Phase 4 (US2 — health
-  + compose smoke + persistence durability) shipped on branch
-  `004-agent-v1-us2`; Phases 5/6/7 (US3, US4, Polish) still
-  unscheduled.
+  safety, generated-code shape, persistence). The frontend's
+  consumption shape is anchored against `004/contracts/api.md`.
 - `specs/005-agent-schema-context/` — schema enrichment + sample
   values + glossary + the `succeeded_empty` zero-row guardrail.
 - `specs/006-bugfix-postmortem/` — three-bug postmortem and
   Constitution v1.2.0 amendment (Principle VII: Implementation
-  Discipline). 007 is structurally a follow-on to 006: same
-  read-only-runtime-mechanics family of issues.
+  Discipline).
+- `specs/007-sandbox-fsize-budget/` — sandbox `RLIMIT_FSIZE`
+  raised to 2 GiB; `004/contracts/code-generation.md §3.1.1`
+  amended.
 
 The published DuckDB contract — produced by the ETL component —
 remains authoritative for everything the agent reads:
@@ -43,27 +54,34 @@ remains authoritative for everything the agent reads:
   `master_fact`.
 
 The agent does NOT import code from `etl/` and does NOT read
-non-published artifacts (no `stg_*`, no `clean_*`, no raw XML, no
-Parquet at query time). Statically enforced by
-`agent/tests/unit/test_no_etl_imports.py` and physically by mounting
-only the published DuckDB into the agent container.
+non-published artifacts. The frontend does NOT import code from
+either `etl/` or `agent/`, and physically cannot read `data/`
+because it never has the volume mounted.
 
 Resolved scope decisions still in force:
 
 - **LLM provider = OpenAI** (`gpt-4o-mini` cheap, `gpt-4o` strong).
-  Provider-agnostic abstraction is future work.
 - **Multi-turn = light contextual carry-over** — only prior
   user-query *text* (capped at 4 turns / 512 tokens) flows into
   `query_understanding`. No prior SQL/code carry-over.
-- **Sandbox file-size budget = 2 GiB** (007 decision). Process-wide
-  on Linux; shared between chart HTML and DuckDB spill. Cwd jail
-  remains the primary write-confinement control.
+- **Sandbox file-size budget = 2 GiB** (007 decision).
+- **Frontend stack = React 18 + Vite + TypeScript + Tailwind**
+  (008 decision; matches the source brief at
+  `docs/discogs_frontend_initial_spec.md`).
+- **Frontend packaging = Vite dev-server in container** for V1
+  (008 decision; nginx-served static build deferred to V1.1).
+- **CORS allowlist** = settings-sourced env var
+  `CORS_ALLOWED_ORIGINS`, defaulting to
+  `["http://localhost:5173", "http://localhost:3000"]`,
+  `allow_credentials = False`.
 
-Constitution: `.specify/memory/constitution.md` (v1.2.0). 007 does
-**NOT** require a constitution amendment — Principle VII.c
-(read-only runtime mechanics) already covers the discipline; the
-contract amendment in `004/contracts/code-generation.md §3.1.1` is
-the load-bearing artifact.
+Constitution: `.specify/memory/constitution.md` (v1.2.0). 008 does
+**NOT** require a constitution amendment to begin. The plan does
+recommend a follow-up **PATCH** amendment (Principle VI's prose
+"two independently deployable components" → "two or more") to be
+landed after 008 merges; the operational rules of Principle VI
+already accommodate a third component. See plan §"Constitution
+amendment recommendation".
 
 The constitution prevails on any conflict.
 <!-- SPECKIT END -->
