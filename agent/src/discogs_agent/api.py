@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from discogs_agent.config import settings
@@ -31,6 +32,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Discogs Conversational Analytics Agent", lifespan=_lifespan)
+
+# Cross-origin policy for the browser frontend (008-agent-frontend-v1).
+# See specs/008-agent-frontend-v1/contracts/amendment-004-api-cors.md §8.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+    allow_credentials=False,
+    max_age=600,
+)
 
 
 @app.get("/health")
