@@ -10,6 +10,11 @@ __pycache__/
 # ETL runtime data — gitignored except for fixtures under etl/tests/fixtures/
 data/
 
+# Frontend source-code "data/" holds static demo content (curated questions
+# for 008-agent-frontend-v1), NOT ETL output. Re-include it.
+!frontend/src/data/
+!frontend/src/data/**
+
 # Large developer-local Discogs samples (kept out of the repo to avoid
 # clone-time cost; download / generate locally per spec 002-etl-scaleup
 # Assumptions section). Only the small raw sample is tracked.
