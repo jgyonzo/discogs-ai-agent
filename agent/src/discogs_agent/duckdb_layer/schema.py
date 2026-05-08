@@ -64,12 +64,31 @@ _SAMPLE_PLAN: tuple[tuple[str, str, int | None], ...] = (
     ("release_fact", "style", 50),
 )
 
-# Budget set against the rendered output of the published catalog: 35+
-# columns × 2 wide tables already eat ~400 tokens before any samples,
-# so a 600-budget would fire truncation on every cold start. 1200 is
-# the comfortable headroom; we still truncate before the prompt gets
-# pathological.
-_TOKEN_BUDGET = 1200
+# Budget set against the rendered output of the published catalog.
+# Recalibrated 2026-05-08 (011-token-budget-recalibration) from 1200 →
+# 1600 after the full April 2026 catalog was observed rendering at
+# 1295 tokens before truncation and 1217 tokens after both
+# truncation steps fired (warning
+# `schema_context_over_budget_after_truncation`). Inputs to the
+# new ceiling:
+#
+# - 35+ columns × 2 wide tables ≈ 400 tokens before any samples
+# - sample-values block (country top-20 + style top-50 + smaller cols)
+#   ≈ 280 tokens
+# - join graph (009) ≈ 300 tokens (estimated 220 in 009/research; the
+#   unicode arrows + traversal hints + master_fact column list run
+#   longer in practice)
+# - domain glossary (4 entries post-009) ≈ 180 tokens
+# - section headers + blank lines ≈ 60 tokens
+# - master_fact column list (~80 tokens; conditional)
+#
+# Total floor: ~1300 tokens on a full catalog. 1600 gives ~300 tokens
+# of headroom while keeping the truncation logic engaged for
+# pathological growth (e.g., country top-50 if the catalog grows past
+# its current set of distinct values). Cheap-model context window is
+# 128K tokens, so 1600 is <2% of context — the budget exists as a
+# discipline ceiling, not a cost ceiling.
+_TOKEN_BUDGET = 1600
 _TIKTOKEN_FALLBACK_ENCODING = "cl100k_base"
 
 # Sample-truncation order when the rendered block exceeds the budget.
