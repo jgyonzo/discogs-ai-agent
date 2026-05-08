@@ -128,10 +128,11 @@ def test_join_graph_section_omitted_master_when_no_master_fact(
 
 def test_rendered_block_within_token_budget(seed_duckdb: Path) -> None:
     """Post-009 the rendered block adds ~220 tokens for the join-graph
-    section. Verify total stays comfortably under the 1200-token budget."""
+    section. Verify total stays comfortably under the 1600-token budget
+    (post-011 recalibration; was 1200 pre-011)."""
     ctx = read_schema_context(str(seed_duckdb))
-    assert ctx["rendered_token_count"] <= 1200, (
-        f"Rendered block exceeds 1200-token budget: "
+    assert ctx["rendered_token_count"] <= 1600, (
+        f"Rendered block exceeds 1600-token budget: "
         f"{ctx['rendered_token_count']} tokens. "
         "Either tighten the join-graph wording or expand the budget."
     )
