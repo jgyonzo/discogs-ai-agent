@@ -42,5 +42,23 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Demo Day frontend (008-agent-frontend-v1). Vite dev-server inside the
+  # container per specs/008-agent-frontend-v1/research.md §R1. Talks to
+  # agent-api over the host's localhost:8000 (browser-side fetch from
+  # the user's machine). No `volumes:` mount of ./data or ./artifacts —
+  # the frontend physically cannot read those paths (FR-020).
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      agent-api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
