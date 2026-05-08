@@ -33,6 +33,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.types import JSON, TIMESTAMP
 
+from .sanitize import sanitize_for_jsonb
+
 
 class GUID(TypeDecorator[UUID]):
     """Platform-portable UUID:
@@ -62,7 +64,31 @@ class GUID(TypeDecorator[UUID]):
 
 
 UUIDType = GUID
-JSONType = JSONB().with_variant(JSON(), "sqlite")
+
+
+class _SanitizedJSON(TypeDecorator[dict[str, Any]]):
+    """JSONB on Postgres / JSON on SQLite, with NaN/Infinity stripped at write time.
+
+    Pinned by `specs/004-agent-v1/contracts/postgres-schema.md §7`,
+    added by `specs/010-jsonb-nan-sanitization/`. Every dict written
+    into a JSONB column passes through `sanitize_for_jsonb` first;
+    NaN/Infinity floats (legal Python, illegal RFC-8259 JSON,
+    rejected by Postgres) become `None` (JSON `null`).
+
+    Read paths use the default `process_result_value` — Postgres
+    only ever stores RFC-8259 JSON, so reads come back clean.
+    """
+
+    impl = JSONB().with_variant(JSON(), "sqlite")
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Dialect) -> Any:
+        if value is None:
+            return None
+        return sanitize_for_jsonb(value)
+
+
+JSONType = _SanitizedJSON
 TIMESTAMPType = TIMESTAMP(timezone=True).with_variant(TIMESTAMP(timezone=False), "sqlite")
 
 
