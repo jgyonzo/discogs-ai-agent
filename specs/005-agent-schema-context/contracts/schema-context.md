@@ -267,11 +267,15 @@ The "Join graph" section MUST contain three sub-blocks, in order:
 ### Token budget interaction
 
 The "Join graph" section is rendered unconditionally within the
-existing `_TOKEN_BUDGET = 1200`. Empirically (April 2026 full
-catalog) the section adds ~220 tokens. If the rendered block
-exceeds the budget, the truncation order in `_TRUNCATION_STEPS`
-MUST drop sample values BEFORE any join-graph content.
-Join-graph content is NOT eligible for truncation.
+`_TOKEN_BUDGET` (1600 tokens post-`011-token-budget-recalibration`;
+see "## Token budget" below for the recalibration history).
+Empirically (April 2026 full catalog) the section adds ~300 tokens
+(009/research originally estimated 220; reality is ~300 because
+unicode arrows + traversal hints + master_fact column list run
+longer than the estimate). If the rendered block exceeds the
+budget, the truncation order in `_TRUNCATION_STEPS` MUST drop
+sample values BEFORE any join-graph content. Join-graph content
+is NOT eligible for truncation.
 
 ### Backwards compatibility
 
@@ -283,16 +287,39 @@ modification.
 
 ## Token budget
 
-`rendered_token_count` MUST be ≤ 1200. The producer computes it
+`rendered_token_count` MUST be ≤ 1600. The producer computes it
 using `tiktoken` (graceful fallback to `cl100k_base` if the
-model alias isn't recognised). The 1200 budget reflects measured
-reality on the April 2026 full-dump catalog: the column lists
-for the two wide tables (`release_fact`, `release_unique_view`
-each carry ~35 columns) already consume ~400 tokens before any
-samples, so a tighter budget would fire truncation on every
-cold start. 1200 tokens is still <8% of the cheap-model context
-window. If the catalog grows past the budget the producer
-truncates samples in this order:
+model alias isn't recognised).
+
+### Recalibration history
+
+- **Pre-009**: 1200 tokens. Sized against ~487 tokens for the
+  full April 2026 catalog (tables + samples + glossary, no join
+  graph).
+- **Post-009**: still 1200, with the join-graph section adding
+  an estimated ~220 tokens. Estimate was off — see below.
+- **Post-011 (2026-05-08)**: raised to 1600 after production
+  observation. The April 2026 full catalog rendered at 1295
+  tokens before truncation and 1217 after both `_TRUNCATION_STEPS`
+  fired (warning `schema_context_over_budget_after_truncation`).
+  The 220-token estimate for the join graph in 009 turned out to
+  be ~300 tokens in practice (unicode arrows + traversal hints +
+  master_fact column list), and the 005 baseline of ~487 tokens
+  had grown alongside the catalog. 1600 restores 005's intended
+  sample-value resolution (country top-20, style top-50) while
+  keeping a meaningful failsafe.
+
+### What the budget guarantees
+
+The column lists for the two wide tables (`release_fact`,
+`release_unique_view` each carry ~35 columns) already consume
+~400 tokens before any samples, so a tighter budget would fire
+truncation on every cold start. The current 1600 ceiling is
+still <2% of the cheap-model context window — the budget is a
+discipline ceiling, not a cost ceiling.
+
+If the catalog grows past the budget the producer truncates
+samples in this order:
 
 1. `country` top-20 → top-10
 2. `style` top-50 → top-30

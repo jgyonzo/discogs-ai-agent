@@ -83,9 +83,9 @@ def test_rendered_block_contains_required_sections(seed_duckdb: Path) -> None:
 
 def test_rendered_block_under_budget(seed_duckdb: Path) -> None:
     ctx = read_schema_context(str(seed_duckdb))
-    assert ctx["rendered_token_count"] <= 1200, (
+    assert ctx["rendered_token_count"] <= 1600, (
         f"rendered_token_count={ctx['rendered_token_count']} exceeds the "
-        "1200-token budget (SC-003)."
+        "1600-token budget (post-011 recalibration)."
     )
 
 
