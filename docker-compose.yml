@@ -30,7 +30,12 @@ services:
       - ./data/published/duckdb:/app/data/published/duckdb:ro
       - ./artifacts:/app/artifacts
     tmpfs:
-      - /tmp/duckdb
+      # 6 GiB cap — needed because release_unique_view is defined as
+      # SELECT DISTINCT * FROM release_fact (~31.7M rows × 33 cols), so any
+      # query against it forces DuckDB to materialize a global distinct
+      # set that spills heavily even for trivial GROUP BYs. Host has
+      # 7.75 GiB; 6 GiB tmpfs leaves ~1.75 GiB for everything else.
+      - /tmp/duckdb:size=6g
     depends_on:
       postgres:
         condition: service_healthy
