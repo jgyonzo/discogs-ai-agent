@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +58,19 @@ class AgentSettings(BaseSettings):
 
     # Build version for /health (set by Docker build args).
     AGENT_VERSION: str = Field(default="dev")
+
+    # Cross-origin allowlist for the browser frontend (008-agent-frontend-v1).
+    # See specs/008-agent-frontend-v1/contracts/amendment-004-api-cors.md §8.2.
+    CORS_ALLOWED_ORIGINS: list[str] = Field(
+        default=["http://localhost:5173", "http://localhost:3000"]
+    )
+
+    @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
     def validate_runtime(self) -> None:
         """Fail fast on misconfiguration. Called from FastAPI startup."""

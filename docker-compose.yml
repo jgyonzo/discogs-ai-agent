@@ -30,7 +30,12 @@ services:
       - ./data/published/duckdb:/app/data/published/duckdb:ro
       - ./artifacts:/app/artifacts
     tmpfs:
-      - /tmp/duckdb
+      # 6 GiB cap — needed because release_unique_view is defined as
+      # SELECT DISTINCT * FROM release_fact (~31.7M rows × 33 cols), so any
+      # query against it forces DuckDB to materialize a global distinct
+      # set that spills heavily even for trivial GROUP BYs. Host has
+      # 7.75 GiB; 6 GiB tmpfs leaves ~1.75 GiB for everything else.
+      - /tmp/duckdb:size=6g
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +45,24 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
+    restart: unless-stopped
+
+  # Demo Day frontend (008-agent-frontend-v1). Vite dev-server inside the
+  # container per specs/008-agent-frontend-v1/research.md §R1. Talks to
+  # agent-api over the host's localhost:8000 (browser-side fetch from
+  # the user's machine). No `volumes:` mount of ./data or ./artifacts —
+  # the frontend physically cannot read those paths (FR-020).
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      agent-api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

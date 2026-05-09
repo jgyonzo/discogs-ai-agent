@@ -166,9 +166,20 @@ Domain glossary:
    Override only when the user says "year", "yearly", or
    "annual".
 
-3) release_fact has grain release × style; counts of unique
-   releases use COUNT(DISTINCT release_id) or
-   release_unique_view.
+3) release_fact has grain release × style. For counts of unique
+   releases, use `SELECT X, COUNT(DISTINCT release_id) FROM
+   release_fact GROUP BY X` — this only tracks per-X distinct
+   sets and is cheap. DO NOT use release_unique_view for
+   catalog-wide aggregations: the view is defined as
+   `SELECT DISTINCT (~33 columns) FROM release_fact` and forces
+   DuckDB to materialize the entire deduplicated set (~19M rows
+   × 33 cols), which spills GBs of temp even for trivial
+   GROUP BYs. release_unique_view is fine for spot-check queries
+   against a single release (e.g., `WHERE release_id = N`),
+   but never for catalog-wide GROUP BYs. Never use `COUNT(*)
+   FROM release_fact` for release counts (it counts release ×
+   style rows, not releases).
+   *(Updated 2026-05-09 by `012-catalog-aggregation-postmortem`.)*
 
 4) release_artist_bridge and release_label_bridge are NOT unique
    on release_id — one row per (release × artist) or

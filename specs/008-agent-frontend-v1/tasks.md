@@ -1,0 +1,313 @@
+# Tasks: Agent Frontend V1
+
+**Input**: Design documents from `/specs/008-agent-frontend-v1/`
+**Prerequisites**:
+- Plan: [plan.md](./plan.md)
+- Spec: [spec.md](./spec.md)
+- Research: [research.md](./research.md) (R1–R5: packaging, CORS, iframe sandbox, error mapping, state)
+- Data model: [data-model.md](./data-model.md) (frontend domain types + reducer state + localStorage shape)
+- Contracts:
+  - [contracts/api-consumption.md](./contracts/api-consumption.md) (which `/query` fields the frontend reads / ignores / maps)
+  - [contracts/amendment-004-api-cors.md](./contracts/amendment-004-api-cors.md) (verbatim §8 insertion text for `004/contracts/api.md`)
+  - [contracts/curated-questions.md](./contracts/curated-questions.md) (V1 set of 7 questions and their spread coverage)
+- Quickstart: [quickstart.md](./quickstart.md)
+
+**Tests**: included — Spec §28 ("Testing Strategy") explicitly requires Vitest + React Testing Library unit/component tests, MSW-backed integration tests, and a docker smoke check. SC-001, SC-002, SC-006, SC-008, SC-009, SC-010 are test-anchored.
+
+**Components touched**:
+- **NEW**: `frontend/` (entire component, third top-level alongside `etl/` and `agent/`).
+- **MODIFIED**: `agent/src/discogs_agent/api.py`, `agent/src/discogs_agent/config.py`, `agent/.env.example`, `docker-compose.yml`, root `README.md`, `CLAUDE.md` SPECKIT block (already updated by `/speckit-plan`).
+- **AMENDED**: `specs/004-agent-v1/contracts/api.md` (new §8).
+- **NOT TOUCHED**: `etl/`. Zero edits.
+
+## Format: `[ID] [P?] [Story?] Description`
+
+- **[P]**: Can run in parallel (different files, no dependencies on incomplete tasks in the same phase).
+- **[Story]**: Which user story this task belongs to (US1, US2, US3, US4, US5).
+- File paths are absolute relative to the repo root and should be created/edited as named.
+
+## Path Conventions
+
+- New frontend component: `frontend/`
+  - Source: `frontend/src/`
+  - Tests: `frontend/tests/`
+  - Static config: `frontend/{package.json,tsconfig.json,vite.config.ts,tailwind.config.ts,postcss.config.js,index.html,Dockerfile,README.md,.env.example,.gitignore}`
+- Agent source (modified): `agent/src/discogs_agent/`
+- Cross-feature contract amendment target: `specs/004-agent-v1/contracts/api.md`
+- Compose orchestration: repo-root `docker-compose.yml`
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: Initialize the new `frontend/` component with its tooling, dependency manifests, and entry points. No business logic yet.
+
+- [X] T001 Create the `frontend/` directory tree per [plan.md](./plan.md) §"Source Code". Empty subdirectories: `frontend/public/`, `frontend/src/{api,components,data,hooks,utils}/`, `frontend/tests/{mocks,unit,components,integration}/`. Add a placeholder `.gitkeep` only where Git would otherwise drop the empty directory.
+- [X] T002 Initialize the Vite + React + TypeScript project at `frontend/` by writing the static config files: `frontend/package.json` (declaring runtime deps: `react@^18`, `react-dom@^18`, `lucide-react`, `clsx`; dev deps: `typescript@^5`, `vite@^5`, `@vitejs/plugin-react`, `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `@types/react`, `@types/react-dom`, `msw`, `tailwindcss`, `postcss`, `autoprefixer`; scripts: `dev`, `build`, `preview`, `test`, `test:watch`, `typecheck`); `frontend/tsconfig.json` (strict, `module: "ESNext"`, `jsx: "react-jsx"`, `moduleResolution: "bundler"`); `frontend/vite.config.ts` (React plugin, dev server `host: true` and `port: 5173`); `frontend/index.html` (root `<div id="root">`, links `/src/main.tsx`); `frontend/src/main.tsx` (React 18 `createRoot` mounting `<App />`); a stub `frontend/src/App.tsx` returning a single `<h1>Discogs Analytics Agent</h1>` so `npm run dev` boots before any other tasks land.
+- [X] T003 [P] Add Tailwind CSS plumbing: `frontend/tailwind.config.ts` (content globs covering `./index.html` and `./src/**/*.{ts,tsx}`); `frontend/postcss.config.js` (Tailwind + Autoprefixer); `frontend/src/index.css` with the `@tailwind base/components/utilities` directives; import `./index.css` in `frontend/src/main.tsx`. Smoke-verify by adding a Tailwind utility class to the stub `<h1>` from T002.
+- [X] T004 [P] Wire up the Vitest + React Testing Library + MSW test environment: `frontend/vitest.config.ts` (test environment `jsdom`, `setupFiles: ["./tests/setup.ts"]`, globals on); `frontend/tests/setup.ts` (`@testing-library/jest-dom` import; `beforeAll` that boots an MSW server stub — full handlers added in T010); `frontend/tests/tsconfig.json` extending the root tsconfig with `types: ["vitest/globals", "@testing-library/jest-dom"]`. Verify `npm test` exits 0 with zero suites collected.
+- [X] T005 [P] Add the per-component metadata files: `frontend/.gitignore` (covers `node_modules/`, `dist/`, `.env.local`, `.vite/`, `coverage/`); `frontend/.env.example` carrying `VITE_API_BASE_URL=http://localhost:8000`; `frontend/README.md` mirroring the structure of `agent/README.md` and `etl/README.md` (one-paragraph what-it-is + "Run locally" + "Run in compose" + "Run tests" sections, all referencing [quickstart.md](./quickstart.md) for the canonical commands).
+
+**Checkpoint**: `cd frontend && npm install && npm run dev` boots and serves a Tailwind-styled stub page on `http://localhost:5173`. `npm test` exits 0. The component has its own dependency manifest (Constitution Principle VI satisfied for the new component).
+
+---
+
+## Phase 2: Foundational
+
+**Purpose**: Cross-cutting infrastructure that EVERY user story depends on — domain types, the API client, the error translation table, the localStorage wrapper, the MSW mock backend, and the agent-side CORS plumbing. No story implementation begins until this phase is complete.
+
+**⚠️ CRITICAL**: User stories cannot be implemented in any order before this phase finishes — they all import the API client, the types, or the utils.
+
+- [X] T006 Define the frontend's TypeScript domain types in `frontend/src/api/types.ts`: `ChartArtifact`, `ResponseStatus` (the 5-value union), `RunMetadata`, `Carryover`, `ChatMessage` (the `UserMessage | AssistantMessage` discriminated union), `CuratedQuestion`, `AgentCapability`, `UserFacingError`, `QueryRequest`, `QueryResponse`, `ApiErrorEnvelope`, and the reducer types `AppState` + `Action`. Source of truth is [data-model.md](./data-model.md) §1, §2.1, §4 — those types must match field-for-field. Mark `code: null` on `QueryResponse` (V1 always sends `debug: false`); the comment must say "see contracts/api-consumption.md §3.1 — frontend ignores `code` regardless." Export everything as named exports; no default export.
+- [X] T007 [P] Implement the localStorage wrapper at `frontend/src/utils/localStorage.ts` exposing `getCurrentThreadId(): string | null`, `setCurrentThreadId(id: string): void`, `clearCurrentThreadId(): void`. Single key constant `KEY = "discogs.frontend.currentThreadId"` per [data-model.md](./data-model.md) §3. All three functions wrap their `localStorage.*` call in `try { ... } catch { return null / no-op }` so private-mode browsers and `QuotaExceededError` failures degrade silently (FR-009 + data-model §3 invariant). Do NOT use `JSON.parse` — the value is a plain string UUID.
+- [X] T008 [P] Implement the error-translation utility at `frontend/src/utils/errors.ts` exposing `translateHttpError(envelope: ApiErrorEnvelope): UserFacingError`, `translateNetworkError(err: unknown): UserFacingError`, `translateParseError(err: unknown): UserFacingError`. The dictionary mapping `error.code` → user-facing copy is verbatim from [research.md](./research.md) §R4 (table in §R4 "The mapping dictionary (V1)"). Unknown `error.code` falls back to the `internal_error` copy. Each translator drops `error.message`, `error.details`, and the original error object (do NOT include them in the returned `UserFacingError` — data-model §1.7 invariant). Each translator calls `console.warn`/`console.error` with the original payload so developers can still debug.
+- [X] T009 Implement the API client at `frontend/src/api/client.ts` exposing `sendQuery(req: QueryRequest): Promise<QueryResponse>`, `toAbsoluteArtifactUrl(relativeUrl: string): string`, and `fetchHealth(): Promise<HealthResponse>` (last is optional in V1; stub OK). The implementation MUST: (a) read `import.meta.env.VITE_API_BASE_URL`, falling back to `http://localhost:8000` if undefined per Constitution VII.a; (b) `POST /query` with `Content-Type: application/json`, body `JSON.stringify(req)` — omitting `thread_id` from the body when it's null/undefined per [contracts/api-consumption.md](./contracts/api-consumption.md) §2; (c) on response: if `response.ok` and JSON is well-shaped, return it; if `response.status === 404` and parsed `error.code === "thread_not_found"`, clear `localStorage`, drop `thread_id` from `req`, retry exactly once — if the retry also fails, propagate normally per api-consumption §4 special case; (d) on non-OK HTTP, parse the error envelope and `throw translateHttpError(envelope)`; (e) on `TypeError` / abort / network failure, `throw translateNetworkError(err)`; (f) on JSON parse failure, `throw translateParseError(err)`. `toAbsoluteArtifactUrl` joins `${API_BASE_URL}${relativeUrl}` only when `relativeUrl.startsWith("/")` (defensive — agent might one day return absolute URLs). Depends on T006, T007, T008.
+- [X] T010 [P] Add MSW mocked-backend handlers at `frontend/tests/mocks/handlers.ts` covering: success path `POST /query` returning the full `QueryResponse` shape from [contracts/api-consumption.md](./contracts/api-consumption.md) §3 with a generated `thread_id`/`run_id`, populated `chart_artifact`, `sql`, `dataframe_preview`, and `route`; controlled-failure path returning HTTP 200 with `status: "failed_unsupported"` and `chart_artifact: null`; HTTP 404 `thread_not_found` returning the standard error envelope; HTTP 500 `internal_error`; `GET /artifacts/:id` returning a tiny inline Plotly HTML stub (≤ 1 KB — enough that an iframe load test passes); `GET /health` returning `status: "ok"`. Wire the handlers into `frontend/tests/setup.ts` via `setupServer(...handlers).listen({ onUnhandledRequest: "error" })`. Helper: `frontend/tests/mocks/factories.ts` exposing `makeQueryResponse(overrides?)`, `makeAssistantMessage(overrides?)` so individual tests can construct shaped data without re-listing every required field. Depends on T006.
+- [X] T011 [P] Add the `cors_allowed_origins` settings field to `agent/src/discogs_agent/config.py`: type `list[str]`, default `["http://localhost:5173", "http://localhost:3000"]`, env var name `CORS_ALLOWED_ORIGINS`. Use the same comma-separated-string-to-list `field_validator` pattern already in use in that file; follow the surrounding code style verbatim. Add a one-line docstring referencing [contracts/amendment-004-api-cors.md](./contracts/amendment-004-api-cors.md) §8.2. Per Constitution VII.a, do NOT hardcode the allowlist anywhere except as the default. Implementation note: field name landed as `CORS_ALLOWED_ORIGINS` (UPPER_CASE, matching surrounding fields like `CHEAP_MODEL`, `STRONG_MODEL`); the contract amendment used `settings.cors_allowed_origins` in prose, but the actual settings field follows the project's UPPER_CASE convention.
+- [X] T012 Wire `fastapi.middleware.cors.CORSMiddleware` into `agent/src/discogs_agent/api.py` immediately after the `app = FastAPI(...)` line (line 33) and BEFORE the route module imports near line 42. Parameters per [contracts/amendment-004-api-cors.md](./contracts/amendment-004-api-cors.md) §8.3: `allow_origins=settings.CORS_ALLOWED_ORIGINS`, `allow_methods=["GET","POST","OPTIONS"]`, `allow_headers=["*"]`, `allow_credentials=False`, `max_age=600`. Add the import `from fastapi.middleware.cors import CORSMiddleware` to the top of the file. Depends on T011 (settings field must exist before the middleware reads from it).
+- [X] T013 [P] Add `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000` to the repo-root `.env.example` (the project keeps a single `.env.example` at the repo root, not under `agent/`). Comment line above it: `# Comma-separated origins permitted for browser-based requests (008-agent-frontend-v1)`.
+- [X] T014 [P] Apply the contract amendment to `specs/004-agent-v1/contracts/api.md`: insert the verbatim §8 "Cross-origin policy" section from [contracts/amendment-004-api-cors.md](./contracts/amendment-004-api-cors.md) after the existing §7 "CLI mirror" and before any trailing horizontal rule / EOF. No edits to §1–§7. The insertion text in the amendment file is already final — copy directly without rephrasing.
+
+**Checkpoint**: Types compile; `client.ts` unit-importable; MSW handlers respond from the test environment; the agent backend accepts cross-origin POSTs from `http://localhost:5173`. None of this is yet wired into a UI; that's where the user stories begin.
+
+---
+
+## Phase 3: User Story 1 — Ask a question and see the chart (Priority: P1) 🎯 MVP
+
+**Goal**: A user opens the page, types a question, hits submit, sees the user message immediately, sees a loading state, and within a few seconds sees the assistant's text reply and an interactive chart rendered inline. This is the entire MVP.
+
+**Independent Test**: With the agent stack reachable at `http://localhost:8000`, run `npm run dev`, open `http://localhost:5173`, type "Show releases by decade as a bar chart", hit submit. Verify (a) the user message appears immediately, (b) input is disabled with a visible loading indicator, (c) within ~10s the assistant text appears, (d) the chart artifact iframe paints. Spec acceptance scenario US1.1. Edge cases US1.2 (controlled-failure no-chart) and US1.3 (backend unreachable) are covered by the integration test (T028) using MSW handlers from T010.
+
+### Implementation for User Story 1
+
+- [X] T015 [US1] Implement the reducer + submit thunk at `frontend/src/hooks/useAgentQuery.ts`. Export `initialState: AppState` (per [data-model.md](./data-model.md) §2), `reducer(state, action): AppState` covering all 5 action types per data-model §2.1 transitions, and a `useAgentQuery()` hook that wraps `useReducer(reducer, initialState)` and returns `{ state, submit(message: string), newConversation() }`. The `submit` thunk: (a) builds a `UserMessage` with a freshly-generated UUID (use `crypto.randomUUID()` — supported in modern browsers and our target env per [plan.md](./plan.md) Target Platform); (b) dispatches `{type: "submit", userMessage}`; (c) calls `client.sendQuery({thread_id: state.threadId, message})`; (d) on success branches by `response.status`: `succeeded` → dispatch `responseSucceeded`, anything starting with `failed_` → dispatch `responseFailedControlled` per data-model §1.3; (e) on thrown `UserFacingError` → dispatch `responseError`. Forbidden-transition guards from data-model §2.2 must be enforced inside the reducer (no-op when invalid). Build the `AssistantMessage` from the `QueryResponse` inside the thunk (not the reducer). Always persist `response.thread_id` to localStorage via the util from T007 on both `responseSucceeded` and `responseFailedControlled`.
+- [X] T016 [P] [US1] Create `frontend/src/components/Header.tsx`: a static header with the title "Discogs Analytics Agent" and the subtitle "Ask natural language questions about the Discogs releases dataset." (per spec §9.1). Tailwind-styled, no props, no state. Single export.
+- [X] T017 [P] [US1] Create `frontend/src/components/LoadingState.tsx`: a small spinner + the label "Generating analysis..." per spec §20. Props: none (always-on when rendered; the parent decides when to mount it). Tailwind animation via `animate-spin` on a Lucide `<Loader2>` icon.
+- [X] T018 [P] [US1] Create `frontend/src/components/ErrorBanner.tsx`: a dismissable banner. Props: `error: UserFacingError`, `onDismiss(): void`. Renders `error.copy` only — never reads `error.kind` for branching beyond an icon hint, never inspects any other field. Lucide `<AlertCircle>` icon. Spec FR-016 forbids exposing tracebacks, which the type system already enforces (data-model §1.7 invariant). Implementation note: `onDismiss` landed as **optional** since V1 has no explicit dismiss action in the reducer (the banner clears on the next submit per data-model §2.1); App.tsx renders the banner without a dismiss handler.
+- [X] T019 [P] [US1] Create `frontend/src/components/QueryInput.tsx`: a single-line input + submit button. Props: `disabled: boolean`, `onSubmit(message: string): void`. Behavior: trim the input on submit, reject empty after trim with an inline hint, reject > 2000 chars per [contracts/api-consumption.md](./contracts/api-consumption.md) §2. Keyboard: Enter submits, Shift+Enter is reserved for a future multiline mode (V1 single-line — see spec §29). Aria-label "Ask a question about the Discogs catalog" so the input is screen-reader accessible (spec §29).
+- [X] T020 [P] [US1] Create `frontend/src/components/ArtifactFrame.tsx`: renders the agent's chart artifact in a sandboxed iframe. Props: `artifact: ChartArtifact | null`. When `artifact` is null OR `artifact.type !== "plotly_html"`, render the empty placeholder per spec §15.2: "No chart yet. Ask a question or run one of the suggested questions." When `artifact` is non-null and Plotly: `<iframe src={toAbsoluteArtifactUrl(artifact.url)} sandbox="allow-scripts" title="Generated chart" className="w-full h-[600px]" />` per [research.md](./research.md) §R3. NEVER use `dangerouslySetInnerHTML` or `srcDoc`. NEVER add `allow-same-origin`. Spec FR-021 + research R3 are load-bearing here.
+- [X] T021 [P] [US1] Create `frontend/src/components/ChatPanel.tsx`: renders the timeline of `ChatMessage[]`. Props: `messages: ChatMessage[]`. Each `UserMessage` renders right-aligned with a subtle background; each `AssistantMessage` renders left-aligned with the agent's `content` as plain-text wrapped paragraphs (no Markdown rendering in V1). Empty list → render the welcome state "Ask a question about the Discogs catalog, or pick one of the suggested questions to start." per spec FR-017. Use `key={message.id}` for stability. The container is a vertically-scrolling flex column with auto-scroll-to-bottom on new message (use a `useEffect` watching `messages.length`).
+- [X] T022 [P] [US1] Create `frontend/src/components/ResultPanel.tsx`: composes `ArtifactFrame` only in this story (SqlViewer/DataPreviewTable/RunMetadata land in US4 and will be added by T046). Props: `current: AppState["current"]`. Renders a single column: `<ArtifactFrame artifact={current.artifact} />`. Will gain siblings in US4. Depends on T020 conceptually but the file resolution holds at integration time.
+- [X] T023 [US1] Wire everything into `frontend/src/App.tsx`, replacing the T002 stub. The shell uses a three-zone Tailwind grid layout per spec §10: header on top spanning full width; below, a 2-column grid (chat panel left ~60%, result panel right ~40%) on `md+` screens, stacked vertically on `sm-`. The component calls `useAgentQuery()` from T015 and threads `state` and handlers through: `<Header />` always; `<ChatPanel messages={state.messages} />`; `<QueryInput disabled={state.pending} onSubmit={submit} />`; `{state.pending && <LoadingState />}`; `{state.error && <ErrorBanner error={state.error} />}`; `<ResultPanel current={state.current} />`. Keyboard-Enter submission is wired through `<QueryInput>` already from T019. Depends on T015–T022.
+
+### Tests for User Story 1
+
+> Spec §28 mandates these. Run `npm test` — all should pass against the MSW handlers from T010.
+
+- [X] T024 [P] [US1] Unit test the API client at `frontend/tests/unit/client.test.ts`: success path returns the parsed `QueryResponse`; HTTP 500 throws a `UserFacingError` with `kind: "http"` and `copy === "Something went wrong on the agent side. Try again or rephrase."`; HTTP 404 `thread_not_found` triggers the silent retry — assert (a) localStorage was cleared, (b) the second request's body lacks `thread_id`, (c) the second response is returned as-is; network failure (force `fetch` to reject) throws `kind: "network"`; malformed JSON response throws `kind: "parse"`; the request body NEVER includes `thread_id` when the input had `null` or `undefined` (per api-consumption §2). Use `vi.spyOn(global, "fetch")` for fine-grained control here rather than going through MSW.
+- [X] T025 [P] [US1] Unit test the error-translation table at `frontend/tests/unit/errors.test.ts`: every entry from the [research.md](./research.md) §R4 dictionary is asserted (one assertion per row); the unknown-code fallback returns the `internal_error` copy; `translateNetworkError` returns the network copy; `translateParseError` returns the parse copy; the returned `UserFacingError` has only `kind` and `copy` keys (verifies data-model §1.7 invariant — no `details`, no `originalError`, no `traceback`).
+- [X] T026 [P] [US1] Component test `ArtifactFrame` at `frontend/tests/components/ArtifactFrame.test.tsx`: `artifact: null` renders the empty placeholder text and NOT an iframe; `artifact` with `type: "plotly_html"` renders an iframe whose `src` equals `${VITE_API_BASE_URL}${artifact.url}`, whose `sandbox` attribute equals exactly `"allow-scripts"` (NO `allow-same-origin`, NO other tokens), and whose `title` is set; `artifact` with an unknown `type` renders the empty placeholder. The sandbox-attribute assertion is load-bearing for FR-021 and SC-009 — this test prevents the iframe from being accidentally widened in a future refactor.
+- [X] T027 [P] [US1] Component test `ChatPanel` at `frontend/tests/components/ChatPanel.test.tsx`: empty messages list renders the welcome state; one user + one assistant message renders both with appropriate roles in DOM order; `messages.length` change scrolls the container to the bottom (assert by checking the scroll target's `scrollTop` after a state update).
+- [X] T028 [P] [US1] Integration test the full submit flow at `frontend/tests/integration/full-flow.test.tsx` using the MSW handlers from T010. Four scenarios: (a) **Success** — render `<App />`, type "Show releases by decade", click submit; assert user message appears immediately; await the assistant message; assert the iframe renders with the expected absolute artifact URL. (b) **Pending state** — hold the response open via a deferred promise; assert the input is disabled while pending and re-enables after resolution. (c) **Controlled failure** — override the `/query` handler to return `status: "failed_unsupported"` with `chart_artifact: null`; submit; assert the assistant text appears; assert the empty-chart placeholder renders; assert NO error banner. (d) **Backend unreachable** — make the `/query` handler reject with a network error; submit; assert the error banner with the "agent is not reachable" copy renders; assert the input is re-enabled. Implementation note: the disabled-state assertion was split into its own scenario because MSW resolves nearly instantly, so the original "submit then assert disabled" code raced the response.
+
+**Checkpoint**: User Story 1 fully functional and testable independently. The MVP demo path (spec §34 step 1–3) works against the live backend; SC-001 (≥ 5 curated questions render charts) is not yet provable because curated questions land in US2 — for now, hand-typing succeeds.
+
+---
+
+## Phase 4: User Story 2 — One-click curated demo questions (Priority: P2)
+
+**Goal**: A presenter sees ≥ 5 curated demo questions in the UI; clicking "Run" on any of them submits it end-to-end without typing.
+
+**Independent Test**: Open `http://localhost:5173`. Verify ≥ 5 question cards are visible, each with a title, category, and full query text. Click "Use" on one → text appears in the input. Click "Run" on one → the query submits, a chart appears (US1 path reused). Spec acceptance scenarios US2.1–US2.3.
+
+### Implementation for User Story 2
+
+- [X] T029 [US2] Create the curated questions data file at `frontend/src/data/curatedQuestions.ts` exporting `curatedQuestions: readonly CuratedQuestion[]` containing all 7 entries from [contracts/curated-questions.md](./contracts/curated-questions.md) §1 (Q1 Releases by decade, Q2 Techno over time, Q3 Vinyl vs CD, Q4 Top countries, Q5 Label diversity, Q6 House outliers, Q7 Works with most versions). Field-for-field match required; the contract is normative. Use `as const` on the array literal so TypeScript widens types tightly.
+- [X] T030 [US2] Create `frontend/src/components/SuggestedQuestions.tsx`: groups the curated questions by `category` and renders each as a card with title, description, and two buttons "Use" and "Run" per spec §22. Props: `onUse(query: string): void`, `onRun(query: string): void`, optional `disabled` (so the parent can lock the cards while a query is in flight) and optional `questions` override (for testing). Layout: vertical stack of category groups, each group has a small heading. Lucide icons: `<Pencil>` next to "Use", `<Play>` next to "Run". The groups render in the order categories first appear in the array (Trends → Styles → Formats → Geography → Labels → Advanced → Masters in the V1 set). Implementation note: icon swapped from `<Search>` (in original task wording) to `<Pencil>` — a Pencil reads more naturally as "edit/insert into the input" than a magnifying glass.
+- [X] T031 [US2] Wire `SuggestedQuestions` into `App.tsx`. Placed as a left sidebar on `lg+` screens, stacked above the conversation on `md-` screens. Handlers: `onUse(q) => setInputText(q)` via lifted input state (QueryInput is now controlled via `value` + `onChange`); `onRun(q) => handleSubmit(q)` reusing the US1 submit thunk. The chat panel's empty-state remains visible until the first message arrives — the user isn't actively double-prompted because the sidebar uses a different visual register (cards on white) from the empty-state copy (centered text on slate). Layout: 3-column grid on `lg+` (`[20rem_1fr_1fr]` — fixed sidebar width, equal chat/result), single-column stacked on `md-`. Depends on T029, T030, and US1 wiring (T023).
+
+### Tests for User Story 2
+
+- [X] T032 [P] [US2] Component test `SuggestedQuestions` at `frontend/tests/components/SuggestedQuestions.test.tsx`: renders all 7 questions with their titles visible; "Use" button click calls `onUse` with the exact `query` text; "Run" button click calls `onRun` with the exact `query` text; questions are grouped by category (asserted via `getByRole("region", { name: category })` since each category section is a labeled region); empty data array renders nothing without crashing; custom `questions` prop overrides the default set; `disabled=true` disables every button.
+- [X] T033 [P] [US2] Spread-coverage test at `frontend/tests/integration/curated-questions-spread.test.ts` per [contracts/curated-questions.md](./contracts/curated-questions.md) §5: asserts `curatedQuestions.length >= 5` (FR-005 floor); the union of all `demonstrates` arrays has size `>= 5` (the meaningful-spread interpretation); each entry has `title.length <= 40`, `description.length <= 100` (when present), `category` ∈ the 7-value enum, `query.length > 0`, `demonstrates.length > 0`. Plus a drop-one safety test (per contract §2): removing any single question from the set still covers ≥ 5 distinct capabilities.
+
+**Checkpoint**: Spec acceptance US2.1–US2.3 hold. SC-001 ("at least 5 of the curated demo questions render charts end-to-end") becomes provable on the live stack — running each curated question through the live agent should produce a chart.
+
+---
+
+## Phase 5: User Story 3 — Multi-turn conversation and reset (Priority: P2)
+
+**Goal**: Follow-up questions in the same conversation continue the agent context; "New conversation" clears the visible chat and starts fresh; the active conversation identifier survives a browser refresh.
+
+**Independent Test**: Run a first question. Submit a follow-up like "Now only for UK" without re-stating context — the agent's response references the prior context. Click "New conversation" — the chat clears and `localStorage.discogs.frontend.currentThreadId` is removed. Refresh the page mid-conversation — the visible chat is empty (chat history is not persisted, FR-010), but the next submission continues the prior conversation (because the thread ID survived). Spec acceptance scenarios US3.1–US3.3.
+
+### Implementation for User Story 3
+
+- [X] T034 [US3] Add the `threadId` field to `AppState` initialization in `frontend/src/hooks/useAgentQuery.ts`: read from `getCurrentThreadId()` (T007) once at module load — pass the read value into `initialState`. The `submit` thunk now reads `state.threadId` (already there from T015 design) and includes it in the request when non-null. The `responseSucceeded` and `responseFailedControlled` reducer cases write the response's `thread_id` back to the in-memory state AND call `setCurrentThreadId(...)` as a side effect — but reducers must be pure; do this side-effect inside the thunk, not in the reducer. Implementation note: T015's original `initialState` was a **module-level constant** that captured the localStorage value at module-load time, breaking US3.3 (browser refresh preserves thread). Replaced with a `buildInitialState()` factory passed to `useReducer`'s third lazy-initializer argument so the read happens at component-mount time. The original `initialState` constant is retained as a `threadId: null` representative (used implicitly nowhere; kept for backwards compat / type ergonomics in case any future test needs it).
+- [X] T035 [US3] Implement the `newConversation` reducer action in `useAgentQuery.ts` per [data-model.md](./data-model.md) §2.1: clears `messages`, `current`, `error`, `pending`, AND `threadId` (back to null). Side effect from the thunk: also call `clearCurrentThreadId()` (T007). Expose `newConversation(): void` from the `useAgentQuery` return object so the UI can wire a button to it. (The reducer action and thunk wrapper were both established in T015; T035's audit confirmed they are correct.)
+- [X] T036 [US3] Implement the `useThreadId` hook at `frontend/src/hooks/useThreadId.ts` exposing `{ threadId, setThreadId, clearThreadId }`. Internally: a `useState` initialized via lazy initializer that calls `getCurrentThreadId()`; `setThreadId(id)` updates state AND calls `setCurrentThreadId(id)`; `clearThreadId()` updates state AND calls `clearCurrentThreadId()`. Used by `ThreadControls` (T037) for display purposes — it does NOT replace the in-reducer `state.threadId` from T034. Reason: the reducer is the source of truth for the live state; this hook is a small read-only mirror suitable for the read-mostly display badge. Implementation note: in V1 the live `App.tsx` actually passes `state.threadId` (from useAgentQuery's reducer) to `ThreadControls`, NOT the value from `useThreadId`. The hook is exported for future reuse (e.g., a sibling component that needs to read the stored id without participating in the reducer) — currently unused but harmless. Keeping the hook in scope per the task spec.
+- [X] T037 [US3] Create `frontend/src/components/ThreadControls.tsx`: renders a "New conversation" button per spec §21.2 + a small read-only display of the truncated current thread ID (e.g., `thread: abcd…890`). Props: `threadId: string | null`, `onNewConversation(): void`. The button is always enabled (data-model §2.1 — `newConversation` is valid in any state including INITIAL). When `threadId === null` the truncated-ID display reads "no active thread". Lucide icon `<RotateCcw>` next to the button label.
+- [X] T038 [US3] Wire `ThreadControls` into `App.tsx` near the header. Implementation: extended `Header` to optionally accept `children` (a `ReactNode` slot) and rendered `<ThreadControls>` inside the header via `<Header><ThreadControls threadId={state.threadId} onNewConversation={handleNewConversation} /></Header>`. The `handleNewConversation` wrapper additionally clears the controlled `inputText` state in App.tsx so the input box is reset alongside the chat.
+- [X] T039 [US3] Verify (and tighten if needed) the `thread_not_found` silent-retry path in `client.ts` from T009. Audit confirmed the path is already correct (clearCurrentThreadId on 404, retry once with no thread_id, propagate retry's outcome). Locked in by `tests/unit/client.test.ts` ("silently retries on 404 thread_not_found and clears localStorage") AND now by `tests/integration/multi-turn.test.tsx` ("thread_not_found returns trigger a silent retry — no banner, conversation continues") which exercises the full UI flow with no error banner shown to the user.
+
+### Tests for User Story 3
+
+- [X] T040 [P] [US3] Unit test `localStorage.ts` at `frontend/tests/unit/localStorage.test.ts`: 9 cases covering get/set/clear round-trips, exception-safe paths under `vi.spyOn(window.localStorage, ...)` failures (private mode, quota exceeded), and the data-model §3 invariant that only the documented key is ever written. Implementation note: had to install an in-memory `localStorage` polyfill in `tests/setup.ts` because Node 25 ships an experimental `localStorage` global that overrides jsdom's and silently no-ops set/get without `--localstorage-file`. Spies switched from `Storage.prototype.*` to `window.localStorage.*` since the polyfill is a plain class instance not on the Storage prototype.
+- [X] T041 [P] [US3] Component test `ThreadControls` at `frontend/tests/components/ThreadControls.test.tsx`: 5 cases — renders truncated ID when set (asserts first 4 chars present, full id NOT shown), renders "no active thread" when null, renders the full id when ≤8 chars, "New conversation" calls handler exactly once, button stays enabled even when threadId is null (data-model §2.1 invariant: newConversation valid in any state).
+- [X] T042 [P] [US3] Integration test multi-turn + reset at `frontend/tests/integration/multi-turn.test.tsx`: 4 scenarios — (a) reuses the same thread_id across two turns, asserting captured request bodies show no thread_id on turn 1 and the same thread_id on turn 2; (b) "New conversation" clears the visible chat AND clears localStorage AND the next request omits thread_id; (c) `thread_not_found` 404 on first attempt triggers silent retry with no thread_id and no error banner shown to the user (locks in the FR-016 + edge-case behavior); (d) US3.3 — pre-seeded localStorage thread_id survives the first mount (visible in the ThreadControls display) and is carried in the next request body.
+
+**Checkpoint**: Multi-turn works (acceptance US3.1); New Conversation resets cleanly (US3.2); refresh-survives-thread-id (US3.3) works because `getCurrentThreadId()` is read at module load — verifiable by manual reload in the live stack. SC-005 holds.
+
+---
+
+## Phase 6: User Story 4 — Inspect what the agent did (Priority: P3)
+
+**Goal**: An evaluator can expand a panel to see the generated SQL (with copy button), see a small data preview, and see metadata badges (complexity / model / status / run id / thread id).
+
+**Independent Test**: Run a query that returns SQL + data + metadata. Expand the SQL panel — SQL is shown, copy button works. Data preview shows up to 20 rows. Metadata badges show `complexity · selected_model · status` (skipping any null fields). Spec acceptance scenarios US4.1–US4.3.
+
+### Implementation for User Story 4
+
+- [X] T043 [P] [US4] Create `frontend/src/components/SqlViewer.tsx`: a collapsible "Generated SQL" panel per spec §16. Props: `sql: string | null`. Hidden when `sql` is null OR empty/whitespace-only. When present: header button toggles `expanded` state; collapsed by default; expanded renders `<pre><code>{sql}</code></pre>` plus a Copy button that calls `navigator.clipboard.writeText` and flips its icon to a checkmark for ~1.5s. Implementation note: implemented as `useState`-driven section rather than `<details>` element because the Copy button needs to coexist with the toggle in the header. Lucide icons: `ChevronDown`/`ChevronUp` for the toggle, `Copy`/`Check` for the copy button. Clipboard failures (insecure context, permission denied) are silently caught — the SQL stays visible to the user.
+- [X] T044 [P] [US4] Create `frontend/src/components/DataPreviewTable.tsx`: a horizontally-scrollable table per spec §17. Props: `rows: Record<string, unknown>[]`. Empty array → "No data preview available." placeholder. Non-empty: render up to 20 rows; columns inferred from `Object.keys(rows[0])`; primitives via `String()`, non-primitives via `JSON.stringify()` (defensive); null/undefined render as empty cells. Numeric-only columns get `text-right tabular-nums` for readable column alignment. `overflow-x-auto` wrapper for wide tables.
+- [X] T045 [P] [US4] Create `frontend/src/components/RunMetadata.tsx`: a row of badges per spec §18. Props: `metadata: RunMetadata | null`. Null → render nothing. Non-null → render `status` (always), `complexity` (when present), `selected_model` (when present and non-null), `run_id` (truncated to first 6 chars + "…"), `thread_id` (truncated). Status badge colored: green (succeeded), slate (failed_unsupported), amber (failed_clarification_needed), red (failed_safety / failed_validation). NEVER renders the literal text "null" or "undefined". `data-testid` per badge for test stability.
+- [X] T046 [US4] Wired `SqlViewer`, `DataPreviewTable`, and `RunMetadata` into `frontend/src/components/ResultPanel.tsx`. Layout per spec §10: ArtifactFrame → RunMetadata → DataPreviewTable (only when rows.length > 0) → SqlViewer. Pass `sql={current.sql}`, `rows={current.dataframePreview}`, `metadata={current.metadata}`. Each child handles its own null/empty case so the panel itself stays declarative.
+
+### Tests for User Story 4
+
+- [X] T047 [P] [US4] Component test `SqlViewer` at `frontend/tests/components/SqlViewer.test.tsx` — 7 cases: null/empty/whitespace-only render nothing; collapsed by default; expand reveals SQL + copy button; copy click calls `navigator.clipboard.writeText` with the exact SQL (uses `vi.stubGlobal("navigator", ...)` because `navigator.clipboard` has only a getter in jsdom — Object.assign fails); icon flips to checkmark after click; collapse-then-expand toggling works.
+- [X] T048 [P] [US4] Component test `DataPreviewTable` at `frontend/tests/components/DataPreviewTable.test.tsx` — 5 cases: empty array renders placeholder; 5 rows render with inferred column headers; 25 rows are capped to 20 (rows 21-25 absent); non-primitive cell values render as JSON-stringified text; null/undefined cells render as empty.
+- [X] T049 [P] [US4] Component test `RunMetadata` at `frontend/tests/components/RunMetadata.test.tsx` — 9 cases: null renders nothing; full metadata renders all 5 badges; missing `complexity` field hides only that badge; `selected_model: null` hides only that badge; literal "null"/"undefined" never appear in output; long ids are truncated; status badges apply correct color classes (green for succeeded, red for failed_safety, slate for failed_unsupported).
+
+**Checkpoint**: Spec US4 acceptance scenarios all pass. The result panel now mirrors spec §10's full layout. SC-010 ("at least one curated complex question succeeds end-to-end") becomes a live-stack verification gate — running Q5 (Label diversity) end-to-end should display a chart, the SQL, the data preview, and the metadata badges.
+
+---
+
+## Phase 7: User Story 5 — Run the whole demo from one command (Priority: P3)
+
+**Goal**: A new contributor on a fresh checkout can run `docker compose up --build` and reach a working frontend at `http://localhost:5173`.
+
+**Independent Test**: From a clean checkout, run `docker compose up --build`. Wait for healthy. Open `http://localhost:5173` in a browser. Verify the page renders, curated questions are visible, and a sample question (Q1) returns a chart. Spec acceptance scenarios US5.1–US5.3, SC-007.
+
+### Implementation for User Story 5
+
+- [X] T050 [US5] Created `frontend/Dockerfile` for the Vite-dev-server packaging variant per [research.md](./research.md) §R1. Six-line Dockerfile (plus a comment block explaining V1 vs V1.1): `FROM node:20-alpine`, `WORKDIR /app`, `COPY package.json package-lock.json ./` + `RUN npm ci`, `COPY . .`, `EXPOSE 5173`, `CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]`. Created `frontend/.dockerignore` excluding `node_modules`, `dist`, `coverage`, `.env.local`, `.git`, `.gitignore`, `*.log`, `.vite`, `.DS_Store`, `*.tsbuildinfo` (the last matches `frontend/.gitignore` and keeps the build context lean).
+- [X] T051 [US5] Added the `frontend` service to root `docker-compose.yml` after the `agent-api` block. Service spec landed: `build: { context: ./frontend, dockerfile: Dockerfile }`, `environment: VITE_API_BASE_URL: http://localhost:8000`, `ports: - "5173:5173"`, `depends_on: { agent-api: { condition: service_healthy } }`, `restart: unless-stopped`. NO `volumes:` mount of `./data/` or `./artifacts/` (FR-020). NO `tmpfs:`. A 4-line comment block above the service explains the V1 packaging choice and the FR-020 boundary. `docker compose config` parses cleanly.
+- [X] T052 [US5] Updated repo-root `README.md`: (a) added `frontend/` to the component list at the top with a one-paragraph description of its boundaries; (b) extended the repository layout tree to include `frontend/` and the new specs (008–011); (c) updated the existing "3. Ask a question" → "3. Ask a question (CLI)" + new "4. Or use the browser frontend" subsection describing the curated-question/multi-turn/new-conversation UX and linking to `frontend/README.md` and `specs/008-agent-frontend-v1/quickstart.md`; (d) updated "Out of scope" to remove "Frontend UI" (since it now exists) and add the V1.1 production-shaped image as an explicit deferred item.
+- [X] T053 [US5] **Container build smoke**: `docker compose build frontend` succeeds (npm ci + COPY . . in clean image; final image tagged `genai-pathway-final-project-yonzo-frontend:latest`). **Container-up smoke**: ran the image standalone with `docker run --rm -d -p 5173:5173 -e VITE_API_BASE_URL=...`, waited for `:5173` to respond, hit `curl -fs http://localhost:5173` → HTTP 200, container logs show `VITE v5.4.21 ready in 75 ms` (Local + Network URLs). Container stopped cleanly. **The full live-stack `docker compose up --build` end-to-end test** ([quickstart.md §3](./quickstart.md)) requires `OPENAI_API_KEY` in `.env` and is the user's gate — documented in the PR description as the manual SC-007 smoke. Both build-smoke and container-up smoke confirm the Dockerfile + compose wiring is correct.
+
+**Checkpoint**: One-command bring-up demonstrably works. The full Demo Day path from spec §34 is executable.
+
+---
+
+## Phase 8: Polish & Cross-cutting
+
+**Purpose**: Final correctness sweeps that span all stories. These are gates, not features.
+
+- [ ] T054 [P] Run `cd frontend && npm run typecheck` — must exit 0 with zero errors. Fix any drift between [data-model.md](./data-model.md) and the actual TypeScript types. Drift here is a real bug; do not silence with `as unknown as ...` or `@ts-ignore`.
+- [ ] T055 [P] Run `cd frontend && npm test` — all unit, component, and integration suites must pass. Failing tests indicate either a real bug or an outdated expectation; fix the bug if it is one, update the test only if the spec or contract changed (and link to the change).
+- [ ] T056 [P] Verify `frontend/package.json` has zero database / data-layer dependencies — no `pg`, `duckdb`, `mysql2`, `sqlite3`, `mongodb`, or any client library that could speak a database protocol. SC-008 is anchored on this. Implementation: a one-liner test at `frontend/tests/unit/no-db-deps.test.ts` that reads `package.json` and asserts the union of `dependencies` and `devDependencies` is disjoint from a hardcoded forbidden-set. Run as part of `npm test` from T055.
+- [ ] T057 [P] Verify the iframe sandbox attribute regression guard (separate from T026). Add a static-analysis-style test at `frontend/tests/unit/no-unsafe-html.test.ts` that reads every `.tsx` file under `frontend/src/components/` and asserts none of them contain the substring `dangerouslySetInnerHTML`. SC-009 is anchored on this — FR-021 forbids the pattern. Implementation: `fs.readdirSync` + `fs.readFileSync` + a simple substring check. ≤ 30 lines.
+- [ ] T058 Polish the empty / welcome state copy in `ChatPanel` and `ArtifactFrame`. Spec FR-017 + §9.1 wants a clear, recognizable empty state before the first query. Refine the copy if it currently reads as placeholder; adopt the strings from spec §9.1 and §15.2 verbatim. Verify keyboard accessibility per spec §29: Enter submits (T019 already covers); Shift+Enter is documented as reserved-for-future-multiline; the iframe has `title="Generated chart"` (T020 already covers); button text is clear (visible in all components).
+- [ ] T059 Update the requirements checklist `specs/008-agent-frontend-v1/checklists/requirements.md` final section (the "Items requiring follow-up at plan time" subsection) to record what landed: the docker packaging variant chosen, how CORS was configured, and the explicit V1 decision NOT to use `GET /threads/{id}` for chat-restore-on-reload. This is a small audit-trail update so a reader of the checklist can see what was decided in the plan and what landed in implementation.
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Phase 1 (Setup)**: No dependencies. Start immediately.
+- **Phase 2 (Foundational)**: Depends on Phase 1. **Blocks all user stories.**
+- **Phase 3 (US1, P1)**: Depends on Phase 2. The MVP — finish before considering anything else done.
+- **Phase 4 (US2, P2)**: Depends on Phase 2. Independent of US1 *implementation* but its independent test requires the US1 submit path to work end-to-end (US2's "Run" button reuses US1's submit). Practically: complete US1 first, then US2.
+- **Phase 5 (US3, P2)**: Depends on Phase 2 + a bit of US1's reducer (T015 establishes the reducer; T034/T035 extend it). Practically: US1 first.
+- **Phase 6 (US4, P3)**: Depends on Phase 2 + US1's `ResultPanel` (T022, modified by T046).
+- **Phase 7 (US5, P3)**: Depends on US1, US2, US3, US4 all being implementation-complete (the smoke check at T053 verifies all five stories together).
+- **Phase 8 (Polish)**: Depends on all desired stories being complete.
+
+### User Story Dependencies (a sharper picture)
+
+- **US1 (P1)** — no dependencies on other stories. The MVP.
+- **US2 (P2)** — independently testable in isolation (the curated cards render and the buttons fire callbacks; T032 doesn't need US1's submit path). For end-to-end behavior in the live stack, depends on US1's submit path.
+- **US3 (P2)** — independently testable in isolation (T040 + T041 do not need a working query path). For end-to-end behavior, depends on US1's submit path.
+- **US4 (P3)** — independently testable in isolation. For end-to-end behavior, depends on US1's `ResultPanel` integration (T046 modifies it).
+- **US5 (P3)** — implicitly depends on all others being implemented enough to hold up under T053's smoke check. Independent test (one-command bring-up) does not require any specific story but the resulting page must render the full UI to satisfy the spec.
+
+### Within Each User Story
+
+- Tests are written alongside (not strictly before) implementation in this codebase — Spec §28 mandates them but doesn't impose TDD ordering. The reducer tests (T015's behavior) are exercised by the integration test (T028) rather than by a separate reducer-only test (the reducer is the only state machine we have; testing it through the public submit/newConversation API is enough).
+- Within US1: reducer (T015) → leaf components in parallel (T016–T022 [P]) → wiring (T023) → tests (T024–T028 [P]).
+- Within US2: data file (T029) → component (T030) → wiring (T031) → tests (T032, T033 [P]).
+- Within US3: reducer extensions (T034, T035) → hook (T036) → component (T037) → wiring (T038) → audit (T039) → tests (T040–T042 [P]).
+- Within US4: leaf components in parallel (T043, T044, T045 [P]) → wiring (T046) → tests (T047–T049 [P]).
+- Within US5: Dockerfile (T050) → compose service (T051) → README (T052) → smoke (T053).
+
+### Parallel Opportunities
+
+- **Phase 1**: T003, T004, T005 in parallel.
+- **Phase 2**: T007, T008 in parallel; T010, T011, T013, T014 in parallel after T006; T012 after T011.
+- **US1 implementation**: T016–T022 in parallel after T015; T024–T028 in parallel after T023.
+- **US3 tests**: T040, T041, T042 in parallel.
+- **US4 implementation**: T043, T044, T045 in parallel; T047–T049 in parallel after T046.
+- **Cross-story parallelism**: once Phase 2 is done, US2 (T029–T033), US3 (T034–T042), US4 (T043–T049), US5 (T050–T053) can run on independent feature branches by different contributors. US1 should land first as it establishes the reducer + ResultPanel that other stories extend.
+
+---
+
+## Parallel Example: User Story 1
+
+```bash
+# After Phase 2 + T015 (reducer) lands, all leaf components in parallel:
+Task: "Create Header.tsx in frontend/src/components/Header.tsx"
+Task: "Create LoadingState.tsx in frontend/src/components/LoadingState.tsx"
+Task: "Create ErrorBanner.tsx in frontend/src/components/ErrorBanner.tsx"
+Task: "Create QueryInput.tsx in frontend/src/components/QueryInput.tsx"
+Task: "Create ArtifactFrame.tsx in frontend/src/components/ArtifactFrame.tsx"
+Task: "Create ChatPanel.tsx in frontend/src/components/ChatPanel.tsx"
+Task: "Create ResultPanel.tsx in frontend/src/components/ResultPanel.tsx"
+
+# Then sequentially: T023 wires App.tsx; then in parallel:
+Task: "Unit test client.ts in frontend/tests/unit/client.test.ts"
+Task: "Unit test errors.ts in frontend/tests/unit/errors.test.ts"
+Task: "Component test ArtifactFrame in frontend/tests/components/ArtifactFrame.test.tsx"
+Task: "Component test ChatPanel in frontend/tests/components/ChatPanel.test.tsx"
+Task: "Integration test full submit flow in frontend/tests/integration/full-flow.test.tsx"
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (User Story 1 Only)
+
+1. Phase 1 (Setup) — `frontend/` boots, `npm test` runs.
+2. Phase 2 (Foundational) — types compile, client + utils unit-importable, MSW handlers respond, agent CORS in place.
+3. Phase 3 (US1) — submit + chart render works end-to-end against the live agent and against MSW.
+4. **STOP and VALIDATE**: open `http://localhost:5173`, type "Show releases by decade", confirm a chart renders. Spec acceptance US1.1 holds. SC-003 holds (response within ~10s).
+5. This is a deployable, demoable MVP. Demo Day is feasible from this point even without US2-US5.
+
+### Incremental Delivery
+
+1. **MVP**: Setup + Foundational + US1.
+2. **Demo polish**: Add US2 (curated questions). Now Demo Day is one-click.
+3. **Conversational depth**: Add US3 (multi-turn + reset). Now follow-ups work.
+4. **Inspector view**: Add US4 (SQL + preview + metadata). Now the demo also serves as a credibility argument.
+5. **One-command bring-up**: Add US5 (Docker + README). Now any team member can demo.
+6. **Final polish**: Phase 8 sweeps.
+
+Each step ends with a checkpoint where the demo is shippable.
+
+### Parallel Team Strategy
+
+With multiple contributors:
+
+1. Phase 1 + Phase 2 land first, ideally on a single short branch.
+2. Once Phase 2 is merged:
+   - Contributor A: US1 (the reducer + base UI) — lands first.
+   - Contributor B: US2 (curated questions) — can start in parallel against the US1 stub UI but lands after US1 wiring.
+   - Contributor C: US3 (multi-turn) — can start in parallel; touches the reducer.
+   - Contributor D: US4 (SQL/preview/metadata) — can start in parallel; touches `ResultPanel`.
+3. US5 (Docker + smoke) lands last, after merge-conflicts settle.
+4. Phase 8 polish closes everything out.
+
+---
+
+## Notes
+
+- `[P]` tasks = different files, no dependencies on incomplete tasks in the same phase.
+- `[Story]` label maps task to a specific user story for traceability.
+- File paths in task descriptions are absolute relative to the repo root (e.g., `frontend/src/components/Header.tsx`).
+- Each story is independently *implementation*-testable in isolation per the within-story section above; for live-stack end-to-end behavior, US2/US3/US4 reuse US1's submit path.
+- Tests here are explicitly mandated by Spec §28 — they are not optional.
+- Constitution Principle VI (Two Components, One Contract) is extended to include the new `frontend/` component; the operational rules (own dependency manifest, no cross-component imports, no data-layer reaches) are enforced by T056 and T057. The PATCH-level constitution amendment recommended in [plan.md](./plan.md) §"Constitution Check" is **follow-up work**, not part of this task list.
+- 59 tasks total across 8 phases. Setup: 5. Foundational: 9. US1: 14. US2: 5. US3: 9. US4: 7. US5: 4. Polish: 6.

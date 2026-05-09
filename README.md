@@ -12,6 +12,11 @@ questions over it.
 - **`agent/`** — containerized FastAPI + LangGraph service. Answers
   natural-language questions over the published DuckDB by generating and executing read-only Python/SQL inside a sandbox, then rendering a
   Plotly chart.
+- **`frontend/`** — browser UI (React + Vite + TypeScript). Calls the
+  agent's HTTP API and renders the chart artifact + generated SQL +
+  data preview + run metadata inline. Runs as a service in
+  `docker-compose.yml` alongside the agent. Never touches DuckDB,
+  Postgres, or local data files directly.
 
 The two halves are coupled **only** through the published DuckDB and
 the contracts in `specs/001-discogs-etl/contracts/duckdb-schema.md`
@@ -61,6 +66,7 @@ checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 .
 ├── etl/                  # ETL component (Python CLI, Parquet/DuckDB)
 ├── agent/                # Agent component (FastAPI + LangGraph + sandbox)
+├── frontend/             # Frontend component (React + Vite + TypeScript SPA)
 ├── specs/                # Spec Kit feature specs (the SDD source of truth)
 │   ├── 001-discogs-etl/              # ETL Fase 1 — release_fact baseline
 │   ├── 002-etl-scaleup/              # ETL Fase 2+3 — real-data + scale
@@ -68,10 +74,15 @@ checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 │   ├── 004-agent-v1/                 # Agent V1 — graph, API, sandbox, contracts
 │   ├── 005-agent-schema-context/     # Schema-context enrichment + empty-result guard
 │   ├── 006-bugfix-postmortem/        # Three-bug postmortem → Constitution v1.2.0
-│   └── 007-sandbox-fsize-budget/     # Active: raise RLIMIT_FSIZE for DuckDB spill
+│   ├── 007-sandbox-fsize-budget/     # Raise RLIMIT_FSIZE for DuckDB spill
+│   ├── 008-agent-frontend-v1/        # Demo Day frontend (this branch's active feature)
+│   ├── 009-schema-context-join-graph/   # Bugfix: deliver FK join graph to the LLM
+│   ├── 010-jsonb-nan-sanitization/      # Bugfix: sanitize NaN/Infinity at the JSONB write boundary
+│   ├── 011-token-budget-recalibration/  # Raise schema-context budget 1200 → 1600
+│   └── 012-catalog-aggregation-postmortem/  # Postmortem back-fill: DuckDB memory_limit + tmpfs + prompt steering
 ├── docs/                 # Original design notes (pre-Spec Kit)
 ├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
-├── docker-compose.yml    # agent-api + postgres for the agent stack
+├── docker-compose.yml    # postgres + agent-api + frontend
 ├── .specify/             # Spec Kit configuration; constitution lives here
 └── CLAUDE.md             # Active-feature pointer for AI assistants
 ```
@@ -126,7 +137,7 @@ do sleep 2
 done
 ```
 
-### 3. Ask a question
+### 3. Ask a question (CLI)
 
 ```bash
 curl -s -X POST http://localhost:8000/query \
@@ -137,6 +148,23 @@ curl -s -X POST http://localhost:8000/query \
 The response includes a `chart_artifact.url`; open it in a browser to
 see the Plotly chart. Files land at
 `./artifacts/<thread_id>/<run_id>/<chart>.html`.
+
+### 4. Or use the browser frontend
+
+The same `docker compose up --build` from step 2 also brings up the
+frontend. Open `http://localhost:5173` in a browser:
+
+- Click a curated demo question (or type your own) → the chart
+  renders inline alongside the generated SQL, a tabular data
+  preview, and run-metadata badges.
+- Multi-turn conversations carry context; "New conversation" resets.
+- The frontend never touches DuckDB or local data files; it talks
+  only to the agent's HTTP API.
+
+Frontend runbook (component layout, env vars, how to run tests, how
+to point at a different agent) lives in
+[`frontend/README.md`](frontend/README.md) and
+[`specs/008-agent-frontend-v1/quickstart.md`](specs/008-agent-frontend-v1/quickstart.md).
 
 The full agent runbook (health endpoints, persistence across
 restart, admin endpoints, configuration knobs) lives in
@@ -208,7 +236,10 @@ Component-specific test details live in
 - Automated download from Discogs (deferred to a future ETL phase).
 - AWS deployment of the agent (containerized service exists; the
   deploy target is undecided).
-- Frontend UI; MCP wrappers; RAG; multi-tenant auth.
+- A V1.1 production-shaped frontend image (multi-stage build →
+  nginx serving a static bundle). V1 ships the dev-server inside
+  the container — see `specs/008-agent-frontend-v1/research.md` §R1.
+- MCP wrappers; RAG; multi-tenant auth.
 - `artist_dim` table in DuckDB (`clean_artists.parquet` is produced
   as foundation; surfacing waits on a future spec).
 - `release_genre_bridge`, `company_bridge`, and a `master_id` denorm
