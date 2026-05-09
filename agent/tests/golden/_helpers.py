@@ -27,7 +27,7 @@ def wrap_sandbox_code(sql: str, *, chart_type: str, plotly_call: str) -> str:
         'ARTIFACT_DIR = Path(os.environ["ARTIFACT_DIR"])\n'
         "ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)\n"
         "\n"
-        'con = duckdb.connect(DB_PATH, read_only=True, config={"temp_directory": "/tmp/duckdb"})\n'
+        'con = duckdb.connect(DB_PATH, read_only=True, config={"temp_directory": "/tmp/duckdb", "memory_limit": "1GB"})\n'
         "\n"
         f'sql = """{sql}"""\n'
         "\n"

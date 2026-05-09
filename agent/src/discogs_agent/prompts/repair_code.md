@@ -38,8 +38,10 @@ Critical rules (unchanged from the original generator prompt):
   `COUNT(*) FROM release_fact` for release counts.
 - Only `SELECT` and `WITH ... SELECT`. No DDL/DML, no file functions.
 - Connect with `read_only=True` and
-  `config={{"temp_directory": "/tmp/duckdb"}}` so spill writes land on
-  a writable tmpfs (the DuckDB file itself is on a read-only mount).
+  `config={{"temp_directory": "/tmp/duckdb", "memory_limit": "1GB"}}` so
+  spill writes land on a writable tmpfs (the DuckDB file is on a
+  read-only mount) AND DuckDB caps its working memory at 1 GiB
+  (forcing it to spill rather than OOM-kill the sandbox subprocess).
 - Produce `RESULT` with keys: `sql`, `chart_path`, `dataframe_preview`,
   `row_count`, `chart_type`.
 - Subgenre names (Techno, House, Ambient, ...) filter on

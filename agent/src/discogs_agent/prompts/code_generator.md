@@ -34,7 +34,7 @@ DB_PATH = os.environ["ANALYTICS_DUCKDB_PATH"]
 ARTIFACT_DIR = Path(os.environ["ARTIFACT_DIR"])
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
-con = duckdb.connect(DB_PATH, read_only=True, config={{"temp_directory": "/tmp/duckdb"}})
+con = duckdb.connect(DB_PATH, read_only=True, config={{"temp_directory": "/tmp/duckdb", "memory_limit": "1GB"}})
 
 sql = """
 <your SELECT or WITH ... SELECT here>
