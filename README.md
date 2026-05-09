@@ -78,7 +78,8 @@ checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 │   ├── 008-agent-frontend-v1/        # Demo Day frontend (this branch's active feature)
 │   ├── 009-schema-context-join-graph/   # Bugfix: deliver FK join graph to the LLM
 │   ├── 010-jsonb-nan-sanitization/      # Bugfix: sanitize NaN/Infinity at the JSONB write boundary
-│   └── 011-token-budget-recalibration/  # Raise schema-context budget 1200 → 1600
+│   ├── 011-token-budget-recalibration/  # Raise schema-context budget 1200 → 1600
+│   └── 012-catalog-aggregation-postmortem/  # Postmortem back-fill: DuckDB memory_limit + tmpfs + prompt steering
 ├── docs/                 # Original design notes (pre-Spec Kit)
 ├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
 ├── docker-compose.yml    # postgres + agent-api + frontend
