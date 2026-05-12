@@ -37,8 +37,14 @@ class AgentSettings(BaseSettings):
     CHEAP_MODEL: str = "gpt-4o-mini"
     STRONG_MODEL: str = "gpt-4o"
 
-    # Retry budget across safety + validation paths.
-    MAX_RETRIES: int = 2
+    # Retry budget across safety + validation paths. Bumped 2 → 3 on
+    # 2026-05-11 alongside the 015 hot patches: run 4b781b03-... showed
+    # two consecutive code-gen attempts each failing for DIFFERENT
+    # reasons (attempt 1 missing duckdb.connect; attempt 2 ambiguous
+    # column in JOIN), exhausting the 2-retry budget. A 3rd attempt
+    # would have had a clean shot at converging on the join-qualify
+    # rule the hot patches added to code_generator.md + repair_code.md.
+    MAX_RETRIES: int = 3
 
     # Sandbox hard wall-clock cap.
     SANDBOX_TIMEOUT_SECONDS: int = 30

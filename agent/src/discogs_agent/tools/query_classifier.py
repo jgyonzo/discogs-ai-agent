@@ -25,6 +25,12 @@ PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "router.md"
 class ClassifierInput(BaseModel):
     user_query: str
     schema_context: dict[str, object]
+    # 015-classifier-carryover: prior-turn preamble for multi-turn
+    # follow-up resolution. Default None for backward compatibility
+    # with callers (e.g., pre-015 tests) that don't pass it. The
+    # router node builds the preamble via
+    # `_carryover.load_carryover_for_state` and passes it here.
+    carryover_preamble: str | None = None
 
 
 class ClassifierOutput(BaseModel):
@@ -43,6 +49,9 @@ def _render_prompt(payload: ClassifierInput) -> list[dict[str, str]]:
     # still renders cleanly; the real user query goes in the user msg.
     system_body = template.format(
         schema_context_block=schema_block,
+        # 015-classifier-carryover: carryover_block flows in here.
+        # Defensive (payload.carryover_preamble or "") handles None.
+        carryover_block=(payload.carryover_preamble or ""),
         cheap_model=settings.CHEAP_MODEL,
         strong_model=settings.STRONG_MODEL,
         user_query="(see user message below)",

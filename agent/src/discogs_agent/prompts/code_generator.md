@@ -17,6 +17,30 @@ reads the published DuckDB and writes a Plotly HTML chart artifact.
 - NEVER use `COUNT(*) FROM release_fact` for release counts — that counts
   release × style rows, not releases.
 
+**Critical rule for JOIN queries**:
+
+- When a SELECT joins two or more tables, **always fully-qualify EVERY
+  column reference** with its table name or alias, including columns
+  inside aggregate functions. `release_fact`, `release_unique_view`,
+  `release_artist_bridge`, and `release_label_bridge` all expose
+  `release_id`; `release_fact` and `release_unique_view` also share
+  `master_id`, `title`, `decade`, `year`, and many other columns. An
+  unqualified `COUNT(DISTINCT release_id)` in a join query produces a
+  DuckDB binder error ("Ambiguous reference to column name").
+- Apply this to: SELECT-list expressions, aggregate arguments
+  (`COUNT(DISTINCT release_fact.release_id)`), WHERE clauses, GROUP BY,
+  ORDER BY, and HAVING. Even when a column happens to be unique to one
+  of the joined tables, qualifying it is the rule — the LLM cannot
+  reliably distinguish "unique to one table" from "shared across
+  tables" without re-reading the schema block each time, so prefer the
+  consistent shape.
+- The canonical join-then-count pattern:
+  `SELECT b.label_name, COUNT(DISTINCT rf.release_id) AS releases
+   FROM release_label_bridge b JOIN release_fact rf
+        ON b.release_id = rf.release_id
+   WHERE rf.style = 'Electronic'
+   GROUP BY b.label_name`
+
 Schema context (allowlist + sample distinct values + domain rules):
 
 {schema_context_block}

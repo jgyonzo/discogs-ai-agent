@@ -81,7 +81,7 @@ class StubChatModel:
         if content is None:
             content = _default_responses.get((node, qhash))
         if content is None:
-            content = _fallback_for_node(node, user_query)
+            content = _fallback_for_node(node, user_query, messages=messages)
 
         prompt_text = "\n".join(m.get("content", "") for m in messages)
         return _StubResponse(
@@ -101,6 +101,30 @@ class StubChatModel:
 _PRICE_PATTERN = re.compile(r"\bprice\b", re.IGNORECASE)
 _BEST_LABEL_PATTERN = re.compile(r"\bbest\s+labels?\b", re.IGNORECASE)
 _YEARLY_PATTERN = re.compile(r"\b(year|yearly|annual)\b", re.IGNORECASE)
+
+# 015-classifier-carryover: detect short anaphoric follow-ups so the
+# stub can mirror real-LLM behavior — return clarification_needed
+# when no prior context is available, otherwise route normally.
+_ANAPHORIC_FOLLOWUP_PATTERN = re.compile(
+    r"^\s*(and\s+(?:what|the)|same\s+but|what\s+about|how\s+about|show\s+me\s+\d+\s+instead)",
+    re.IGNORECASE,
+)
+
+# The carryover preamble (produced by _carryover.build_carryover_preamble)
+# always starts with this exact header. Used by the stub to decide
+# whether the router prompt has access to prior turns.
+_CARRYOVER_MARKER = "Recent conversation (prior user questions in this thread"
+
+
+def _has_carryover(messages: list[dict[str, str]] | None) -> bool:
+    """True iff a non-empty multi-turn carryover preamble is present
+    in any system message. 015-classifier-carryover: the router and
+    query_understanding prompts both render this preamble; the stub
+    uses its presence as the signal that prior-turn context is
+    available for follow-up resolution."""
+    if not messages:
+        return False
+    return any(_CARRYOVER_MARKER in m.get("content", "") for m in messages)
 
 # Known style values. Mirrors the values the agent's enriched
 # schema-context surfaces to the LLM in production. Keep the list
@@ -131,14 +155,36 @@ def _detect_style(query: str) -> str | None:
     return None
 
 
-def _fallback_for_node(node: str, user_query: str) -> str:
-    """Sane defaults for the headline test queries."""
+def _fallback_for_node(
+    node: str,
+    user_query: str,
+    *,
+    messages: list[dict[str, str]] | None = None,
+) -> str:
+    """Sane defaults for the headline test queries.
+
+    015-classifier-carryover: takes ``messages`` so the router branch
+    can detect whether the system prompt carries multi-turn context
+    (and therefore whether short anaphoric follow-ups can be resolved
+    or should fall back to clarification_needed).
+    """
     q = user_query.lower()
     style = _detect_style(user_query)
     if node == "router":
+        # Isolation-ambiguous wins over follow-up detection: even with
+        # rich carryover, "the best labels" is missing a metric — it's
+        # NOT anaphoric, just under-specified.
         if _PRICE_PATTERN.search(q):
             return _ROUTER_UNSUPPORTED
         if _BEST_LABEL_PATTERN.search(q):
+            return _ROUTER_CLARIFICATION
+        if _ANAPHORIC_FOLLOWUP_PATTERN.match(q):
+            # 015: short follow-up requires prior context to resolve.
+            # Without carryover → clarification_needed (the pre-015
+            # behavior on these queries; the 015 trigger case).
+            # With carryover → route normally.
+            if _has_carryover(messages):
+                return _ROUTER_SIMPLE
             return _ROUTER_CLARIFICATION
         if "diversity" in q or "outlier" in q or "stylistic" in q:
             return _ROUTER_COMPLEX

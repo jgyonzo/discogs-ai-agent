@@ -39,40 +39,32 @@ on 2026-05-07 to pull in 009's schema-context join-graph fix,
 and again on 2026-05-08 to pull in 010's JSONB NaN sanitization
 fix.
 
-In-flight follow-on (current): **`014-cross-grain-join-postmortem`**
-(branch `014-cross-grain-join-postmortem`) — agent-side
-hardening triggered by run `2557c2ce-...` on 2026-05-10, where
-013's glossary tightening left 009's cross-grain traversal hint
-internally contradictory ("traverse via release_unique_view"
-vs. "don't use release_unique_view in JOIN/GROUP BY") and the
-LLM resolved the contradiction by hallucinating a forbidden
-join (`master_fact.master_id = release_artist_bridge.release_id`).
-Two work items: (US1) update `_render_join_graph`'s cross-grain
-hint to recommend `release_fact` instead of `release_unique_view`;
-(US2) promote the forbidden-joins list from descriptive prose
-to static enforcement in `sql_safety_checker` (`rule="forbidden_join"`,
-regex+alias-resolver implementation; CTE-indirection acknowledged
-as a known gap). Plus an admin task: 013's provisional
-`successor-014-pointer.md` is renumbered to `successor-015-pointer.md`
-because 014 is now this spec. See
-`specs/014-cross-grain-join-postmortem/plan.md`.
-
-Predecessor follow-on (awaiting MR review): **`013-filtered-aggregation-postmortem`**
-(branch `013-filtered-aggregation-postmortem`, pushed) — agent-side
-hardening that extends 012 in two ways. (1) Sandbox SIGKILL is
-no longer opaque: `exit_code=-9` outside the harness's own
-timeout path now produces `exception_type="oom_killed"` with
-a downstream named validator rule and a memory-pressure user
-message. (2) Glossary entry #3 drops the "catalog-wide
-aggregations" loophole that let the LLM rationalize using
-`release_unique_view` on filtered queries (per the Depeche Mode
-incident, run `b809ca52-...`). Also folds in a one-line Q1
-description fix in `008/contracts/curated-questions.md`, and
-opens a future ETL-component follow-on pointer
-(`015-release-unique-view-materialization`, provisional — bumped
-from 014 by this in-flight spec) that would rewrite the view's
-`SELECT DISTINCT (~33 cols)` materialization. See
-`specs/013-filtered-aggregation-postmortem/plan.md`.
+In-flight follow-on (current): **`015-classifier-carryover`**
+(branch `015-classifier-carryover`) — agent-side hardening
+triggered by thread `9214f7fb-...` on 2026-05-11, where two
+short follow-up questions ("and what is the second one?" and
+"and the top 5?") were rejected as `clarification_needed`
+because the classifier (router) sees only `{user_query}` +
+`{schema_context_block}` — it doesn't receive the multi-turn
+carryover preamble that the next node (`query_understanding`)
+already consumes. Structural wiring bug: carryover is built and
+consumed in `query_understanding`, AFTER the classifier
+short-circuits to clarification_needed. Two work items: (US1)
+extract `_load_carryover` from `query_understanding.py` to
+`_carryover.py` as a public helper; call it in the router
+BEFORE invoking `query_classifier`; populate state; pass
+`carryover_preamble` into `ClassifierInput`; add
+`{carryover_block}` placeholder + follow-up-resolution
+instructions to `router.md`. (US2) Persist carryover at
+run-start (falls out of US1's earlier state population) so
+`metadata_json.carryover` is no longer `null` on 2nd+-turn
+clarification_needed runs — operators can see what context
+the classifier had. Plus an admin task: 013's pointer
+`successor-015-pointer.md` is renumbered to
+`successor-016-pointer.md` because 015 is now this spec
+(second renumbering of the same pointer; 014 already did
+014→015). See
+`specs/015-classifier-carryover/plan.md`.
 
 Prior 004-family work (still authoritative):
 
@@ -109,14 +101,21 @@ Prior 004-family work (still authoritative):
   bumped to 6 GiB, and glossary entry #3 first-round rewrite
   steering the LLM away from `release_unique_view` for catalog-
   wide aggregations.
-- `specs/013-filtered-aggregation-postmortem/` — *in-flight*
-  follow-on to 012. Observability fix (`oom_killed` named
-  exception_type for external SIGKILL) + glossary entry #3
-  second-round rewrite (drops the "catalog-wide" qualifier;
-  blanket ban on view-in-JOIN/GROUP-BY regardless of WHERE
-  filters). Triggered by the Depeche Mode failure run. Records
-  a future ETL follow-on pointer (provisional `014`) for the
-  view's materialization rewrite.
+- `specs/013-filtered-aggregation-postmortem/` — follow-on
+  to 012. Observability fix (`oom_killed` named exception_type
+  for external SIGKILL) + glossary entry #3 second-round
+  rewrite (drops the "catalog-wide" qualifier; blanket ban on
+  view-in-JOIN/GROUP-BY regardless of WHERE filters). Triggered
+  by the Depeche Mode failure run (`b809ca52-...`). Merged to
+  main 2026-05-11.
+- `specs/014-cross-grain-join-postmortem/` — follow-on to 013
+  + 009. Resolves the contradiction 013 introduced between
+  009's cross-grain traversal hint and 013's glossary
+  tightening; updates the hint to recommend `release_fact`
+  instead of `release_unique_view`; promotes the forbidden-
+  joins list to static enforcement in `sql_safety_checker`
+  (`rule="forbidden_join"`). Triggered by run `2557c2ce-...`
+  on 2026-05-10. Merged to main 2026-05-11.
 
 The published DuckDB contract — produced by the ETL component —
 remains authoritative for everything the agent reads:
