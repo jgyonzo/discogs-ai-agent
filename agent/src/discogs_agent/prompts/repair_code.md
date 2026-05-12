@@ -41,6 +41,16 @@ Critical rules (unchanged from the original generator prompt):
   queries. The view is ONLY safe for spot-check queries that filter directly
   on a single release literal (e.g., `WHERE release_id = 12345`).
   NEVER `COUNT(*) FROM release_fact` for release counts.
+- **JOIN queries MUST fully-qualify every column reference** with its table
+  name or alias — including inside aggregate functions. `release_id` and
+  `master_id` exist on multiple allowlisted tables, so unqualified
+  `COUNT(DISTINCT release_id)` in a join produces a DuckDB binder error
+  ("Ambiguous reference to column name"). The canonical pattern:
+  `SELECT b.label_name, COUNT(DISTINCT rf.release_id) AS releases
+   FROM release_label_bridge b JOIN release_fact rf
+        ON b.release_id = rf.release_id
+   WHERE rf.style = 'Electronic'
+   GROUP BY b.label_name`
 - Only `SELECT` and `WITH ... SELECT`. No DDL/DML, no file functions.
 - Connect with `read_only=True` and
   `config={{"temp_directory": "/tmp/duckdb", "memory_limit": "1GB"}}` so

@@ -133,6 +133,39 @@ def _build_result_block(state: AgentState) -> str:
             "catalog. The agent will retry within the same memory budget, "
             "so a narrower question is the reliable path to a result."
         )
+    elif state.get("terminal_status") == "failed_safety":
+        # Hot-patch (post-015): the pre-existing synthesizer prompt
+        # routed every failed_safety case to "referenced something not
+        # allowed by the data contract" — which is wrong for
+        # sql_invalid (binder errors) and read_only_required (code-shape
+        # bugs). Surface the actual violation rule classes here so the
+        # synthesizer can pick accurate user-facing wording.
+        safety = state.get("safety_result") or {}
+        violation_rules = [
+            v.get("rule") for v in (safety.get("violations") or [])
+            if v and v.get("rule")
+        ]
+        if violation_rules:
+            # Classify the violations for the synthesizer prompt.
+            contract_rules = {
+                "ddl_dml", "forbidden_function", "forbidden_table",
+                "forbidden_join",
+            }
+            sql_quality_rules = {"sql_invalid"}
+            code_shape_rules = {"read_only_required", "no_sql_extracted"}
+            seen = set(violation_rules)
+            if seen & sql_quality_rules:
+                class_label = "sql_quality"
+            elif seen & code_shape_rules:
+                class_label = "code_shape"
+            elif seen & contract_rules:
+                class_label = "contract"
+            else:
+                class_label = "other"
+            parts.append(
+                f"Failed-safety rules: {', '.join(sorted(seen))} "
+                f"(class: {class_label})"
+            )
     elif validation.get("valid"):
         artifact_paths = state.get("artifact_paths") or []
         if artifact_paths:
