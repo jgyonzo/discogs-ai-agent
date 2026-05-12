@@ -22,6 +22,21 @@ Schema context (allowlist + sample distinct values + domain rules):
 
 {schema_context_block}
 
+Recent conversation context (prior user questions in this thread):
+
+{carryover_block}
+
+If the user's question is a short follow-up that references prior turns
+by anaphora ("and the next one?", "and the top 5?", "same but for X",
+"what about Y instead?", terse fragments without an explicit subject),
+USE the prior question text above to resolve the reference. Return
+`simple` or `complex` (not `clarification_needed`) if the prior context
+unambiguously identifies the metric / table / filter the follow-up
+inherits. The `clarification_needed` examples above ("the best labels",
+"most important genres") are for questions that are genuinely ambiguous
+even with full conversation context — they're missing a metric, not a
+referent.
+
 Use the sample distinct values to decide whether a referenced filter
 value is in the catalog. If a user asks about "Techno" and the
 `release_fact.style` sample contains "Techno", classify as `simple` or

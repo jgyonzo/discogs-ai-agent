@@ -86,3 +86,87 @@ def test_techno_query_routes_to_simple_not_unsupported(schema: dict) -> None:
         "since 'Techno' appears in the style sample of the schema context."
     )
     assert out.selected_model is not None
+
+
+# ─── 015-classifier-carryover: multi-turn follow-up resolution ──
+
+
+def test_follow_up_with_carryover_routes_to_simple_or_complex(schema: dict) -> None:
+    """The 015 trigger case (thread 9214f7fb-...).
+
+    A short anaphoric follow-up question ("and what is the second
+    one?") preceded by an explicit ranked-by-metric question has its
+    referent resolved against the prior turn. The classifier MUST
+    NOT return clarification_needed when carryover is present.
+    """
+    carryover = (
+        "Recent conversation (prior user questions in this thread, oldest first):\n"
+        "  1. which is the label with most Electronic releases?\n"
+    )
+    with use_node("router"):
+        out = query_classifier(
+            ClassifierInput(
+                user_query="and what is the second one?",
+                schema_context=schema,
+                carryover_preamble=carryover,
+            )
+        )
+    assert out.complexity != "clarification_needed", (
+        f"Follow-up with non-empty carryover should resolve to simple/complex; "
+        f"got {out.complexity!r} with rationale {out.rationale!r}"
+    )
+    assert out.complexity in ("simple", "complex")
+    assert out.selected_model is not None
+
+
+def test_follow_up_without_carryover_still_needs_clarification(schema: dict) -> None:
+    """Regression guard for first-turn behavior.
+
+    The same anaphoric follow-up question, sent as the first message
+    in a thread (carryover_preamble=None), MUST still return
+    clarification_needed — the question is genuinely ambiguous in
+    isolation. 015 narrows clarification_needed's behavior; it does
+    NOT disable it.
+    """
+    with use_node("router"):
+        out = query_classifier(
+            ClassifierInput(
+                user_query="and what is the second one?",
+                schema_context=schema,
+                carryover_preamble=None,
+            )
+        )
+    assert out.complexity == "clarification_needed", (
+        f"Follow-up with EMPTY carryover should still need clarification; "
+        f"got {out.complexity!r}"
+    )
+
+
+def test_isolation_ambiguous_with_carryover_still_needs_clarification(
+    schema: dict,
+) -> None:
+    """Regression guard for the canonical isolation-ambiguous case.
+
+    The classic "best labels" / "most important genres" examples are
+    missing a METRIC, not a referent. Even with rich carryover
+    establishing prior context, they MUST still return
+    clarification_needed. 015's prompt instructions explicitly
+    preserve this case.
+    """
+    rich_carryover = (
+        "Recent conversation (prior user questions in this thread, oldest first):\n"
+        "  1. Show releases by decade.\n"
+        "  2. Distribution of primary formats.\n"
+    )
+    with use_node("router"):
+        out = query_classifier(
+            ClassifierInput(
+                user_query="What are the best labels?",
+                schema_context=schema,
+                carryover_preamble=rich_carryover,
+            )
+        )
+    assert out.complexity == "clarification_needed", (
+        f"'best labels' is isolation-ambiguous independently of carryover; "
+        f"got {out.complexity!r} with carryover present"
+    )

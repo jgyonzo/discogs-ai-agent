@@ -65,6 +65,7 @@ class SchemaReaderOutput(BaseModel):
 class ClassifierInput(BaseModel):
     user_query: str
     schema_context: SchemaReaderOutput
+    carryover_preamble: str | None = None  # ← Added 2026-05-11 by 015
 
 class ClassifierOutput(BaseModel):
     complexity: Literal["simple", "complex", "unsupported", "clarification_needed"]
@@ -78,6 +79,34 @@ class ClassifierOutput(BaseModel):
   `ClassifierOutput`.
 - Schema-aware: if the query references a column/concept not
   in the allowlist, the classifier MUST return `unsupported`.
+- **Multi-turn-aware (added 015)**: when `carryover_preamble`
+  is non-null, the classifier MUST use the prior question text
+  to resolve short anaphoric follow-ups (e.g., "and the next
+  one?", "and the top 5?", "same but for X", "what about Y
+  instead?"). In that case the classifier returns `simple` or
+  `complex`, NOT `clarification_needed`. When
+  `carryover_preamble` is `None` or the empty string, the
+  classifier MUST behave identically to the pre-015 baseline —
+  genuinely isolation-ambiguous questions ("the best labels",
+  "most important genres") still return `clarification_needed`.
+
+**Producer** (added 015): the `router` node loads the carryover
+preamble via `agent.graph.nodes._carryover.load_carryover_for_state`
+BEFORE invoking `query_classifier`, and passes the result
+through `ClassifierInput.carryover_preamble`. The router also
+writes the preamble into `AgentState.carryover_preamble` so
+downstream nodes (query_understanding) can read it without a
+second DB fetch. `query_understanding` no longer calls the
+loader itself — it reads from state. See
+`specs/015-classifier-carryover/contracts/carryover-as-router-input.md`
+for the cross-node carryover-flow contract.
+
+**Carryover invariants** (unchanged from the carryover module's
+existing contract): preamble is built from same-thread prior
+`user_query` text only, capped at 4 turns / 512 tokens (per
+`settings.THREAD_CARRYOVER_TURNS` and
+`settings.THREAD_CARRYOVER_TOKEN_BUDGET`). Carries only the
+`user_query` text — never SQL, generated code, or final responses.
 
 ---
 

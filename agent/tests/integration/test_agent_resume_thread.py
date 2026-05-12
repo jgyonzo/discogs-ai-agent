@@ -5,9 +5,18 @@ follow-up against the same thread. Asserts:
   (a) the second run's `metadata.carryover.turn_count` is 1
   (b) the carryover preamble contains the first query's text
   (c) the second run succeeds, and the carryover preamble is
-      injected into the query_understanding prompt (and only that
-      prompt — R-04: router stays stateless). A run on the same
-      query *without* the thread_id sees no carryover preamble.
+      injected into BOTH the router prompt AND the
+      query_understanding prompt. A run on the same query
+      *without* the thread_id sees no carryover preamble in
+      either node.
+
+015-classifier-carryover update: pre-015 the router was
+stateless and only query_understanding received the carryover
+preamble. That asymmetry caused thread `9214f7fb-...` to fail
+on short follow-ups (the classifier rejected "and the second
+one?" as clarification_needed despite the prior turn making it
+unambiguous). 015 plumbs the carryover into the router as well;
+this test was updated to reflect the new symmetric contract.
 """
 
 from __future__ import annotations
@@ -57,19 +66,39 @@ def test_thread_resume_carries_prior_query_text(agent_env: dict) -> None:
     assert r2.thread_id == thread_id
     assert r3.thread_id != thread_id
 
-    # (c) Carry-over preamble lands in query_understanding only on r2.
+    # (c) Carry-over preamble lands in query_understanding on r2.
+    # Match on the FULL preamble header produced by
+    # build_carryover_preamble (not just "Recent conversation",
+    # because 015 added a literal "Recent conversation context"
+    # heading to the router prompt that's always present).
+    PREAMBLE_HEADER = "Recent conversation (prior user questions in this thread, oldest first):"
     qu_prompts = captured.get("query_understanding", [])
     assert len(qu_prompts) == 2
     r2_qu_prompt, r3_qu_prompt = qu_prompts
-    assert "Recent conversation" in r2_qu_prompt
+    assert PREAMBLE_HEADER in r2_qu_prompt
     assert "Techno releases over time" in r2_qu_prompt
-    assert "Recent conversation" not in r3_qu_prompt
+    assert PREAMBLE_HEADER not in r3_qu_prompt
 
-    # Router is stateless — even on the resumed thread, no prior text
-    # reaches the router prompt (R-04).
+    # 015: the router prompt ALSO receives carryover on resumed
+    # threads (post-015 invariant — pre-015 the router was
+    # stateless, which caused short-follow-up clarification_needed
+    # rejections per thread 9214f7fb-...).
     router_prompts = captured.get("router", [])
-    for p in router_prompts:
-        assert "Recent conversation" not in p
+    assert len(router_prompts) == 2, (
+        f"Expected two router invocations (r2 + r3); got {len(router_prompts)}"
+    )
+    r2_router_prompt, r3_router_prompt = router_prompts
+    assert PREAMBLE_HEADER in r2_router_prompt, (
+        "Resumed thread MUST surface carryover into the router prompt "
+        "(015-classifier-carryover invariant)."
+    )
+    assert "Techno releases over time" in r2_router_prompt
+    assert PREAMBLE_HEADER not in r3_router_prompt, (
+        "Fresh thread MUST NOT surface a populated carryover preamble "
+        "into the router prompt (the 'Recent conversation context' "
+        "section heading is still rendered, but the preamble body "
+        "is empty)."
+    )
 
     # (a) and (b) — verify via the inspection endpoint.
     from discogs_agent.api import app
