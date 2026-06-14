@@ -1,4 +1,4 @@
-# genai-pathway-final-project-yonzo
+# Discogs Analytics Agent
 
 A two-component system that turns the public Discogs XML dumps into a
 queryable analytics surface, then lets you ask natural-language

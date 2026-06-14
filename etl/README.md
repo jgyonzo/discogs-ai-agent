@@ -184,7 +184,7 @@ tmux new -s discogs-etl
 Inside tmux:
 
 ```bash
-cd /path/to/genai-pathway-final-project-yonzo
+cd /path/to/discogs-analytics-agent
 caffeinate -i .venv/bin/python -m discogs_etl.cli run \
     --config etl/configs/base.yml \
     --run-id full-dump-$(date +%Y%m%d)

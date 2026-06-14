@@ -9,7 +9,7 @@ description = "Offline ETL from Discogs releases XML to a published DuckDB analy
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "genai-pathway-final-project-yonzo" }]
+authors = [{ name = "jgyonzo" }]
 dependencies = [
     "lxml>=5",
     "pyarrow>=15",
