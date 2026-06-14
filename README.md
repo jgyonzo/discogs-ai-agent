@@ -1,8 +1,8 @@
 # Discogs Analytics Agent
 
-A two-component system that turns the public Discogs XML dumps into a
-queryable analytics surface, then lets you ask natural-language
-questions over it.
+A three-component system that turns the public Discogs XML dumps into a
+queryable analytics surface, lets you ask natural-language questions over
+it, and serves the answers in a browser.
 
 - **`etl/`** — local-first batch tool. Streams the monthly Discogs
   `releases.xml` / `masters.xml` / `artists.xml` dumps, materializes
@@ -18,32 +18,44 @@ questions over it.
   `docker-compose.yml` alongside the agent. Never touches DuckDB,
   Postgres, or local data files directly.
 
-The two halves are coupled **only** through the published DuckDB and
-the contracts in `specs/001-discogs-etl/contracts/duckdb-schema.md`
-and `specs/003-masters-artists/contracts/duckdb-schema.md`. They have
-their own dependency manifests, their own test suites, and run
-independently. This separation is governed by Principle VI
-("Two Components, One Contract") of the project constitution at
-[`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+The components meet at **two contract boundaries, and nowhere else**:
+
+- **`etl` ↔ `agent`** — coupled only through the published DuckDB and the
+  contracts in `specs/001-discogs-etl/contracts/duckdb-schema.md` and
+  `specs/003-masters-artists/contracts/duckdb-schema.md`. This boundary is
+  governed by Principle VI ("Two Components, One Contract") of the project
+  constitution at
+  [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+- **`frontend` ↔ `agent`** — coupled only through the agent's HTTP API plus a
+  single CORS allowance (`http://localhost:5173`). The frontend was added as a
+  third component on top of this contract; the matching PATCH amendment to
+  Principle VI's prose is tracked as a follow-up.
+
+Each component has its own dependency manifest, its own test suite, and runs
+independently.
 
 ---
 
 ## Architecture
 
 ```text
-   Discogs XML dumps                          natural-language question
-   (releases / masters / artists)                       │
-              │                                         ▼
-              ▼                                ┌────────────────────┐
-   ┌────────────────────┐                      │   agent (FastAPI   │
-   │      etl CLI       │     publishes        │   + LangGraph,     │
-   │  python -m         │  ──────────────────▶ │   sandboxed exec)  │
-   │  discogs_etl.cli   │   discogs.duckdb     │   :8000            │
-   └────────────────────┘    (read-only        └──────┬─────────────┘
-              │              contract)                │
-              ▼                                       ▼
-   data/{staging,clean,                       Plotly chart artifact
-   analytics}/{run_id}/                       + run trace in Postgres
+   Discogs XML dumps                          ┌────────────────────┐
+   (releases / masters / artists)             │  frontend (React + │
+              │                               │  Vite + TS SPA)    │
+              ▼                               │  :5173             │
+   ┌────────────────────┐                     └─────────┬──────────┘
+   │      etl CLI       │     publishes                 │ HTTP /query
+   │  python -m         │  ──────────────┐              │ (+ CORS)
+   │  discogs_etl.cli   │   discogs.duckdb│              ▼
+   └────────────────────┘   (read-only    │   ┌────────────────────┐
+              │             contract)      └─▶ │   agent (FastAPI   │
+              ▼                                │   + LangGraph,     │
+   data/{staging,clean,                       │   sandboxed exec)  │
+   analytics}/{run_id}/                       │   :8000            │
+                                              └─────────┬──────────┘
+                                                        ▼
+                                            Plotly chart artifact
+                                            + run trace in Postgres
 ```
 
 The agent's LangGraph is a deterministic 8-node pipeline:
@@ -67,19 +79,7 @@ checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 ├── etl/                  # ETL component (Python CLI, Parquet/DuckDB)
 ├── agent/                # Agent component (FastAPI + LangGraph + sandbox)
 ├── frontend/             # Frontend component (React + Vite + TypeScript SPA)
-├── specs/                # Spec Kit feature specs (the SDD source of truth)
-│   ├── 001-discogs-etl/              # ETL Fase 1 — release_fact baseline
-│   ├── 002-etl-scaleup/              # ETL Fase 2+3 — real-data + scale
-│   ├── 003-masters-artists/          # ETL Fase 4 — master_fact + artists
-│   ├── 004-agent-v1/                 # Agent V1 — graph, API, sandbox, contracts
-│   ├── 005-agent-schema-context/     # Schema-context enrichment + empty-result guard
-│   ├── 006-bugfix-postmortem/        # Three-bug postmortem → Constitution v1.2.0
-│   ├── 007-sandbox-fsize-budget/     # Raise RLIMIT_FSIZE for DuckDB spill
-│   ├── 008-agent-frontend-v1/        # Demo Day frontend (this branch's active feature)
-│   ├── 009-schema-context-join-graph/   # Bugfix: deliver FK join graph to the LLM
-│   ├── 010-jsonb-nan-sanitization/      # Bugfix: sanitize NaN/Infinity at the JSONB write boundary
-│   ├── 011-token-budget-recalibration/  # Raise schema-context budget 1200 → 1600
-│   └── 012-catalog-aggregation-postmortem/  # Postmortem back-fill: DuckDB memory_limit + tmpfs + prompt steering
+├── specs/                # Spec Kit feature specs — one NNN-name dir per feature (SDD source of truth)
 ├── docs/                 # Original design notes (pre-Spec Kit)
 ├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
 ├── docker-compose.yml    # postgres + agent-api + frontend
