@@ -98,7 +98,8 @@ _SELECT_COLS = f"""
     primary_genre        AS genre,
     primary_label_name   AS label,
     {_sql_norm('primary_artist_name')} AS na,
-    {_sql_norm('title')}               AS nt
+    {_sql_norm('title')}               AS nt,
+    {_sql_norm("primary_artist_name || ' ' || title")} AS nc
 """
 
 
@@ -158,22 +159,39 @@ class Matcher:
         format (`has_vinyl`). For a crate of records that's the right default —
         it removes CD/cassette pressings and cuts the number of tied pressings
         you have to disambiguate.
+
+        Scoring blends two views and keeps the better one, so it's robust to how
+        the row was written:
+
+        - *structured* — artist-vs-artist and title-vs-title, blended by
+          `artist_weight`. Best when the `"ARTIST - Title"` split is clean.
+        - *combined* — the whole query against the catalog's
+          ``artist || ' ' || title``. Rescues rows with no separator
+          (``"noah pred navigation ep"``) where the split dumps everything into
+          the title and the structured score collapses.
         """
         qa, qt = normalize(artist), normalize(title)
+        # The combined query is just the normalized whole row; when there was no
+        # separator `artist` is empty and this is exactly `normalize(title)`.
+        qc = normalize(f"{artist} {title}")
         aw, tw = artist_weight, 1.0 - artist_weight
         fmt_filter = "AND has_vinyl" if vinyl_only else ""
         sql = f"""
         SELECT release_id, title, artist, year, country, fmt, genre, label,
-               round({aw}*jaro_winkler_similarity(na, $qa)
-                   + {tw}*jaro_winkler_similarity(nt, $qt), 4) AS score,
+               round(greatest(
+                   {aw}*jaro_winkler_similarity(na, $qa)
+                       + {tw}*jaro_winkler_similarity(nt, $qt),
+                   jaro_winkler_similarity(nc, $qc)
+               ), 4) AS score,
                round(jaro_winkler_similarity(na, $qa), 4) AS artist_score,
-               round(jaro_winkler_similarity(nt, $qt), 4) AS title_score
+               round(jaro_winkler_similarity(nt, $qt), 4) AS title_score,
+               round(jaro_winkler_similarity(nc, $qc), 4) AS combined_score
         FROM {self._from}
         WHERE nt <> '' {fmt_filter}
         ORDER BY score DESC
         LIMIT {int(k)}
         """
-        return self.con.execute(sql, {"qa": qa, "qt": qt}).df()
+        return self.con.execute(sql, {"qa": qa, "qt": qt, "qc": qc}).df()
 
     def match_one(self, artist: str, title: str, **kw) -> dict:
         """Convenience: best candidate + an `ambiguous` flag.
