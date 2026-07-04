@@ -2,10 +2,22 @@
 
 Usage: .venv/bin/python collection-agent/export_batch.py Lote-Feb
 Writes collection-agent/data/<batch>_review.csv (gitignored).
+
+Optionally reads hand-authored per-row review notes from
+`data/review_notes.csv` (gitignored, batch-specific — not part of this tool).
+That file, if present, has two columns:
+
+    raw_input,note
+
+`raw_input` is matched leniently (bidi marks / dash spacing / case are
+ignored), so you can write the keys in plain ASCII. Any row whose `raw_input`
+matches gets its `note` copied into the exported review CSV. Absent the file,
+the `note` column is simply left blank.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -15,46 +27,33 @@ from matcher import Matcher, split_artist_title
 
 HERE = Path(__file__).resolve().parent
 PENDING = HERE / "data" / "pending_discogs.csv"
+NOTES_FILE = HERE / "data" / "review_notes.csv"
 
-# Hand-authored review notes for rows the matcher can't settle on its own,
-# keyed by the exact raw_input string.
-NOTES = {
-    "Javonnete - People on earth":
-        "Top auto-match (John Lemke) is WRONG. No Javonntte title 'People On "
-        "Earth' exists; 'People Of Earth' is the label (PoEM). Likely "
-        "Javonntte - Way Back, release 11393073 (PoEM 008, 2018).",
-    "Album sampler - ":
-        "Blank/unmatchable: no artist or title on the row. Need info off the "
-        "sleeve/label to match.",
-    "In Flagranti - Alpha blocker":
-        "Only candidate is 'Additional Alpha Blocker' [2007, US]. No release "
-        "titled exactly 'Alpha Blocker' - verify this is your record.",
-    "Sleepwalker - Sleepwalker":
-        "Matched 'Sleep Walker' (Japanese jazz-funk band) [2003, Japan]. "
-        "Confirm that's the act you mean.",
-    # --- Lote-57 ---
-    "fetisch & me black palms":
-        "CORRECT despite low score: real title is the full A/B side "
-        "'Diskotecktonik / Black Palms'. Fetisch, release 1249243 "
-        "[2008, Germany, Gigolo, vinyl].",
-    "Mink - salmon ep":
-        "No 'Mink' match. Closest title is Salmon - Salmon EP, release "
-        "680602 [2006, Germany, Raum...musik] - artist differs, verify.",
-    "alex under el encuentro":
-        "No Alex Under release titled 'El Encuentro' in the catalog. "
-        "Auto-match (Azul Terio) is wrong. Likely a track name or a "
-        "pressing not in this dump.",
-    "pacifics technics ep 1":
-        "No 'Pacifics - Technics EP' in the catalog. Auto-match is wrong. "
-        "Check the exact artist/label on the sleeve.",
-    "pacifics technics ep 2":
-        "No 'Pacifics - Technics EP' in the catalog. Auto-match is wrong. "
-        "Check the exact artist/label on the sleeve.",
-    "jichael mackson - fluff in the bellybutton":
-        "No Jichael Mackson release titled 'Fluff In The Bellybutton'. "
-        "Likely a track name - check which EP it's on (his catalog: Baff, "
-        "Catch 22, Plex EP, etc.).",
-}
+# Bidi/zero-width marks Discogs exports leave around separators.
+_BIDI = re.compile(r"[​‎‏﻿]")
+
+
+def note_key(s: object) -> str:
+    """Tolerant key for the notes lookup: strip invisible marks, normalize any
+    dash variant to '-', collapse whitespace, lowercase. Lets the notes file be
+    written in readable ASCII instead of pixel-matching bidi marks and
+    en-dashes in the raw rows."""
+    s = _BIDI.sub("", "" if s is None else str(s))
+    s = re.sub(r"\s*[-–—]\s*", " - ", s)  # any dash variant -> ' - ', spacing-agnostic
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def load_notes() -> dict[str, str]:
+    """Load optional per-row review notes, keyed by `note_key(raw_input)`.
+
+    Returns an empty dict if `data/review_notes.csv` doesn't exist — the notes
+    are batch-specific research, not part of the tool, so running without them
+    is the normal case for anyone else.
+    """
+    if not NOTES_FILE.exists():
+        return {}
+    ndf = pd.read_csv(NOTES_FILE).fillna("")
+    return {note_key(r["raw_input"]): str(r["note"]) for _, r in ndf.iterrows()}
 
 
 def url(release_id) -> str:
@@ -67,6 +66,7 @@ def main(batch: str, k: int = 5, vinyl_only: bool = True) -> None:
     if rows.empty:
         raise SystemExit(f"No rows for {batch!r}. Batches: {sorted(df['batch'].unique())}")
 
+    notes = load_notes()
     m = Matcher(fast_index=True)
     out = []
     for raw in rows["title"]:
@@ -77,6 +77,7 @@ def main(batch: str, k: int = 5, vinyl_only: bool = True) -> None:
             "raw_input": raw,
             "parsed_artist": artist,
             "parsed_title": title,
+            "note": notes.get(note_key(raw), ""),
         }
         if not res["matched"]:
             rec.update(matched_artist="", matched_title="", year="", country="",
@@ -101,7 +102,6 @@ def main(batch: str, k: int = 5, vinyl_only: bool = True) -> None:
             discogs_url=url(b["release_id"]),
             alt_release_ids=" ".join(str(int(x)) for x in alts),
             confirmed="",  # for you to fill: y / n / corrected release_id
-            note=NOTES.get(raw, ""),
         )
         out.append(rec)
 
