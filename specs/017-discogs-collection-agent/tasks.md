@@ -89,9 +89,9 @@
 
 **Independent Test** (spec US3): a record with videos returns every link in its metadata; a list groups links per record; a link-less record says so.
 
-- [ ] T028 [US3] Implement `media_links(record_refs)` in `collection-agent/src/collection_agent/tools/media.py` (depends T018): resolve refs by instance id, by fuzzy artist/title mention, or from the session's last listing ("those"/"esos"); per-record `{record, links[], none}` with URIs verbatim (FR-014/015/016; snapshot-schema invariant 6).
-- [ ] T029 [US3] Register `media_links` in the agent loop + prompt; ensure last-listing session refs flow from `filter_records` results (works standalone too — direct record mention needs no prior US2 call).
-- [ ] T030 [P] [US3] Unit tests `collection-agent/tests/unit/test_media.py`: links returned verbatim (no URL edits), grouping per record, explicit `none` flag, ref resolution (id / name mention / last listing), unknown record → clear not-found (no fabrication).
+- [x] T028 [US3] Implement `media_links(record_refs)` in `collection-agent/src/collection_agent/tools/media.py` (depends T018): resolve refs by instance id, by fuzzy artist/title mention, or from the session's last listing ("those"/"esos"); per-record `{record, links[], none}` with URIs verbatim (FR-014/015/016; snapshot-schema invariant 6).
+- [x] T029 [US3] Register `media_links` in the agent loop + prompt; ensure last-listing session refs flow from `filter_records` results (works standalone too — direct record mention needs no prior US2 call).
+- [x] T030 [P] [US3] Unit tests `collection-agent/tests/unit/test_media.py`: links returned verbatim (no URL edits), grouping per record, explicit `none` flag, ref resolution (id / name mention / last listing), unknown record → clear not-found (no fabrication).
 
 **Checkpoint**: US1–US3 all independently functional.
 
