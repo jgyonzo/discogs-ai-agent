@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # component root = collection-agent/ (this file lives in src/collection_agent/)
@@ -28,11 +28,13 @@ class Settings(BaseSettings):
     )
 
     # --- Discogs ---
-    discogs_user_token: SecretStr = Field(alias="DISCOGS_USER_TOKEN")
+    discogs_user_token: SecretStr = Field(
+        validation_alias=AliasChoices("DISCOGS_USER_TOKEN", "DISCOGS_TOKEN")
+    )
     discogs_username: str | None = Field(default=None, alias="DISCOGS_USERNAME")
     user_agent: str = Field(
         default="DiscogsCollectionAgent/0.1 +https://github.com/jgyonzo/genai-pathway-final-project-yonzo",
-        alias="COLLECTION_AGENT_USER_AGENT",
+        validation_alias=AliasChoices("COLLECTION_AGENT_USER_AGENT", "DISCOGS_USER_AGENT"),
     )
     discogs_base_url: str = Field(
         default="https://api.discogs.com", alias="DISCOGS_BASE_URL"
