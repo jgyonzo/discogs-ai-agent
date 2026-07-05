@@ -94,9 +94,9 @@ should now locate all four records.
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T009 [P] Check `collection-agent/README.md` for any attribute list or filtering examples and update if `title` belongs there (runbook accuracy only; no new attribute prose that duplicates the registry)
-- [ ] T010 Verify SC-003 mechanically: `git diff main -- collection-agent/src/collection_agent/tools/` is empty (no tool-code edits) and the registry diff is a single `AttributeSpec` block plus tests/prompt
-- [ ] T011 Run quickstart.md validation: full suite (`cd collection-agent && pytest`), attribute-block grep, and — if a live snapshot is present — replay the four incident queries in `python -m collection_agent chat` expecting zero false "not in your collection" answers (SC-001)
+- [x] T009 [P] Check `collection-agent/README.md` for any attribute list or filtering examples and update if `title` belongs there (runbook accuracy only; no new attribute prose that duplicates the registry)
+- [x] T010 Verify SC-003 mechanically: `git diff main -- collection-agent/src/collection_agent/tools/` is empty (no tool-code edits) and the registry diff is a single `AttributeSpec` block plus tests/prompt
+- [x] T011 Run quickstart.md validation: full suite (`cd collection-agent && pytest`), attribute-block grep, and — if a live snapshot is present — replay the four incident queries in `python -m collection_agent chat` expecting zero false "not in your collection" answers (SC-001)
 
 ---
 
