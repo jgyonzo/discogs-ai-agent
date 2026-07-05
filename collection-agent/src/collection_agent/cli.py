@@ -149,10 +149,12 @@ def _build_agent(settings: Settings, store: SnapshotStore):
     from collection_agent.tools.base import make_base_tools
 
     registry = build_registry(settings)
+    # the OpenAI SDK only reads os.environ; our key comes from the repo .env
+    # via pydantic-settings, so pass it explicitly.
     agent = Agent(
         registry=registry,
         model=settings.collection_agent_model,
-        llm_client=OpenAI(),
+        llm_client=OpenAI(api_key=settings.openai_api_key.get_secret_value()),
     )
     for tool in make_base_tools(store, lambda full: _run_sync_with_progress(settings, full)):
         agent.register(tool)
