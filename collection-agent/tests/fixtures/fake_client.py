@@ -39,6 +39,12 @@ class FakeDiscogsClient:
         self.moves: list[tuple[int, int, int, int]] = []  # (folder, release, instance, target)
         self.created_folders: list[str] = []
         self._next_folder_id = 100
+        # live instance state for US4 re-validation: instance_id -> (release_id, folder_id)
+        self.live_instances: dict[int, tuple[int, int]] = {
+            int(i["instance_id"]): (int(i["id"]), int(i["folder_id"]))
+            for i in self._instances
+        }
+        self.extra_folders: list[dict[str, Any]] = []
 
     # -- read interface -------------------------------------------------------
 
@@ -46,7 +52,14 @@ class FakeDiscogsClient:
         return payloads.identity(self._username)
 
     def get_folders(self, username: str) -> list[dict[str, Any]]:
-        return payloads.folders()
+        return payloads.folders() + self.extra_folders
+
+    def get_release_instances(self, username: str, release_id: int) -> list[dict[str, Any]]:
+        return [
+            {"instance_id": iid, "id": rid, "folder_id": fid}
+            for iid, (rid, fid) in self.live_instances.items()
+            if rid == release_id
+        ]
 
     def get_collection_value(self, username: str) -> dict[str, Any]:
         return payloads.collection_value()
@@ -83,7 +96,9 @@ class FakeDiscogsClient:
     def create_folder(self, username: str, name: str) -> dict[str, Any]:
         self.created_folders.append(name)
         self._next_folder_id += 1
-        return {"id": self._next_folder_id, "name": name, "count": 0}
+        folder = {"id": self._next_folder_id, "name": name, "count": 0}
+        self.extra_folders.append(folder)
+        return folder
 
     def move_instance(
         self,
@@ -94,6 +109,9 @@ class FakeDiscogsClient:
         target_folder_id: int,
     ) -> None:
         self.moves.append((folder_id, release_id, instance_id, target_folder_id))
+        if instance_id in self.live_instances:
+            rid, _ = self.live_instances[instance_id]
+            self.live_instances[instance_id] = (rid, target_folder_id)
 
     def close(self) -> None:
         pass

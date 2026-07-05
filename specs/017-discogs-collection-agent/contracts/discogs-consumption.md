@@ -22,6 +22,7 @@ change set). Endpoint shapes per `docs/discogs_api_reference.md`.
 | `GET /users/{u}/collection/folders/0/releases?per_page=100&page=N` | each sync (instance pass; folder 0 = All) | `pagination.pages,items`; per item: `instance_id`, `folder_id`, `date_added`, `rating`, `basic_information.{id,title,year,artists[].name,labels[].{name,catno},formats[].{name,descriptions}, genres,styles}` |
 | `GET /releases/{release_id}` | enrichment pass, once per unique release; results journaled and reused across syncs (unless `--full`) | `country`, `genres`, `styles`, `videos[].{uri,title,duration}`, `community.{have,want,rating.average,rating.count}`, `num_for_sale`, `lowest_price` |
 | `GET /users/{u}/collection/value` | each sync | `minimum`, `median`, `maximum` (currency strings, reported verbatim with basis "Discogs estimate") |
+| `GET /users/{u}/collection/releases/{release_id}` | US4 execute-time only — live re-validation that each instance still exists (and in which folder) before mutating | per instance: `instance_id`, `folder_id` |
 
 ## 3. Write endpoints (US4 only — live, confirmation-gated)
 

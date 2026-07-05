@@ -145,6 +145,19 @@ class DiscogsClient:
     def get_collection_value(self, username: str) -> dict[str, Any]:
         return self._get_json(f"/users/{username}/collection/value")
 
+    def get_release_instances(
+        self, username: str, release_id: int
+    ) -> list[dict[str, Any]]:
+        """Instances of a release in the collection (US4 execute-time
+        re-validation). Empty list when the release is no longer owned."""
+        resp = self._request(
+            "GET", f"/users/{username}/collection/releases/{release_id}"
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        return resp.json().get("releases", [])
+
     # -- write endpoints (US4 only; called by the confirmed write path) -------
 
     def create_folder(self, username: str, name: str) -> dict[str, Any]:
