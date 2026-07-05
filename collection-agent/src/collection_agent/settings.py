@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     discogs_base_url: str = Field(
         default="https://api.discogs.com", alias="DISCOGS_BASE_URL"
     )
+    # human-facing site, not the API — release_page_url (019) builds
+    # listing release_url fields from it
+    discogs_web_base_url: str = Field(
+        default="https://www.discogs.com", alias="DISCOGS_WEB_BASE_URL"
+    )
 
     # --- LLM ---
     collection_agent_model: str = Field(

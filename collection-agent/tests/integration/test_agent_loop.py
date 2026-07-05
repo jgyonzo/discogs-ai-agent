@@ -192,3 +192,54 @@ def test_all_expected_tools_registered(settings, store, complete_snapshot):
     sent_tools = {t["function"]["name"] for t in llm.requests[0]["tools"]}
     assert "aggregate_by" in sent_tools
     assert "execute_plan" not in sent_tools  # write execution is never an LLM tool
+
+
+def test_system_prompt_has_link_sourcing_rule(settings):
+    """019 (agent-tools delta 7): ground rule 1 names release_url as the only
+    source for a record's Discogs page and forbids building URLs from ids."""
+    prompt = render_system_prompt(build_registry(settings))
+    assert "release_url" in prompt
+    assert "media_links" in prompt
+    assert "instance_id" in prompt  # named as forbidden URL material
+    low = prompt.lower()
+    assert "construct" in low or "build" in low  # the prohibition verb
+
+
+def test_every_listing_payload_entry_carries_release_url(settings, store, complete_snapshot):
+    """019 (agent-tools delta 6): every listing-shaped tool result — filter
+    matches, zero-match fallback, rankings — links each entry."""
+    from collection_agent.agent import AgentSession
+    from collection_agent.tools.browse import make_browse_tools
+
+    store.save(complete_snapshot)
+    (filter_tool,) = make_browse_tools(settings, store)
+    analytics = {t.name: t for t in make_analytics_tools(settings, store)}
+
+    session = AgentSession()
+    listings = []
+
+    res = filter_tool.fn(
+        session,
+        filter_tool.params_model(criteria=[{"attribute": "genre", "value": "Electronic"}]),
+    )
+    listings.append(res["matches"])
+
+    res = filter_tool.fn(
+        session,
+        filter_tool.params_model(criteria=[
+            {"attribute": "genre", "value": "Electronic"},
+            {"attribute": "title", "op": "contains", "value": "zzz-no-such-title"},
+        ]),
+    )
+    listings.append(res["fallback_matches"])
+
+    for basis in ("community_rating", "most_expensive", "rarest"):
+        tool = analytics["top_n"]
+        res = tool.fn(session, tool.params_model(basis=basis, n=5))
+        listings.append(res["items"])
+
+    for entries in listings:
+        assert entries
+        for entry in entries:
+            assert "release_url" in entry, entry
+            assert "/release/" in entry["release_url"]

@@ -20,7 +20,11 @@ from collection_agent.models import CollectionRecord
 from collection_agent.registry import fold
 from collection_agent.settings import Settings
 from collection_agent.snapshot.store import SnapshotStore
-from collection_agent.tools.common import load_for_serving, with_warnings
+from collection_agent.tools.common import (
+    load_for_serving,
+    release_page_url,
+    with_warnings,
+)
 
 
 class MediaLinksArgs(BaseModel):
@@ -102,6 +106,7 @@ def make_media_tools(settings: Settings, store: SnapshotStore) -> list[ToolDef]:
                 "artist": ", ".join(rec.artists) or "?",
                 "title": rec.title,
                 "year": rec.year,
+                "release_url": release_page_url(settings, rec),
                 "links": [
                     {"uri": v.uri, "title": v.title, "duration_s": v.duration_s}
                     for v in rec.videos
@@ -115,7 +120,8 @@ def make_media_tools(settings: Settings, store: SnapshotStore) -> list[ToolDef]:
             "records_without_links": sum(1 for p in per_record if p["none"]),
             "note": "URIs are verbatim from Discogs metadata — do not modify "
             "them. For records marked none=true, state that Discogs has no "
-            "linked media for them.",
+            "linked media for them. release_url is the record's Discogs "
+            "release page, not playable media — offer it only as the page.",
         }
         if not_found:
             payload["not_found"] = not_found
