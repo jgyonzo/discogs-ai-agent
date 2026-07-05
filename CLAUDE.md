@@ -2,7 +2,25 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 019-listing-link-integrity** (branch
+`019-listing-link-integrity`) — the scheduled follow-up to 018's
+invented-URL candidate (see "Known follow-up" below). Every per-record
+listing entry (`filter_records` matches + fallback_matches, `top_n`,
+`media_links` per_record) gains a genuine tool-built `release_url`
+(`{DISCOGS_WEB_BASE_URL}/release/{release_id}` — new settings field,
+default `https://www.discogs.com`; helper in `tools/common.py`;
+`release_id` comes from the sync instance pass so no re-sync needed);
+`instance_id` stays unchanged as the opaque follow-up reference (id
+obfuscation rejected — research R1); ground rule 1 in
+`prompts/system.md` is extended (page links only from `release_url`,
+media links only from `media_links`, URL construction from any id
+forbidden). Contract deltas 6–8 in
+`specs/019-listing-link-integrity/contracts/amendment-017-agent-tools.md`
+amend 017's agent-tools §1/§5. Plan:
+`specs/019-listing-link-integrity/plan.md` (spec, research, data-model,
+quickstart alongside). Collection-agent only.
+
+Most recently merged:
 **018-title-locate-postmortem** (PR #5, merged to main 2026-07-05) —
 postmortem fix for the same-day incident where the collection agent
 falsely answered "not in your collection" for records it has synced
@@ -32,7 +50,7 @@ scope. 131 tests (`cd collection-agent && pytest`). Artifacts:
 addenda, plan, research, data-model, quickstart, tasks T001–T021,
 contract deltas 1–5 in `contracts/amendment-017-agent-tools.md`,
 amending 017's agent-tools §3).
-**Known follow-up (019 candidate, unscheduled):** during replays the
+**Known follow-up (now in flight as 019, above):** during replays the
 LLM invented Discogs URLs from listing `instance_id`s
 (`discogs.com/release/<instance_id>` — wrong id space), violating
 system-prompt ground rule 1 (links only from `media_links`). Fix
