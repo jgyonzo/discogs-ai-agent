@@ -2,25 +2,39 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 019-listing-link-integrity** (branch
-`019-listing-link-integrity`) — the scheduled follow-up to 018's
-invented-URL candidate (see "Known follow-up" below). Every per-record
-listing entry (`filter_records` matches + fallback_matches, `top_n`,
-`media_links` per_record) gains a genuine tool-built `release_url`
-(`{DISCOGS_WEB_BASE_URL}/release/{release_id}` — new settings field,
-default `https://www.discogs.com`; helper in `tools/common.py`;
-`release_id` comes from the sync instance pass so no re-sync needed);
-`instance_id` stays unchanged as the opaque follow-up reference (id
-obfuscation rejected — research R1); ground rule 1 in
-`prompts/system.md` is extended (page links only from `release_url`,
-media links only from `media_links`, URL construction from any id
-forbidden). Contract deltas 6–8 in
-`specs/019-listing-link-integrity/contracts/amendment-017-agent-tools.md`
-amend 017's agent-tools §1/§5. Plan:
-`specs/019-listing-link-integrity/plan.md` (spec, research, data-model,
-quickstart alongside). Collection-agent only.
+**No feature is currently in flight.** Most recently merged:
+**019-listing-link-integrity** (PR #7, merged to main 2026-07-05) —
+same-day follow-up closing 018's invented-URL candidate: during 018
+replays the LLM fabricated `discogs.com/release/<instance_id>` links
+(instance_id is a collection-instance id, not a release id — wrong id
+space), violating ground rule 1. Fix (collection-agent only, 013→014
+precedent — deterministic enforcement over prompt steering): every
+per-record listing entry (`filter_records` matches + fallback_matches,
+`top_n` all bases, `media_links` per_record) carries a genuine
+tool-built `release_url` =
+`{DISCOGS_WEB_BASE_URL}/release/{release_id}` (new settings field,
+default `https://www.discogs.com`, distinct from the API base;
+shared helper `tools/common.py::release_page_url`; `release_id` comes
+from the sync instance pass so every existing snapshot works — no
+re-sync). `instance_id` stays byte-identical as the opaque follow-up
+reference (id obfuscation rejected, research R1: it would break
+`media_links` ref resolution and move/ordinal follow-ups). Ground
+rule 1 in `prompts/system.md` extended: page links only from
+`release_url`, media links only from `media_links`, URL construction
+from any identifier forbidden (absent records get no fabricated
+link). `media_links` verbatim-URI + explicit-`none` shape preserved;
+its note now distinguishes the release *page* from playable media.
+Live replay of the 018 incident prompts passed (zero invented URLs,
+SC-001); link spot-checked in browser (SC-002). 146 tests
+(`cd collection-agent && pytest`), no live API calls;
+`collection-agent/uv.lock` is now tracked. Artifacts:
+`specs/019-listing-link-integrity/` (spec, plan, research R1–R5,
+data-model, quickstart, tasks T001–T018, contract deltas 6–8 in
+`contracts/amendment-017-agent-tools.md`, amending 017's agent-tools
+§1/§5 — the second amendment to that contract, after 018's deltas
+1–5 against §3).
 
-Most recently merged:
+Prior feature:
 **018-title-locate-postmortem** (PR #5, merged to main 2026-07-05) —
 postmortem fix for the same-day incident where the collection agent
 falsely answered "not in your collection" for records it has synced
@@ -50,12 +64,8 @@ scope. 131 tests (`cd collection-agent && pytest`). Artifacts:
 addenda, plan, research, data-model, quickstart, tasks T001–T021,
 contract deltas 1–5 in `contracts/amendment-017-agent-tools.md`,
 amending 017's agent-tools §3).
-**Known follow-up (now in flight as 019, above):** during replays the
-LLM invented Discogs URLs from listing `instance_id`s
-(`discogs.com/release/<instance_id>` — wrong id space), violating
-system-prompt ground rule 1 (links only from `media_links`). Fix
-direction: make the listing payload's id non-linkable-looking or carry
-a real tool-provided URL.
+Its known follow-up (the invented-URL 019 candidate) is **resolved by
+019** (above).
 
 Prior feature: **017-discogs-collection-agent** (PR #3, merged to main
 2026-07-05) — a terminal/CLI conversational agent
@@ -88,7 +98,7 @@ Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
 `contracts/agent-tools.md`). API reference:
 `docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
 explicitly out of scope. Component runbook:
-`collection-agent/README.md`; ~106 tests at merge — 131 after 018
+`collection-agent/README.md`; ~106 tests at merge — 146 after 019
 (`cd collection-agent && pytest`), no live API calls.
 
 Prior feature: **016-frontend-plot-layout** — frontend polish: widened
