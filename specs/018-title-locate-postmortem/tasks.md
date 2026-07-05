@@ -100,6 +100,19 @@ should now locate all four records.
 
 ---
 
+## Phase 6: Replay Hardening (post-quickstart follow-up — spec FR-006 (e)/(f), FR-009)
+
+**Trigger**: 2026-07-05 live replay showed the assistant using `eq`/full
+noisy phrases, skipping the artist-only retry (steered away by the plain
+zero-match note), and narrating found records as "related".
+
+- [ ] T012 [US2] Add failing tests: in `collection-agent/tests/unit/test_filters.py`, zero-match `filter_records` with a `title` criterion returns a note instructing to loosen (drop text criterion / shorter substring) before declaring absence, while a zero-match with only non-text criteria keeps the plain "say so explicitly" note; in `collection-agent/tests/integration/test_agent_loop.py`, extend the guidance test for FR-006 (e)/(f) stable phrases (contains-never-eq / short substring / affirm near-match as the record)
+- [ ] T013 [US2] Make the zero-match note retry-aware in `collection-agent/src/collection_agent/tools/browse.py` per data-model §2a (criterion-kind check on the resolved specs; `note` stays a string; no payload-shape change)
+- [ ] T014 [US2] Sharpen the "Locating a specific record" section in `collection-agent/src/collection_agent/prompts/system.md` with rules 5–6 from data-model §2 (contains-never-eq + short distinctive substring; affirm near-matches as THE record, never "related")
+- [ ] T015 Run full suite (`cd collection-agent && pytest`) and re-replay the batch incident query live per quickstart.md — zero false "not in your collection" answers and affirmative narration for near-matches
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

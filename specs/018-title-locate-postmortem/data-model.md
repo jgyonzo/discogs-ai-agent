@@ -46,16 +46,35 @@ these four rules (FR-006):
 4. Zero matches with a title criterion ≠ absent: retry with artist only
    and inspect that listing before telling the user the record is not in
    the collection.
+5. *(FR-006e, post-replay)* Use `contains` — never `eq` — when locating;
+   choose a **short** distinctive substring (a few words, not the user's
+   full phrase, which may embed typos or missing connective words).
+6. *(FR-006f, post-replay)* A match differing only by suffix ("EP"),
+   casing, accents, or extra words IS the requested record: affirm it as
+   found; never present it as merely "related"/"similar".
 
 Constraint (Constitution VII(b) analog): this section is procedure only —
 it must not enumerate attributes, ops, or collection facts; those enter
 solely via the registry-rendered `{attribute_block}`.
 
+## 2a. Retry-aware zero-match note (`filter_records`, FR-009)
+
+The `note` string on a zero-match listing becomes criterion-aware:
+
+| Applied criteria | Zero-match `note` behavior |
+|---|---|
+| ≥1 text-kind criterion (e.g. `title`) | instruct: loosen before declaring absence — drop the text criterion or use a shorter distinctive substring; still forbid inventing results |
+| no text-kind criterion | unchanged plain note ("no records matched — say so explicitly; do not invent results") |
+
+Payload shape unchanged — `note` stays a string; no new fields.
+
 ## 3. Unchanged entities (for reviewer orientation)
 
 - `CollectionRecord.title: str` — already synced and displayed in every
   listing; no snapshot/sync change.
-- `FilterCriterion` / `filter_records` / `aggregate_by` — untouched
-  (SC-003 measures this).
+- `FilterCriterion` / `aggregate_by` — untouched. `filter_records` is
+  untouched *for the attribute addition* (SC-003 measures exactly that);
+  its only change is the FR-009 zero-match note wording (§2a), which is
+  independent of how attributes are declared.
 - `settings.filter_result_limit` (default 50) — unchanged; remains the
   "standard cap" the guidance refers to.

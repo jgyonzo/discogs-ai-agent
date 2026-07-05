@@ -36,6 +36,20 @@ four were falsely reported as absent:
 The two queries that "worked" were for artists with exactly one record in
 the collection — truncation to one row hid nothing — which masked the bug.
 
+**Follow-up (2026-07-05, replay after the first fix landed):** replaying
+the incident queries in a live chat surfaced three residual gaps, all in
+assistant behavior rather than the filter itself: (a) the assistant
+sometimes uses exact title matching (`eq`) or the user's full noisy phrase
+as the substring ("Espaco tempo" misses "Espaço **E** Tempo"), yielding
+zero matches; (b) on zero matches it often skips the artist-only retry —
+because the listing tool's own zero-match note ("no records matched — say
+so explicitly; do not invent results"), written as an anti-hallucination
+guard, overrides the standing retry instruction at exactly the decision
+moment; (c) when it does retry and finds the record, it presents it as
+"related" instead of affirming it is the requested record ("A Walk In The
+Park EP" reported as *similar to* "A walk in the park"). FR-006 (e)–(f)
+and FR-009 close these.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Locate a record by artist and title (Priority: P1)
@@ -98,13 +112,20 @@ the incident queries.
 
 1. **Given** the assistant's standing instructions, **When** they are
    rendered, **Then** they include locate-a-record guidance covering: artist
-   + title-substring filtering, never limiting a presence-check listing
-   below the standard cap, artist-only retry before declaring absence, and
-   stripping format noise from the queried title.
+   + title-substring filtering (substring, never exact; short distinctive
+   substring), never limiting a presence-check listing below the standard
+   cap, artist-only retry before declaring absence, stripping format noise
+   from the queried title, and affirming near-matches as the requested
+   record.
 2. **Given** the incident queries ("Guido Schneider - Focus On 2xLP",
    "Troy Pierce - gone astral 2x12") against the incident snapshot,
    **When** asked again, **Then** the agent locates both records (the
    second via artist-only retry, since "astral" ≠ "astray").
+3. **Given** a listing request with a title criterion that matches zero
+   records, **When** the tool result is returned, **Then** its note tells
+   the assistant to loosen the search before declaring absence (FR-009);
+   **and Given** a zero-match listing with no text criterion, **Then** the
+   plain "say so explicitly" note is returned unchanged.
 
 ---
 
@@ -156,7 +177,22 @@ the incident queries.
   the queried title before searching; (c) never request a listing limit
   smaller than the standard cap when the question is whether a record is
   present; (d) if artist + title yields nothing, retry with artist only and
-  inspect the listing before declaring the record absent.
+  inspect the listing before declaring the record absent; (e) use substring
+  matching — never exact matching — for locating, with a **short**
+  distinctive substring (a few words; not the user's full phrase, which may
+  embed typos, missing connective words, or format noise); (f) a match that
+  differs from the user's phrasing only by suffixes ("EP"), casing,
+  accents, or extra words IS the requested record and MUST be affirmed as
+  found — never presented as merely "related" or "similar".
+- **FR-009**: When a record listing with at least one text-kind criterion
+  (e.g. title) matches zero records, the listing tool's zero-match note
+  MUST itself instruct the assistant to loosen the search (drop the text
+  criterion or use a shorter substring) before telling the user the record
+  is absent — while still forbidding invented results. The plain zero-match
+  note remains for listings without text criteria. Rationale: the assistant
+  demonstrably obeys in-result notes over standing instructions at the
+  zero-match decision point; the note must push toward the retry, not away
+  from it.
 - **FR-007**: Records with a missing/empty title MUST simply not match any
   title criterion, without error.
 - **FR-008**: All pre-existing behavior MUST be preserved: every existing
@@ -188,8 +224,9 @@ the incident queries.
   declaration plus its tests — no record-listing tool code changed
   (SC-003a of the agent-tools contract holds).
 - **SC-004**: The full existing test suite (~106 tests) passes unchanged;
-  new tests cover title matching (substring, exact, folding, missing title)
-  and the prompt guidance.
+  new tests cover title matching (substring, exact, folding, missing title),
+  the prompt guidance, and the retry-aware zero-match note (FR-009) —
+  including that non-text zero-match listings keep the plain note.
 
 ## Assumptions
 

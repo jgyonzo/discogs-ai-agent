@@ -46,6 +46,27 @@ This section is procedural only (Constitution VII(b) analog): attribute
 inventory continues to enter the prompt exclusively via the
 registry-rendered attribute block.
 
+Post-replay hardening (spec FR-006 (e)–(f)): the guidance additionally
+mandates substring matching (never `eq`) with a **short** distinctive
+substring, and affirming near-matches (suffix/casing/accent/extra-word
+differences) as the requested record rather than "related" items.
+
+## Delta 3 — `filter_records` zero-match note is retry-aware (FR-009)
+
+017's FR-013b behavior ("no records matched — say so explicitly; do not
+invent results") is amended: that plain note now applies only when **no
+text-kind criterion** was applied. When at least one applied criterion is
+text-kind (e.g. `title contains …`), the zero-match note instead instructs
+the agent to loosen the search — drop the text criterion or use a shorter
+distinctive substring — before telling the user the record is absent,
+while still forbidding invented results.
+
+Rationale (replay postmortem, 2026-07-05): at the zero-match decision
+point the LLM follows the in-result note over the standing prompt; the
+note must therefore point toward the presence-check retry, not toward an
+immediate "not found" answer. Payload shape is unchanged (`note` remains a
+string; no new fields).
+
 ## Compatibility
 
 - Additive only: no existing attribute, op, tool signature, or payload
