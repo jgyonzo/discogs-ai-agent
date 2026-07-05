@@ -132,6 +132,170 @@ def test_truncation_disclosed_and_session_refs_set(settings, store, session):
     assert session.last_listing_instance_ids == [1, 2, 3, 4, 5]
 
 
+# --- title attribute (018-title-locate-postmortem) -------------------------------
+
+
+@pytest.fixture()
+def incident_shaped_tool(settings, store):
+    """Multi-record artists in the 2026-07-05 incident shape: the target
+    title is NOT the artist's first record in snapshot order."""
+    from tests.conftest import make_record, make_snapshot
+
+    records = [
+        make_record(1, artist="Guido Schneider", title="Styleways", year=2005),
+        make_record(2, artist="Guido Schneider",
+                    title="Focus On Guido Schneider", year=2006),
+        make_record(3, artist="Troy Pierce", title="25 Bitches Vol. II", year=2006),
+        make_record(4, artist="Troy Pierce", title="Gone Astray EP"),
+        make_record(5, artist="Click Box", title="Espaço E Tempo", year=2008),
+    ]
+    store.save(make_snapshot(records))
+    (tool,) = make_browse_tools(settings, store)
+    return tool
+
+
+def test_artist_and_title_contains_combination(incident_shaped_tool, session):
+    """FR-002/FR-004 + SC-002: findable regardless of snapshot ordering."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Guido Schneider"},
+                      {"attribute": "title", "op": "contains", "value": "focus on"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Focus On Guido Schneider"
+
+
+def test_title_only_search_across_collection(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "gone astr"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Gone Astray EP"
+
+
+def test_title_contains_folds_diacritics_in_filter(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "título", "op": "contains", "value": "espaco e tempo"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["instance_id"] == 5
+
+
+def test_title_reads_title_field_only(incident_shaped_tool, session):
+    """Spec edge case: a substring that appears in the artist name must not
+    make that artist's other records match on title."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "guido"}])
+    assert {m["instance_id"] for m in res["matches"]} == {2}  # not Styleways (1)
+
+
+def test_text_criterion_defaults_to_contains_when_op_omitted(incident_shaped_tool, session):
+    """FR-010: the LLM often omits op; a silent eq default on title would
+    recreate the false-absence failure."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "value": "focus on"}])  # no op
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Focus On Guido Schneider"
+    assert res["criteria_applied"] == [
+        {"attribute": "title", "op": "contains", "value": "focus on"}
+    ]
+
+
+def test_text_criterion_explicit_eq_stays_exact(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "eq", "value": "focus on"}])
+    assert res["count"] == 0
+    res2 = run_filter(incident_shaped_tool, session,
+                      [{"attribute": "title", "op": "eq",
+                        "value": "focus on guido schneider"}])
+    assert res2["count"] == 1
+
+
+def test_non_text_criterion_keeps_eq_default(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"}])  # no op
+    assert res["criteria_applied"][0]["op"] == "eq"
+    assert res["count"] == 2
+
+
+def test_zero_match_with_text_criterion_note_says_loosen(incident_shaped_tool, session):
+    """FR-009: a zero-match listing whose only criterion is text-kind must
+    steer the LLM toward loosening the search, not toward declaring absence.
+    (Mixed text+non-text zero-matches take the FR-011 fallback path instead.)"""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "gone astral 2x12"}])
+    assert res["count"] == 0
+    note = res["note"]
+    assert "no records matched" in note
+    assert "shorter" in note and "drop" in note  # loosen-before-absence
+    assert "do not invent" in note               # anti-hallucination stays
+
+
+def test_zero_match_without_text_criterion_keeps_plain_note(incident_shaped_tool, session):
+    """FR-009: non-text zero-matches keep the FR-013b 'say so explicitly' note."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "genre", "value": "Polka"}])
+    assert res["count"] == 0
+    assert "say so explicitly" in res["note"]
+    assert "shorter" not in res["note"]
+
+
+def test_zero_match_with_mixed_criteria_returns_fallback(incident_shaped_tool, session):
+    """FR-011: near-miss titles land IN the payload — the LLM never has to
+    choose to re-query."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"},
+                      {"attribute": "title", "op": "contains", "value": "gone astral"}])
+    assert res["count"] == 0 and res["matches"] == []
+    assert res["fallback_count"] == 2
+    titles = {m["title"] for m in res["fallback_matches"]}
+    assert titles == {"25 Bitches Vol. II", "Gone Astray EP"}
+    assert {"artist", "title", "year", "instance_id"} <= set(res["fallback_matches"][0])
+    assert "near-miss" in res["note"] and "do not invent" in res["note"]
+    # follow-ups ("show me details") work off the fallback listing
+    assert set(session.last_listing_instance_ids) == {
+        m["instance_id"] for m in res["fallback_matches"]
+    }
+
+
+def test_zero_match_text_only_has_no_fallback(incident_shaped_tool, session):
+    """FR-011: text-only searches don't fall back to the whole collection."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "zzz"}])
+    assert res["count"] == 0
+    assert "fallback_matches" not in res
+    assert "shorter" in res["note"]  # FR-009 loosen note stays
+
+
+def test_zero_match_non_text_has_no_fallback(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "genre", "value": "Polka"}])
+    assert res["count"] == 0
+    assert "fallback_matches" not in res
+    assert "say so explicitly" in res["note"]  # FR-013b plain note stays
+
+
+def test_fallback_respects_limit(settings, store, session):
+    from tests.conftest import make_record, make_snapshot
+
+    store.save(make_snapshot(
+        [make_record(i, artist="Prolific", title=f"Vol {i}") for i in range(1, 9)]
+    ))
+    (tool,) = make_browse_tools(settings, store)
+    res = run_filter(tool, session,
+                     [{"attribute": "artist", "value": "Prolific"},
+                      {"attribute": "title", "op": "contains", "value": "nope"}],
+                     limit=3)
+    assert res["fallback_count"] == 8
+    assert len(res["fallback_matches"]) == 3
+
+
+def test_title_in_attribute_block(settings):
+    """FR-005: title auto-renders into the prompt attribute block."""
+    from collection_agent.registry import render_attribute_block
+
+    block = render_attribute_block(build_registry(settings))
+    assert "`title`" in block
+    assert "título" in block
+    assert "contains" in block
+
+
 # --- extensibility proof (SC-003a / FR-013) --------------------------------------
 
 

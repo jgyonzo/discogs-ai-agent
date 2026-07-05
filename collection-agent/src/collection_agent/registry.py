@@ -223,6 +223,12 @@ def build_registry(settings: Settings) -> AttributeRegistry:
             unknown_label="unknown artist", description="credited artist(s)",
         ),
         AttributeSpec(
+            "title", ("título", "titulo", "titles", "títulos", "titulos"),
+            "text", lambda r: r.title or None,
+            unknown_label="unknown title",
+            description="release title (substring search via contains)",
+        ),
+        AttributeSpec(
             "format", ("formato", "formatos", "formats"),
             "categorical", lambda r: r.formats or None, multi=True,
             unknown_label="unknown format", description='format descriptors ("Vinyl", "12\\"", "LP")',

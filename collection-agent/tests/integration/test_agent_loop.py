@@ -163,6 +163,24 @@ def test_system_prompt_rendered_from_registry(settings):
     assert str(settings.rarity_want_have_ratio) in prompt
 
 
+def test_system_prompt_has_locate_record_guidance(settings):
+    """018 FR-006: presence-check procedure is in the standing instructions.
+    Asserts on stable phrases, not exact prose."""
+    prompt = render_system_prompt(build_registry(settings)).lower()
+    # (a) artist + title-substring filtering
+    assert "artist" in prompt and "title" in prompt and "contains" in prompt
+    # (b) strip format noise from the queried title
+    assert "2xlp" in prompt
+    # (c) no reduced limit on presence checks
+    assert "limit" in prompt
+    # (d) artist-only retry before declaring absence
+    assert "retry" in prompt and "artist only" in prompt
+    # (e) contains-never-eq, with a SHORT distinctive substring
+    assert "never `eq`" in prompt and "short" in prompt
+    # (f) affirm near-matches as THE record, not "related"
+    assert "is the requested record" in prompt and "related" in prompt
+
+
 def test_all_expected_tools_registered(settings, store, complete_snapshot):
     agent, llm = build_agent(
         settings, store, script=[("text", "hi")], snapshot=complete_snapshot
