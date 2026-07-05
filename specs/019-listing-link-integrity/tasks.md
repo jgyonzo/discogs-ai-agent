@@ -113,8 +113,8 @@ record's page (quickstart replay prompt 2, media half).
 
 - [X] T015 Full-suite gate: `cd collection-agent && pytest` — record the new test count (was 131) and confirm zero pre-existing tests modified in their expectations (SC-003)
 - [X] T016 [P] Cross-check `specs/019-listing-link-integrity/contracts/amendment-017-agent-tools.md` deltas 6–8 against the implementation (field name, settings alias/default, helper location, prompt sentences); fix any drift in the same change set
-- [ ] T017 Execute the quickstart replay (`specs/019-listing-link-integrity/quickstart.md`, live snapshot, chat) — prompts 1–4; SC-001 gate: zero `discogs.com` URLs in assistant answers absent from tool results. If any invented URL survives, record a replay-postmortem addendum in `specs/019-listing-link-integrity/spec.md` (018 precedent) before closing
-- [ ] T018 Manual SC-002 spot check: open one returned `release_url` in a browser and confirm it resolves to the correct release page (never automated)
+- [X] T017 Execute the quickstart replay (`specs/019-listing-link-integrity/quickstart.md`, live snapshot, chat) — prompts 1–4; SC-001 gate: zero `discogs.com` URLs in assistant answers absent from tool results. If any invented URL survives, record a replay-postmortem addendum in `specs/019-listing-link-integrity/spec.md` (018 precedent) before closing
+- [X] T018 Manual SC-002 spot check: open one returned `release_url` in a browser and confirm it resolves to the correct release page (never automated)
 
 ---
 
