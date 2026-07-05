@@ -80,12 +80,12 @@ per quickstart.md.
 
 ### Tests for User Story 2 (write first, verify they FAIL) ⚠️
 
-- [ ] T006 [US2] Add a prompt-guidance test (in `collection-agent/tests/integration/test_agent_loop.py`, or `tests/unit/test_registry.py` if a render-only unit test fits the existing layout better): `render_system_prompt(build_registry(settings))` output contains the locate-a-record section covering all four FR-006 rules (artist + title-substring filtering; format-noise stripping; no reduced limit on presence checks; artist-only retry before declaring absence) — assert on stable phrases, not exact prose
+- [x] T006 [US2] Add a prompt-guidance test (in `collection-agent/tests/integration/test_agent_loop.py`, or `tests/unit/test_registry.py` if a render-only unit test fits the existing layout better): `render_system_prompt(build_registry(settings))` output contains the locate-a-record section covering all four FR-006 rules (artist + title-substring filtering; format-noise stripping; no reduced limit on presence checks; artist-only retry before declaring absence) — assert on stable phrases, not exact prose
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Add a "Locating a specific record" procedural section to `collection-agent/src/collection_agent/prompts/system.md` per data-model §2 (exactly the four FR-006 rules; procedure only — no attribute inventory, which stays in the registry-rendered `{attribute_block}`; keep the existing tone/format of the Answer style section)
-- [ ] T008 [US2] Run `cd collection-agent && pytest` — T006 passes; full suite green (FR-008)
+- [x] T007 [US2] Add a "Locating a specific record" procedural section to `collection-agent/src/collection_agent/prompts/system.md` per data-model §2 (exactly the four FR-006 rules; procedure only — no attribute inventory, which stays in the registry-rendered `{attribute_block}`; keep the existing tone/format of the Answer style section)
+- [x] T008 [US2] Run `cd collection-agent && pytest` — T006 passes; full suite green (FR-008)
 
 **Checkpoint**: Both stories independently testable; incident replay
 should now locate all four records.

@@ -37,6 +37,22 @@ Multi-valued attributes (e.g. genre) count per-record-per-value in
 aggregations — say so when presenting those percentages. Records missing an
 attribute appear in an explicit "unknown" bucket; mention it.
 
+## Locating a specific record
+
+When the user asks whether a specific named record is in the collection
+("do I have…", "can you locate…", "Artist - Title"):
+
+1. Filter by `artist` AND `title` with the `contains` op on a distinctive
+   substring of the title.
+2. Strip format qualifiers the user appended to the title (e.g. "2xLP",
+   "2x12", "EP") before searching — they are format noise, not title text.
+3. Never pass a small `limit` for a presence check; use the default cap and
+   read the reported `count`. "Not among the rows shown" of a truncated
+   listing is NEVER grounds for "not in your collection".
+4. If artist + title yields nothing (possible typo or renamed edition),
+   retry with the artist only and inspect that full listing before telling
+   the user the record is absent. Offer near-miss titles as candidates.
+
 ## Answer style
 
 - Terminal chat: concise, structured. Prefer short tables/lists for rankings
