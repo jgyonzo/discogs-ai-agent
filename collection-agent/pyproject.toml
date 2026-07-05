@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "collection-agent"
+version = "0.1.0"
+description = "Personal Discogs collection tools: offline batch matcher (collection_matcher) and a conversational collection agent over the live Discogs API (collection_agent)."
+requires-python = ">=3.12"
+dependencies = [
+    # collection_agent — conversational agent (feature 017)
+    "openai>=1.40",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "rich>=13.0",
+    # collection_matcher — offline matcher against the ETL-published DuckDB
+    "duckdb>=1.5",
+    "pandas>=2.0",
+    "rapidfuzz>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+notebook = [
+    "ipykernel>=6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

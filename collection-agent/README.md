@@ -1,4 +1,33 @@
-# collection-agent (experiment)
+# collection-agent
+
+Two independent tools sharing this component directory (no imports between
+them):
+
+- **`src/collection_matcher/`** — offline batch matcher (experiment): messy
+  DJ lists → confident Discogs release matches, against the ETL-published
+  DuckDB. Described below.
+- **`src/collection_agent/`** — conversational agent over the owner's **live
+  Discogs collection** (feature `specs/017-discogs-collection-agent/`):
+  sync-to-snapshot analytics, filtered listings, media links, and
+  confirmation-gated folder organization, from a terminal chat.
+
+## Environment variables (collection_agent)
+
+Read from the repo-root `.env` (gitignored — never commit secrets):
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `DISCOGS_USER_TOKEN` | yes | — | Discogs personal access token (Settings → Developers) |
+| `OPENAI_API_KEY` | yes | — | LLM provider key |
+| `DISCOGS_USERNAME` | no | via `/oauth/identity` | Username override |
+| `COLLECTION_AGENT_MODEL` | no | `gpt-4o-mini` | OpenAI model id |
+| `SNAPSHOT_PATH` | no | `collection-agent/data/snapshot.json` | Snapshot location |
+
+Quickstart: `specs/017-discogs-collection-agent/quickstart.md`.
+
+---
+
+# collection_matcher (experiment)
 
 A separate, exploratory project inside this monorepo. Goal: turn a messy
 DJ-supplied list of records (`artist`, `title`, one row per disc, grouped in
