@@ -157,8 +157,14 @@ def make_analytics_tools(
             scarcity = registry.resolve("scarcity")
             rank = {"very rare": 0, "rare": 1}
             eligible = []
+            missing_data = 0
+            common = 0
             for r in records:
                 bucket = scarcity.extract(r)
+                if bucket is None:
+                    missing_data += 1
+                elif bucket == "common":
+                    common += 1
                 if bucket in rank:
                     ratio = (
                         round(r.community_want / max(r.community_have, 1), 2)
@@ -184,7 +190,16 @@ def make_analytics_tools(
                 f"{settings.rarity_min_have} to avoid small-sample noise); both → 'very rare'"
             )
 
-        excluded = len(records) - len(eligible)
+        if args.basis == "rarest":
+            excluded = missing_data
+            payload_extra = {
+                "not_rare_count": common,
+                "not_rare_note": f"{common} record(s) have market/community data "
+                "but do not meet the rarity thresholds (they are 'common', not excluded)",
+            }
+        else:
+            excluded = len(records) - len(eligible)
+            payload_extra = {}
         return with_warnings(
             ctx,
             {
@@ -198,6 +213,7 @@ def make_analytics_tools(
                     if excluded
                     else None
                 ),
+                **payload_extra,
             },
         )
 
