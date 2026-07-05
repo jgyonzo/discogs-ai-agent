@@ -1,6 +1,0 @@
-# collection-agent experiment deps (matcher notebook).
-# duckdb reads the ETL-published catalog; the rest is for the notebook.
-duckdb>=1.5
-pandas>=2.0
-rapidfuzz>=3.0
-ipykernel>=6.0

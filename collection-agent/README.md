@@ -1,4 +1,55 @@
-# collection-agent (experiment)
+# collection-agent
+
+Two independent tools sharing this component directory (no imports between
+them):
+
+- **`src/collection_matcher/`** — offline batch matcher (experiment): messy
+  DJ lists → confident Discogs release matches, against the ETL-published
+  DuckDB. Described below.
+- **`src/collection_agent/`** — conversational agent over the owner's **live
+  Discogs collection** (feature `specs/017-discogs-collection-agent/`):
+  sync-to-snapshot analytics, filtered listings, media links, and
+  confirmation-gated folder organization, from a terminal chat.
+
+## Environment variables (collection_agent)
+
+Read from the repo-root `.env` (gitignored — never commit secrets):
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `DISCOGS_USER_TOKEN` | yes | — | Discogs personal access token (Settings → Developers) |
+| `OPENAI_API_KEY` | yes | — | LLM provider key |
+| `DISCOGS_USERNAME` | no | via `/oauth/identity` | Username override |
+| `COLLECTION_AGENT_MODEL` | no | `gpt-4o-mini` | OpenAI model id |
+| `SNAPSHOT_PATH` | no | `collection-agent/data/snapshot.json` | Snapshot location |
+
+## Run the agent
+
+```bash
+cd collection-agent
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+python -m collection_agent sync      # first sync: minutes-scale, resumable (Ctrl-C safe)
+python -m collection_agent status    # snapshot age / completeness / counts / value
+python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
+```
+
+Analytics, filtered listings, and media links are answered instantly from
+the local snapshot (`data/snapshot.json`, gitignored); moving records /
+creating folders executes **live** against Discogs and only after the CLI
+itself asks `¿Confirmás? [y/N]` — the LLM can only *propose* moves.
+
+Exit codes: `0` ok · `1` unexpected error · `2` configuration error
+(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
+
+Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md` ·
+API notes: `docs/discogs_api_reference.md` ·
+Tests: `pytest` (102 tests, no live API calls).
+
+---
+
+# collection_matcher (experiment)
 
 A separate, exploratory project inside this monorepo. Goal: turn a messy
 DJ-supplied list of records (`artist`, `title`, one row per disc, grouped in
@@ -16,9 +67,9 @@ streaming-link enrichment are deliberately out of scope for now.
 
 | Path | What it is |
 |---|---|
-| `matcher.py` | Fuzzy matcher: normalize `(artist, title)`, Jaro-Winkler scoring in DuckDB, top-K candidates with a per-field score breakdown. Scores both a *structured* (artist-vs-artist + title-vs-title) and a *combined* (whole query vs `artist + title`) view and keeps the higher — so rows written without a clean separator still match. `vinyl_only=True` restricts to vinyl pressings (right default for a record crate). |
-| `review_batch.py` | Run one batch through the matcher and print a confidence-sorted review queue to the terminal. Quick look, no files written. |
-| `export_batch.py` | Run one batch and write `data/<batch>_review.csv` — one row per disc with Discogs URLs, alternate candidates, and a `confirmed` column to fill in. |
+| `src/collection_matcher/matcher.py` | Fuzzy matcher: normalize `(artist, title)`, Jaro-Winkler scoring in DuckDB, top-K candidates with a per-field score breakdown. Scores both a *structured* (artist-vs-artist + title-vs-title) and a *combined* (whole query vs `artist + title`) view and keeps the higher — so rows written without a clean separator still match. `vinyl_only=True` restricts to vinyl pressings (right default for a record crate). |
+| `src/collection_matcher/review_batch.py` | Run one batch through the matcher and print a confidence-sorted review queue to the terminal. Quick look, no files written. |
+| `src/collection_matcher/export_batch.py` | Run one batch and write `data/<batch>_review.csv` — one row per disc with Discogs URLs, alternate candidates, and a `confirmed` column to fill in. |
 | `notebooks/01_matcher_experiments.ipynb` | Experiment: messy-input demo, a ground-truth accuracy eval (corrupt known releases, measure top-1/top-5 hit rate), and a disambiguation deep-dive. |
 | `data/sample_batches.csv` | A small DJ-style messy input to play with. |
 | `requirements.txt` | Notebook + script deps. |
@@ -69,7 +120,9 @@ If it's missing, run the ETL first — see the repo `README.md` §Quickstart.
 **Review a batch in the terminal** (nothing written):
 
 ```bash
-.venv/bin/python collection-agent/review_batch.py Lote-Feb
+# from collection-agent/ (or add collection-agent/src to PYTHONPATH from repo root)
+cd collection-agent
+PYTHONPATH=src ../.venv/bin/python -m collection_matcher.review_batch Lote-Feb
 ```
 
 Prints a queue sorted worst-confidence-first, with a high-confidence count
@@ -78,9 +131,13 @@ Prints a queue sorted worst-confidence-first, with a high-confidence count
 **Export a batch to a review CSV** for clicking through on Discogs:
 
 ```bash
-.venv/bin/python collection-agent/export_batch.py Lote-Feb
+cd collection-agent
+PYTHONPATH=src ../.venv/bin/python -m collection_matcher.export_batch Lote-Feb
 # -> collection-agent/data/Lote-Feb_review.csv
 ```
+
+(Once the component's `pyproject.toml` lands — next step in feature 017 —
+`pip install -e .` makes the `PYTHONPATH=src` prefix unnecessary.)
 
 Columns in the exported CSV:
 

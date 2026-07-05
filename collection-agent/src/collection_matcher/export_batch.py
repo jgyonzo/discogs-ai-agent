@@ -1,6 +1,6 @@
 """Export one batch's matches to a review CSV with Discogs URLs.
 
-Usage: .venv/bin/python collection-agent/export_batch.py Lote-Feb
+Usage (from collection-agent/): python -m collection_matcher.export_batch Lote-Feb
 Writes collection-agent/data/<batch>_review.csv (gitignored).
 
 Optionally reads hand-authored per-row review notes from
@@ -23,11 +23,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from matcher import Matcher, split_artist_title
+from collection_matcher.matcher import Matcher, split_artist_title
 
-HERE = Path(__file__).resolve().parent
-PENDING = HERE / "data" / "pending_discogs.csv"
-NOTES_FILE = HERE / "data" / "review_notes.csv"
+# component root = collection-agent/ (this file lives in src/collection_matcher/)
+COMPONENT_ROOT = Path(__file__).resolve().parents[2]
+PENDING = COMPONENT_ROOT / "data" / "pending_discogs.csv"
+NOTES_FILE = COMPONENT_ROOT / "data" / "review_notes.csv"
 
 # Bidi/zero-width marks Discogs exports leave around separators.
 _BIDI = re.compile(r"[​‎‏﻿]")
@@ -110,7 +111,7 @@ def main(batch: str, k: int = 5, vinyl_only: bool = True) -> None:
             "format", "score", "ambiguous", "release_id", "discogs_url",
             "alt_release_ids", "confirmed", "note"]
     odf = pd.DataFrame(out)[cols]
-    dest = HERE / "data" / f"{batch}_review.csv"
+    dest = COMPONENT_ROOT / "data" / f"{batch}_review.csv"
     odf.to_csv(dest, index=False)
     print(f"Wrote {len(odf)} rows -> {dest}")
 
