@@ -131,3 +131,30 @@ def test_zero_instance_snapshot_blocks_explicitly(settings, store):
     ]:
         res = _run(tools, name, **kwargs)
         assert res["error"] == "empty_collection", name
+
+
+# --- 019 listing link integrity (delta 6): release_url in rankings -----------
+
+
+def test_top_n_items_carry_release_url_all_bases(tools):
+    for basis in ("community_rating", "most_expensive", "rarest"):
+        res = _run(tools, "top_n", basis=basis, n=5)
+        assert res["items"], basis
+        for item in res["items"]:
+            assert item["release_url"].startswith(
+                "https://www.discogs.com/release/"
+            ), basis
+
+
+def test_top_n_release_url_uses_release_id_space(settings, store):
+    from tests.conftest import make_record
+
+    store.save(make_snapshot([
+        make_record(987654321, release_id=1234,
+                    community_rating_avg=4.5, community_rating_count=10),
+    ]))
+    tools = {t.name: t for t in make_analytics_tools(settings, store)}
+    res = _run(tools, "top_n", basis="community_rating", n=1)
+    (item,) = res["items"]
+    assert item["release_url"] == "https://www.discogs.com/release/1234"
+    assert "987654321" not in item["release_url"]

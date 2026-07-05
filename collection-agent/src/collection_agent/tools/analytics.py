@@ -21,7 +21,11 @@ from collection_agent.models import CollectionRecord
 from collection_agent.registry import AttributeRegistry, build_registry
 from collection_agent.settings import Settings
 from collection_agent.snapshot.store import SnapshotStore
-from collection_agent.tools.common import load_for_serving, with_warnings
+from collection_agent.tools.common import (
+    load_for_serving,
+    release_page_url,
+    with_warnings,
+)
 
 
 class AggregateArgs(BaseModel):
@@ -41,12 +45,13 @@ class _NoArgs(BaseModel):
     pass
 
 
-def _display(rec: CollectionRecord) -> dict[str, Any]:
+def _display(rec: CollectionRecord, settings: Settings) -> dict[str, Any]:
     return {
         "instance_id": rec.instance_id,
         "artist": ", ".join(rec.artists) or "?",
         "title": rec.title,
         "year": rec.year,
+        "release_url": release_page_url(settings, rec),
     }
 
 
@@ -124,7 +129,7 @@ def make_analytics_tools(
             )
             items = [
                 {
-                    **_display(r),
+                    **_display(r, settings),
                     "community_rating_avg": r.community_rating_avg,
                     "votes": r.community_rating_count,
                 }
@@ -141,7 +146,7 @@ def make_analytics_tools(
             no_copies = sum(1 for r in records if r.num_for_sale == 0)
             items = [
                 {
-                    **_display(r),
+                    **_display(r, settings),
                     "lowest_price": r.lowest_price,
                     "num_for_sale": r.num_for_sale,
                 }
@@ -175,7 +180,7 @@ def make_analytics_tools(
             eligible.sort(key=lambda t: (t[0], t[1]))
             items = [
                 {
-                    **_display(r),
+                    **_display(r, settings),
                     "scarcity": bucket,
                     "have": r.community_have,
                     "want": r.community_want,

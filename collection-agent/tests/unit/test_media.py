@@ -85,3 +85,37 @@ def test_no_snapshot_blocks(settings, store):
     (t,) = make_media_tools(settings, store)
     res = run(t, AgentSession(), record_refs=["1"])
     assert res["error"] == "sync_required"
+
+
+# --- 019 listing link integrity (deltas 6+8): release_url alongside media ----
+
+
+def test_per_record_carries_release_url_in_release_id_space(settings, store):
+    store.save(make_snapshot([
+        make_record(987654321, release_id=1234, title="Focus On",
+                    artist="Guido Schneider",
+                    videos=[MediaLink(uri=SIGNED_URI, title="Video A")]),
+    ]))
+    (tool,) = make_media_tools(settings, store)
+    res = run(tool, AgentSession(), record_refs=["987654321"])
+    (rec,) = res["per_record"]
+    assert rec["release_url"] == "https://www.discogs.com/release/1234"
+    assert "987654321" not in rec["release_url"]
+    # media answer shape unchanged (FR-014/015/016)
+    assert rec["links"][0]["uri"] == SIGNED_URI
+    assert rec["none"] is False
+
+
+def test_release_url_present_even_with_no_media(tool):
+    res = run(tool, AgentSession(), record_refs=["2"])
+    (rec,) = res["per_record"]
+    assert rec["none"] is True  # explicit no-media flag unchanged
+    assert rec["release_url"].startswith("https://www.discogs.com/release/")
+
+
+def test_note_distinguishes_release_page_from_playable_media(tool):
+    res = run(tool, AgentSession(), record_refs=["1"])
+    note = res["note"].lower()
+    assert "verbatim" in note                 # FR-014 wording preserved
+    assert "release_url" in res["note"]
+    assert "page" in note and "not" in note   # page ≠ playable media

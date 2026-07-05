@@ -353,3 +353,42 @@ def test_previously_passing_filters_unchanged_after_extension(
         after = run_filter(ext_tool, AgentSession(), criteria)
         assert before["count"] == after["count"], criteria
         assert before["matches"] == after["matches"], criteria
+
+
+# --- 019 listing link integrity (delta 6): release_url on every entry --------
+
+
+def test_matches_carry_release_url_in_release_id_space(settings, store, session):
+    """019: the listing's URL embeds release_id — NEVER instance_id (the
+    018-replay invented-URL incident was exactly that id-space confusion)."""
+    from tests.conftest import make_record, make_snapshot
+
+    store.save(make_snapshot([
+        make_record(987654321, release_id=1234, artist="Guido Schneider",
+                    title="Focus On Guido Schneider", genres=["Electronic"]),
+    ]))
+    (tool,) = make_browse_tools(settings, store)
+    res = run_filter(tool, session, [{"attribute": "genre", "value": "Electronic"}])
+    (m,) = res["matches"]
+    assert m["release_url"] == "https://www.discogs.com/release/1234"
+    assert "987654321" not in m["release_url"]
+    assert m["instance_id"] == 987654321  # opaque follow-up ref unchanged
+
+
+def test_copies_of_same_release_share_release_url(filter_tool, session):
+    res = run_filter(filter_tool, session,
+                     [{"attribute": "genre", "value": "Electronic"},
+                      {"attribute": "decade", "value": "2000s"}])
+    urls = {m["instance_id"]: m["release_url"] for m in res["matches"]}
+    assert urls[1] == urls[4]  # instances 1+4 are copies of release 1
+
+
+def test_fallback_matches_carry_release_url(incident_shaped_tool, session):
+    """019: the FR-011 fallback listing is a listing — its entries carry the
+    link so a follow-up 'give me its link' works without invention."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"},
+                      {"attribute": "title", "op": "contains", "value": "gone astral"}])
+    assert res["fallback_matches"]
+    for m in res["fallback_matches"]:
+        assert m["release_url"].startswith("https://www.discogs.com/release/")

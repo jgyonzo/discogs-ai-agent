@@ -14,7 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from collection_agent.models import Completeness, Snapshot
+from collection_agent.models import CollectionRecord, Completeness, Snapshot
+from collection_agent.settings import Settings
 from collection_agent.snapshot.store import SnapshotStore
 
 
@@ -68,6 +69,18 @@ def load_for_serving(store: SnapshotStore) -> ServeContext:
 def _age_hours(store: SnapshotStore) -> float | None:
     age = store.sync_age()
     return round(age.total_seconds() / 3600, 1) if age else None
+
+
+def release_page_url(settings: Settings, record: CollectionRecord) -> str:
+    """The record's Discogs release-page URL (019, agent-tools deltas 6–8).
+
+    Built from `release_id` (sync instance pass — present in every snapshot
+    state), NEVER `instance_id`: the two live in different id spaces, and
+    pasting an instance id into this path was exactly the 018-replay
+    invented-URL incident. Every listing entry carries this field so the
+    LLM never constructs a URL itself (ground rule 1).
+    """
+    return f"{settings.discogs_web_base_url.rstrip('/')}/release/{record.release_id}"
 
 
 def with_warnings(ctx: ServeContext, payload: dict[str, Any]) -> dict[str, Any]:

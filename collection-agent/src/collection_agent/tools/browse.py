@@ -25,7 +25,11 @@ from collection_agent.registry import (
 )
 from collection_agent.settings import Settings
 from collection_agent.snapshot.store import SnapshotStore
-from collection_agent.tools.common import load_for_serving, with_warnings
+from collection_agent.tools.common import (
+    load_for_serving,
+    release_page_url,
+    with_warnings,
+)
 
 
 class FilterCriterion(BaseModel):
@@ -49,7 +53,9 @@ def _folder_names(snapshot: Snapshot) -> dict[int, str]:
     return {f.folder_id: f.name for f in snapshot.folders}
 
 
-def _display(rec: CollectionRecord, folder_names: dict[int, str]) -> dict[str, Any]:
+def _display(
+    rec: CollectionRecord, folder_names: dict[int, str], settings: Settings
+) -> dict[str, Any]:
     return {
         "instance_id": rec.instance_id,
         "artist": ", ".join(rec.artists) or "?",
@@ -57,6 +63,7 @@ def _display(rec: CollectionRecord, folder_names: dict[int, str]) -> dict[str, A
         "year": rec.year,
         "format": ", ".join(rec.formats[:3]),
         "folder": folder_names.get(rec.folder_id, str(rec.folder_id)),
+        "release_url": release_page_url(settings, rec),
     }
 
 
@@ -130,7 +137,7 @@ def make_browse_tools(
             "criteria_applied": applied,
             "unsupported_criteria": unsupported,
             "count": len(matched),
-            "matches": [_display(r, folder_names) for r in shown],
+            "matches": [_display(r, folder_names, settings) for r in shown],
             "truncated": len(matched) > limit,
         }
         if len(matched) > limit:
@@ -147,7 +154,9 @@ def make_browse_tools(
                     if all(matches(spec, rec, op, value) for spec, op, value in non_text)
                 ]
                 shown_fb = fallback[:limit]
-                payload["fallback_matches"] = [_display(r, folder_names) for r in shown_fb]
+                payload["fallback_matches"] = [
+                    _display(r, folder_names, settings) for r in shown_fb
+                ]
                 payload["fallback_count"] = len(fallback)
                 session.last_listing_instance_ids = [r.instance_id for r in shown_fb]
                 payload["note"] = (
