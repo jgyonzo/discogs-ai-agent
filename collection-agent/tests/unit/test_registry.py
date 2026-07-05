@@ -5,7 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from collection_agent.registry import build_registry, fold, render_attribute_block
+from collection_agent.registry import (
+    UnsupportedOp,
+    build_registry,
+    fold,
+    matches,
+    render_attribute_block,
+)
 from tests.conftest import make_record
 
 
@@ -45,7 +51,8 @@ def test_unknown_attribute_returns_none_and_supported_list(registry):
     assert registry.resolve("catno") is None
     supported = registry.supported_names()
     assert "genre" in supported and "scarcity" in supported
-    assert len(supported) == 16  # launch set (contracts/agent-tools.md §3)
+    # launch set (017 agent-tools §3) + title (018 amendment)
+    assert len(supported) == 17
 
 
 def test_fold():
@@ -101,6 +108,58 @@ def test_null_extract_for_unknown_bucket(registry):
 def test_zero_rating_normalized_to_null(registry):
     rec = make_record(1, my_rating=0)
     assert registry.resolve("my_rating").extract(rec) is None
+
+
+# --- title attribute (018-title-locate-postmortem) ----------------------------
+
+
+@pytest.mark.parametrize("alias", ["title", "titulo", "título", "titles", "TÍTULOS"])
+def test_title_alias_resolution(registry, alias):
+    spec = registry.resolve(alias)
+    assert spec is not None and spec.name == "title"
+
+
+def test_title_spec_shape(registry):
+    spec = registry.resolve("title")
+    assert spec.kind == "text"
+    assert spec.ops == ("contains", "eq")
+    assert spec.multi is False
+    assert spec.unknown_label == "unknown title"
+
+
+def test_title_contains_folds_case_and_diacritics(registry):
+    spec = registry.resolve("title")
+    focus = make_record(1, title="Focus On Guido Schneider")
+    assert matches(spec, focus, "contains", "focus on")
+    assert matches(spec, focus, "contains", "FOCUS ON")
+    assert not matches(spec, focus, "contains", "styleways")
+    espaco = make_record(2, title="Espaço E Tempo")
+    assert matches(spec, espaco, "contains", "espaco tempo") is False  # substring, not tokens
+    assert matches(spec, espaco, "contains", "espaco e tempo")
+    assert matches(spec, espaco, "contains", "Espaço")
+
+
+def test_title_eq_exact_modulo_folding(registry):
+    spec = registry.resolve("title")
+    rec = make_record(1, title="Gone Astray EP")
+    assert matches(spec, rec, "eq", "gone astray ep")
+    assert not matches(spec, rec, "eq", "gone astray")
+
+
+def test_title_empty_matches_nothing(registry):
+    """FR-007: empty title normalizes to missing — never matches, never errors."""
+    spec = registry.resolve("title")
+    rec = make_record(1, title="")
+    assert spec.extract(rec) is None
+    assert not matches(spec, rec, "contains", "anything")
+    # a bare `contains ""` must not match an empty-title record either
+    assert not matches(spec, rec, "contains", "")
+
+
+def test_title_unsupported_op_raises(registry):
+    spec = registry.resolve("title")
+    with pytest.raises(UnsupportedOp):
+        matches(spec, make_record(1, title="X"), "between", [1, 2])
 
 
 # --- prompt rendering (VII(b) analog) ----------------------------------------

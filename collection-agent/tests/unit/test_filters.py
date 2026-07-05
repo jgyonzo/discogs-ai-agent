@@ -132,6 +132,69 @@ def test_truncation_disclosed_and_session_refs_set(settings, store, session):
     assert session.last_listing_instance_ids == [1, 2, 3, 4, 5]
 
 
+# --- title attribute (018-title-locate-postmortem) -------------------------------
+
+
+@pytest.fixture()
+def incident_shaped_tool(settings, store):
+    """Multi-record artists in the 2026-07-05 incident shape: the target
+    title is NOT the artist's first record in snapshot order."""
+    from tests.conftest import make_record, make_snapshot
+
+    records = [
+        make_record(1, artist="Guido Schneider", title="Styleways", year=2005),
+        make_record(2, artist="Guido Schneider",
+                    title="Focus On Guido Schneider", year=2006),
+        make_record(3, artist="Troy Pierce", title="25 Bitches Vol. II", year=2006),
+        make_record(4, artist="Troy Pierce", title="Gone Astray EP"),
+        make_record(5, artist="Click Box", title="Espaço E Tempo", year=2008),
+    ]
+    store.save(make_snapshot(records))
+    (tool,) = make_browse_tools(settings, store)
+    return tool
+
+
+def test_artist_and_title_contains_combination(incident_shaped_tool, session):
+    """FR-002/FR-004 + SC-002: findable regardless of snapshot ordering."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Guido Schneider"},
+                      {"attribute": "title", "op": "contains", "value": "focus on"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Focus On Guido Schneider"
+
+
+def test_title_only_search_across_collection(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "gone astr"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Gone Astray EP"
+
+
+def test_title_contains_folds_diacritics_in_filter(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "título", "op": "contains", "value": "espaco e tempo"}])
+    assert res["count"] == 1
+    assert res["matches"][0]["instance_id"] == 5
+
+
+def test_title_reads_title_field_only(incident_shaped_tool, session):
+    """Spec edge case: a substring that appears in the artist name must not
+    make that artist's other records match on title."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "guido"}])
+    assert {m["instance_id"] for m in res["matches"]} == {2}  # not Styleways (1)
+
+
+def test_title_in_attribute_block(settings):
+    """FR-005: title auto-renders into the prompt attribute block."""
+    from collection_agent.registry import render_attribute_block
+
+    block = render_attribute_block(build_registry(settings))
+    assert "`title`" in block
+    assert "título" in block
+    assert "contains" in block
+
+
 # --- extensibility proof (SC-003a / FR-013) --------------------------------------
 
 

@@ -27,7 +27,7 @@ tests under `tests/`.
 
 **Purpose**: Confirm a green baseline so regressions are attributable.
 
-- [ ] T001 Run the full existing suite (`cd collection-agent && pytest`) and record the passing count (~106) as the baseline; no code changes
+- [x] T001 Run the full existing suite (`cd collection-agent && pytest`) and record the passing count (~106) as the baseline; no code changes
 
 ---
 
@@ -54,13 +54,13 @@ in `render_attribute_block()` output.
 
 ### Tests for User Story 1 (write first, verify they FAIL) ⚠️
 
-- [ ] T002 [P] [US1] Add title-spec unit tests in `collection-agent/tests/unit/test_registry.py`: registry resolves `title`/`titulo`/`título`/`titles` to a text-kind spec with ops `(contains, eq)`; `matches()` cases — `contains` substring hit and miss, case folding ("FOCUS ON" vs "Focus On Guido Schneider"), diacritic folding ("espaco" matches "Espaço E Tempo"), `eq` exact-modulo-folding, empty-title record matches nothing (extract → None), unsupported op (e.g. `between`) raises `UnsupportedOp`
-- [ ] T003 [P] [US1] Add filter-tool tests in `collection-agent/tests/unit/test_filters.py`: `filter_records` with `artist eq "Guido Schneider" AND title contains "focus on"` returns only the matching record from a snapshot where that artist has several records (incident fixture shape); title-only criterion works across the whole collection; a substring present only in the artist name does NOT match on `title` ("Styleways" by Guido Schneider is excluded for `title contains "guido"` while "Focus On Guido Schneider" matches); `title` appears in `render_attribute_block()` output (FR-005)
+- [x] T002 [P] [US1] Add title-spec unit tests in `collection-agent/tests/unit/test_registry.py`: registry resolves `title`/`titulo`/`título`/`titles` to a text-kind spec with ops `(contains, eq)`; `matches()` cases — `contains` substring hit and miss, case folding ("FOCUS ON" vs "Focus On Guido Schneider"), diacritic folding ("espaco" matches "Espaço E Tempo"), `eq` exact-modulo-folding, empty-title record matches nothing (extract → None), unsupported op (e.g. `between`) raises `UnsupportedOp`
+- [x] T003 [P] [US1] Add filter-tool tests in `collection-agent/tests/unit/test_filters.py`: `filter_records` with `artist eq "Guido Schneider" AND title contains "focus on"` returns only the matching record from a snapshot where that artist has several records (incident fixture shape); title-only criterion works across the whole collection; a substring present only in the artist name does NOT match on `title` ("Styleways" by Guido Schneider is excluded for `title contains "guido"` while "Focus On Guido Schneider" matches); `title` appears in `render_attribute_block()` output (FR-005)
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Add the `title` `AttributeSpec` to `build_registry()` in `collection-agent/src/collection_agent/registry.py` per data-model §1: `name="title"`, aliases `("título", "titulo", "titles", "títulos", "titulos")`, kind `"text"`, `extract=lambda r: r.title or None`, `unknown_label="unknown title"`, description one-liner — one declaration, no other registry/tool code changes (SC-003a)
-- [ ] T005 [US1] Run `cd collection-agent && pytest` — T002/T003 tests now pass; baseline suite still green (FR-008)
+- [x] T004 [US1] Add the `title` `AttributeSpec` to `build_registry()` in `collection-agent/src/collection_agent/registry.py` per data-model §1: `name="title"`, aliases `("título", "titulo", "titles", "títulos", "titulos")`, kind `"text"`, `extract=lambda r: r.title or None`, `unknown_label="unknown title"`, description one-liner — one declaration, no other registry/tool code changes (SC-003a)
+- [x] T005 [US1] Run `cd collection-agent && pytest` — T002/T003 tests now pass; baseline suite still green (FR-008)
 
 **Checkpoint**: US1 delivers the MVP — the incident's P1 failure
 ("Focus On Guido Schneider" unfindable) is now mechanically impossible to
