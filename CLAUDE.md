@@ -2,7 +2,22 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 018-title-locate-postmortem** (branch
+`018-title-locate-postmortem`) — postmortem fix for the 2026-07-05
+incident where the collection agent falsely answered "not in your
+collection" for records it has synced ("Focus On Guido Schneider",
+"Gone Astray EP"). Root cause: no `title` attribute in the declarative
+registry + the LLM passing `limit=1` on locate-one-record listings, so
+the target title hid behind truncation. Fix (collection-agent only):
+one `title` text-kind `AttributeSpec` in `registry.py` (SC-003a — no
+tool-code edits) + procedural "locating a specific record" guidance in
+`prompts/system.md` (artist + title-contains, strip format noise like
+"2xLP", no small limits on presence checks, artist-only retry before
+declaring absence; fuzzy matching and `media_links` changes out of
+scope). Plan: `specs/018-title-locate-postmortem/plan.md`; contract
+delta: `specs/018-title-locate-postmortem/contracts/amendment-017-agent-tools.md`.
+
+Most recently merged:
 **017-discogs-collection-agent** (PR #3, merged to main
 2026-07-05) — a terminal/CLI conversational agent
 over the owner's **live Discogs collection** (personal access token),
