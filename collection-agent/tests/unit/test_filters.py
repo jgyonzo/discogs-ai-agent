@@ -215,11 +215,11 @@ def test_non_text_criterion_keeps_eq_default(incident_shaped_tool, session):
 
 
 def test_zero_match_with_text_criterion_note_says_loosen(incident_shaped_tool, session):
-    """FR-009: a zero-match listing that applied a text criterion must steer
-    the LLM toward loosening the search, not toward declaring absence."""
+    """FR-009: a zero-match listing whose only criterion is text-kind must
+    steer the LLM toward loosening the search, not toward declaring absence.
+    (Mixed text+non-text zero-matches take the FR-011 fallback path instead.)"""
     res = run_filter(incident_shaped_tool, session,
-                     [{"attribute": "artist", "value": "Troy Pierce"},
-                      {"attribute": "title", "op": "contains", "value": "gone astral"}])
+                     [{"attribute": "title", "op": "contains", "value": "gone astral 2x12"}])
     assert res["count"] == 0
     note = res["note"]
     assert "no records matched" in note
@@ -234,6 +234,56 @@ def test_zero_match_without_text_criterion_keeps_plain_note(incident_shaped_tool
     assert res["count"] == 0
     assert "say so explicitly" in res["note"]
     assert "shorter" not in res["note"]
+
+
+def test_zero_match_with_mixed_criteria_returns_fallback(incident_shaped_tool, session):
+    """FR-011: near-miss titles land IN the payload — the LLM never has to
+    choose to re-query."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"},
+                      {"attribute": "title", "op": "contains", "value": "gone astral"}])
+    assert res["count"] == 0 and res["matches"] == []
+    assert res["fallback_count"] == 2
+    titles = {m["title"] for m in res["fallback_matches"]}
+    assert titles == {"25 Bitches Vol. II", "Gone Astray EP"}
+    assert {"artist", "title", "year", "instance_id"} <= set(res["fallback_matches"][0])
+    assert "near-miss" in res["note"] and "do not invent" in res["note"]
+    # follow-ups ("show me details") work off the fallback listing
+    assert set(session.last_listing_instance_ids) == {
+        m["instance_id"] for m in res["fallback_matches"]
+    }
+
+
+def test_zero_match_text_only_has_no_fallback(incident_shaped_tool, session):
+    """FR-011: text-only searches don't fall back to the whole collection."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "contains", "value": "zzz"}])
+    assert res["count"] == 0
+    assert "fallback_matches" not in res
+    assert "shorter" in res["note"]  # FR-009 loosen note stays
+
+
+def test_zero_match_non_text_has_no_fallback(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "genre", "value": "Polka"}])
+    assert res["count"] == 0
+    assert "fallback_matches" not in res
+    assert "say so explicitly" in res["note"]  # FR-013b plain note stays
+
+
+def test_fallback_respects_limit(settings, store, session):
+    from tests.conftest import make_record, make_snapshot
+
+    store.save(make_snapshot(
+        [make_record(i, artist="Prolific", title=f"Vol {i}") for i in range(1, 9)]
+    ))
+    (tool,) = make_browse_tools(settings, store)
+    res = run_filter(tool, session,
+                     [{"attribute": "artist", "value": "Prolific"},
+                      {"attribute": "title", "op": "contains", "value": "nope"}],
+                     limit=3)
+    assert res["fallback_count"] == 8
+    assert len(res["fallback_matches"]) == 3
 
 
 def test_title_in_attribute_block(settings):

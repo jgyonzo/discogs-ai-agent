@@ -51,9 +51,10 @@ When the user asks whether a specific named record is in the collection
    read the reported `count`. "Not among the rows shown" of a truncated
    listing is NEVER grounds for "not in your collection".
 4. If artist + title yields nothing (possible typo or renamed edition),
-   retry with the artist only and inspect that full listing before telling
-   the user the record is absent. This applies per record when several are
-   asked about at once.
+   the result includes `fallback_matches` — the same search with artist
+   only. Inspect it for a near-miss title before telling the user the
+   record is absent; if it is missing, retry with the artist only
+   yourself. This applies per record when several are asked about at once.
 5. A match that differs from the user's phrasing only by a suffix ("EP"),
    casing, accents, or extra words **is the requested record** — affirm it
    as found. Never call it "related" or "similar", and never say you

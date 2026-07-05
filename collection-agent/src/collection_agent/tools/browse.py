@@ -136,10 +136,28 @@ def make_browse_tools(
         if len(matched) > limit:
             payload["truncation_note"] = f"showing {limit} of {len(matched)} matches"
         if not matched:
-            # FR-009 (018): at the zero-match decision point the LLM follows
-            # this note over the standing prompt — with a text criterion it
-            # must point toward loosening, not toward "not found".
-            if any(spec.kind == "text" for spec, _, _ in resolved):
+            # FR-009/FR-011 (018): at the zero-match decision point the LLM
+            # follows this note over the standing prompt — with a text
+            # criterion it must point toward the near-misses, not "not found".
+            has_text = any(spec.kind == "text" for spec, _, _ in resolved)
+            non_text = [(s, o, v) for s, o, v in resolved if s.kind != "text"]
+            if has_text and non_text:
+                fallback = [
+                    rec for rec in ctx.snapshot.records
+                    if all(matches(spec, rec, op, value) for spec, op, value in non_text)
+                ]
+                shown_fb = fallback[:limit]
+                payload["fallback_matches"] = [_display(r, folder_names) for r in shown_fb]
+                payload["fallback_count"] = len(fallback)
+                session.last_listing_instance_ids = [r.instance_id for r in shown_fb]
+                payload["note"] = (
+                    "no records matched the text criterion — fallback_matches "
+                    "lists the records matching the remaining criteria; inspect "
+                    "them for a near-miss title (typo, extra suffix, accents) "
+                    "and affirm it if it clearly is the requested record; only "
+                    "report absence if none fits; do not invent results"
+                )
+            elif has_text:
                 payload["note"] = (
                     "no records matched — before telling the user a record is "
                     "absent, loosen the search: drop the text criterion (e.g. "
