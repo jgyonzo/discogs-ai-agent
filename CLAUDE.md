@@ -1,24 +1,42 @@
 <!-- SPECKIT START -->
-Active feature: **016-frontend-plot-layout** (branch
-`016-frontend-plot-layout`) — small frontend polish spanning two
-components. (US1) Rebalance the wide three-column layout in
-`frontend/src/App.tsx` so the result/chart column is the widest and
-the conversation is a bit narrower (keeping a usable minimum width);
-mobile stacking unchanged. (US2) Legends below the plot — the chart is
-opaque Plotly HTML in a sandboxed iframe, so this is an agent-side
-change: a `fig.update_layout(legend=dict(orientation="h", ...))` line
+Active feature: **017-discogs-collection-agent** (branch
+`017-discogs-collection-agent`) — a terminal/CLI conversational agent
+over the owner's **live Discogs collection** (personal access token),
+grown inside the existing `collection-agent/` directory (promoted from
+script experiment to a `src/` layout with its own `pyproject.toml` +
+tests; the offline matcher scripts move mechanically to a sibling
+package `src/collection_matcher/` as a separate commit — zero behavior
+change, no imports between the two packages).
+Architecture: OpenAI **tool-calling loop over deterministic tools** —
+no LangGraph, no codegen, no sandbox, no DuckDB. Two-phase sync
+(collection pages → per-release enrichment, journaled + resumable,
+header-driven rate-limit governor) into a local JSON snapshot at
+`collection-agent/data/snapshot.json` (gitignored;
+complete/partial/stale states). Analytics/filter/link answers are
+served from the snapshot at conversational speed; a **declarative
+attribute registry** (`registry.py`) makes filters+aggregations
+extensible by declaration and is rendered into the system prompt
+dynamically (VII(b) analog — no static attribute prose). Writes
+(move-to-folder, create-folder) are **live-only and runtime-gated**:
+LLM can only `propose_moves`; the CLI itself prompts y/N and only
+then executes with per-item live re-validation. Clarified decisions:
+CLI surface; snapshot model; top-rated = community avg (vote count
+shown); analytics count **instances**; scale target 300–1k records.
+Key facts: Discogs 60 req/min authenticated; unique User-Agent
+required; token via `.env` `DISCOGS_USER_TOKEN`. Spec + plan +
+Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
+`plan.md`, `research.md`, `data-model.md`, `quickstart.md`,
+`contracts/discogs-consumption.md`, `contracts/snapshot-schema.md`,
+`contracts/agent-tools.md`). API reference:
+`docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
+explicitly out of scope.
+
+Prior feature: **016-frontend-plot-layout** — frontend polish: widened
+result/chart column in `frontend/src/App.tsx`, horizontal legend line
 added to the canonical code shape in
-`agent/src/discogs_agent/prompts/code_generator.md`. (US3) Copy buttons
-for the full run id and thread id badges in
-`frontend/src/components/RunMetadata.tsx` (copies untruncated value,
-transient "copied" state, keyboard/a11y, graceful clipboard failure).
-No API/persistence/schema/DuckDB-contract changes; no new deps
-(`lucide-react`, `clsx` already present); iframe sandbox unchanged.
-Constitution Check passes (VI components named, VII(b) is styling not
-schema prose). Plan + Phase-1 artifacts:
-`specs/016-frontend-plot-layout/` (`plan.md`, `research.md`,
-`data-model.md`, `quickstart.md`,
-`contracts/frontend-layout.md`, `contracts/chart-legend.md`).
+`agent/src/discogs_agent/prompts/code_generator.md`, copy buttons for
+run/thread id badges in `frontend/src/components/RunMetadata.tsx`.
+Artifacts: `specs/016-frontend-plot-layout/`.
 
 Prior feature: **008-agent-frontend-v1** — Demo Day frontend. A
 React + Vite + TypeScript single-page app that turns the existing
