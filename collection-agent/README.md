@@ -16,9 +16,9 @@ streaming-link enrichment are deliberately out of scope for now.
 
 | Path | What it is |
 |---|---|
-| `matcher.py` | Fuzzy matcher: normalize `(artist, title)`, Jaro-Winkler scoring in DuckDB, top-K candidates with a per-field score breakdown. Scores both a *structured* (artist-vs-artist + title-vs-title) and a *combined* (whole query vs `artist + title`) view and keeps the higher — so rows written without a clean separator still match. `vinyl_only=True` restricts to vinyl pressings (right default for a record crate). |
-| `review_batch.py` | Run one batch through the matcher and print a confidence-sorted review queue to the terminal. Quick look, no files written. |
-| `export_batch.py` | Run one batch and write `data/<batch>_review.csv` — one row per disc with Discogs URLs, alternate candidates, and a `confirmed` column to fill in. |
+| `src/collection_matcher/matcher.py` | Fuzzy matcher: normalize `(artist, title)`, Jaro-Winkler scoring in DuckDB, top-K candidates with a per-field score breakdown. Scores both a *structured* (artist-vs-artist + title-vs-title) and a *combined* (whole query vs `artist + title`) view and keeps the higher — so rows written without a clean separator still match. `vinyl_only=True` restricts to vinyl pressings (right default for a record crate). |
+| `src/collection_matcher/review_batch.py` | Run one batch through the matcher and print a confidence-sorted review queue to the terminal. Quick look, no files written. |
+| `src/collection_matcher/export_batch.py` | Run one batch and write `data/<batch>_review.csv` — one row per disc with Discogs URLs, alternate candidates, and a `confirmed` column to fill in. |
 | `notebooks/01_matcher_experiments.ipynb` | Experiment: messy-input demo, a ground-truth accuracy eval (corrupt known releases, measure top-1/top-5 hit rate), and a disambiguation deep-dive. |
 | `data/sample_batches.csv` | A small DJ-style messy input to play with. |
 | `requirements.txt` | Notebook + script deps. |
@@ -69,7 +69,9 @@ If it's missing, run the ETL first — see the repo `README.md` §Quickstart.
 **Review a batch in the terminal** (nothing written):
 
 ```bash
-.venv/bin/python collection-agent/review_batch.py Lote-Feb
+# from collection-agent/ (or add collection-agent/src to PYTHONPATH from repo root)
+cd collection-agent
+PYTHONPATH=src ../.venv/bin/python -m collection_matcher.review_batch Lote-Feb
 ```
 
 Prints a queue sorted worst-confidence-first, with a high-confidence count
@@ -78,9 +80,13 @@ Prints a queue sorted worst-confidence-first, with a high-confidence count
 **Export a batch to a review CSV** for clicking through on Discogs:
 
 ```bash
-.venv/bin/python collection-agent/export_batch.py Lote-Feb
+cd collection-agent
+PYTHONPATH=src ../.venv/bin/python -m collection_matcher.export_batch Lote-Feb
 # -> collection-agent/data/Lote-Feb_review.csv
 ```
+
+(Once the component's `pyproject.toml` lands — next step in feature 017 —
+`pip install -e .` makes the `PYTHONPATH=src` prefix unnecessary.)
 
 Columns in the exported CSV:
 

@@ -1,7 +1,7 @@
 """Run one batch from pending_discogs.csv through the matcher and print a
 review queue (worst-confidence first) plus the top candidates per row.
 
-Usage: .venv/bin/python collection-agent/review_batch.py Lote-Feb
+Usage (from collection-agent/): python -m collection_matcher.review_batch Lote-Feb
 """
 
 from __future__ import annotations
@@ -11,10 +11,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from matcher import Matcher, split_artist_title
+from collection_matcher.matcher import Matcher, split_artist_title
 
-HERE = Path(__file__).resolve().parent
-PENDING = HERE / "data" / "pending_discogs.csv"
+# component root = collection-agent/ (this file lives in src/collection_matcher/)
+COMPONENT_ROOT = Path(__file__).resolve().parents[2]
+PENDING = COMPONENT_ROOT / "data" / "pending_discogs.csv"
 
 pd.set_option("display.max_colwidth", 40)
 pd.set_option("display.width", 200)
