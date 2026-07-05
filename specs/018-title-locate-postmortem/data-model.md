@@ -68,6 +68,16 @@ The `note` string on a zero-match listing becomes criterion-aware:
 
 Payload shape unchanged — `note` stays a string; no new fields.
 
+## 2b. Kind-aware default op (`filter_records`, FR-010)
+
+`FilterCriterion.op` defaults to `eq`. When the criterion's attribute
+resolves to a **text-kind** spec and the caller did not explicitly set
+`op` (pydantic `model_fields_set` check), the effective op becomes
+`contains`; an explicit `op="eq"` is honored. `criteria_applied` reports
+the effective op. Replay evidence: the assistant frequently omits `op`
+entirely, and `title eq "<phrase>"` recreates the false-absence failure
+deterministically.
+
 ## 3. Unchanged entities (for reviewer orientation)
 
 - `CollectionRecord.title: str` — already synced and displayed in every

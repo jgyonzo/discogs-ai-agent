@@ -110,6 +110,9 @@ zero-match note), and narrating found records as "related".
 - [ ] T013 [US2] Make the zero-match note retry-aware in `collection-agent/src/collection_agent/tools/browse.py` per data-model §2a (criterion-kind check on the resolved specs; `note` stays a string; no payload-shape change)
 - [ ] T014 [US2] Sharpen the "Locating a specific record" section in `collection-agent/src/collection_agent/prompts/system.md` with rules 5–6 from data-model §2 (contains-never-eq + short distinctive substring; affirm near-matches as THE record, never "related")
 - [ ] T015 Run full suite (`cd collection-agent && pytest`) and re-replay the batch incident query live per quickstart.md — zero false "not in your collection" answers and affirmative narration for near-matches
+- [ ] T016 [US2] Add failing tests in `collection-agent/tests/unit/test_filters.py` for FR-010: a `title` criterion with omitted `op` behaves as `contains` (and `criteria_applied` reports `contains`); an explicit `op="eq"` on `title` stays exact
+- [ ] T017 [US2] Implement the kind-aware default op in `collection-agent/src/collection_agent/tools/browse.py` per data-model §2b (`model_fields_set` check; text-kind → effective op `contains`); update the `FilterCriterion.op` field description so the LLM sees the kind-aware default
+- [ ] T018 Re-run full suite + live batch replay (supersedes T015's replay if executed together)
 
 ---
 

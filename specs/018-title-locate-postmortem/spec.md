@@ -184,6 +184,13 @@ the incident queries.
   differs from the user's phrasing only by suffixes ("EP"), casing,
   accents, or extra words IS the requested record and MUST be affirmed as
   found — never presented as merely "related" or "similar".
+- **FR-010**: When a filter criterion on a text-kind attribute is given
+  without an explicit operator, the listing capability MUST default it to
+  substring matching (`contains`), not exact matching — an explicitly
+  requested exact match is honored unchanged. Rationale: in replays the
+  assistant frequently omits the operator; a text criterion silently
+  defaulting to exact matching recreates the false-absence failure no
+  matter what the standing instructions say.
 - **FR-009**: When a record listing with at least one text-kind criterion
   (e.g. title) matches zero records, the listing tool's zero-match note
   MUST itself instruct the assistant to loosen the search (drop the text

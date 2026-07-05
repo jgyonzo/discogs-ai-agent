@@ -67,6 +67,15 @@ note must therefore point toward the presence-check retry, not toward an
 immediate "not found" answer. Payload shape is unchanged (`note` remains a
 string; no new fields).
 
+## Delta 4 — text criteria default to `contains` (FR-010)
+
+`filter_records` criteria whose attribute is text-kind and whose `op` was
+**omitted** by the caller default to `contains` instead of the schema-wide
+`eq` default; an explicitly passed `op` (including `eq`) is honored, and
+`criteria_applied` discloses the effective op. Replay evidence
+(2026-07-05): the LLM frequently omits `op`, and a silent `eq` default on
+title recreates the false-absence failure regardless of prompt guidance.
+
 ## Compatibility
 
 - Additive only: no existing attribute, op, tool signature, or payload
