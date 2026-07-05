@@ -2,23 +2,44 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 018-title-locate-postmortem** (branch
-`018-title-locate-postmortem`) — postmortem fix for the 2026-07-05
-incident where the collection agent falsely answered "not in your
-collection" for records it has synced ("Focus On Guido Schneider",
-"Gone Astray EP"). Root cause: no `title` attribute in the declarative
-registry + the LLM passing `limit=1` on locate-one-record listings, so
-the target title hid behind truncation. Fix (collection-agent only):
-one `title` text-kind `AttributeSpec` in `registry.py` (SC-003a — no
-tool-code edits) + procedural "locating a specific record" guidance in
-`prompts/system.md` (artist + title-contains, strip format noise like
-"2xLP", no small limits on presence checks, artist-only retry before
-declaring absence; fuzzy matching and `media_links` changes out of
-scope). Plan: `specs/018-title-locate-postmortem/plan.md`; contract
-delta: `specs/018-title-locate-postmortem/contracts/amendment-017-agent-tools.md`.
+**No feature is currently in flight.** Most recently merged:
+**018-title-locate-postmortem** (PR #5, merged to main 2026-07-05) —
+postmortem fix for the same-day incident where the collection agent
+falsely answered "not in your collection" for records it has synced
+("Focus On Guido Schneider", "Gone Astray EP"). Root cause: no `title`
+attribute in the declarative registry + the LLM passing `limit=1` on
+locate-one-record listings, so the target title hid behind truncation.
+Fix (collection-agent only), a five-layer escalation ladder — each
+layer added after a live replay showed the previous one insufficient:
+(1) one `title` text-kind `AttributeSpec` in `registry.py` (SC-003a
+held — no tool-code edits for the attribute); (2) procedural "Locating
+a specific record" guidance in `prompts/system.md` (artist +
+title-contains on a short distinctive substring, strip format noise
+like "2xLP", no small limits on presence checks, affirm near-matches
+as THE record); (3) FR-009 retry-aware zero-match note in
+`tools/browse.py` (the plain anti-hallucination note was steering the
+LLM away from the retry at the decision point); (4) FR-010 `contains`
+as the effective default op for text-kind criteria when the LLM omits
+`op` (pydantic `model_fields_set` check; explicit `eq` honored) — the
+biggest single win; (5) FR-011 deterministic `fallback_matches` +
+`fallback_count`: on a zero-match with text + non-text criteria,
+`filter_records` itself re-runs the non-text criteria so near-miss
+titles land in the payload (013→014 precedent: prompt steering →
+deterministic enforcement); session last-listing points at the
+fallback. Fuzzy/edit-distance matching and `media_links` stayed out of
+scope. 131 tests (`cd collection-agent && pytest`). Artifacts:
+`specs/018-title-locate-postmortem/` (spec with two replay-postmortem
+addenda, plan, research, data-model, quickstart, tasks T001–T021,
+contract deltas 1–5 in `contracts/amendment-017-agent-tools.md`,
+amending 017's agent-tools §3).
+**Known follow-up (019 candidate, unscheduled):** during replays the
+LLM invented Discogs URLs from listing `instance_id`s
+(`discogs.com/release/<instance_id>` — wrong id space), violating
+system-prompt ground rule 1 (links only from `media_links`). Fix
+direction: make the listing payload's id non-linkable-looking or carry
+a real tool-provided URL.
 
-Most recently merged:
-**017-discogs-collection-agent** (PR #3, merged to main
+Prior feature: **017-discogs-collection-agent** (PR #3, merged to main
 2026-07-05) — a terminal/CLI conversational agent
 over the owner's **live Discogs collection** (personal access token),
 grown inside the existing `collection-agent/` directory (promoted from
@@ -49,8 +70,8 @@ Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
 `contracts/agent-tools.md`). API reference:
 `docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
 explicitly out of scope. Component runbook:
-`collection-agent/README.md`; ~106 tests (`cd collection-agent &&
-pytest`), no live API calls.
+`collection-agent/README.md`; ~106 tests at merge — 131 after 018
+(`cd collection-agent && pytest`), no live API calls.
 
 Prior feature: **016-frontend-plot-layout** — frontend polish: widened
 result/chart column in `frontend/src/App.tsx`, horizontal legend line
