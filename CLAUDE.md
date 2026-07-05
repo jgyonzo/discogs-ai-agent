@@ -1,6 +1,10 @@
 <!-- SPECKIT START -->
-Active feature: **017-discogs-collection-agent** (branch
-`017-discogs-collection-agent`) — a terminal/CLI conversational agent
+Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
+(renamed from `discogs-analytics-agent` on 2026-07-05).
+
+**No feature is currently in flight.** Most recently merged:
+**017-discogs-collection-agent** (PR #3, merged to main
+2026-07-05) — a terminal/CLI conversational agent
 over the owner's **live Discogs collection** (personal access token),
 grown inside the existing `collection-agent/` directory (promoted from
 script experiment to a `src/` layout with its own `pyproject.toml` +
@@ -29,7 +33,9 @@ Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
 `contracts/discogs-consumption.md`, `contracts/snapshot-schema.md`,
 `contracts/agent-tools.md`). API reference:
 `docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
-explicitly out of scope.
+explicitly out of scope. Component runbook:
+`collection-agent/README.md`; ~106 tests (`cd collection-agent &&
+pytest`), no live API calls.
 
 Prior feature: **016-frontend-plot-layout** — frontend polish: widened
 result/chart column in `frontend/src/App.tsx`, horizontal legend line
@@ -69,17 +75,14 @@ Read this feature's plan and its phase-1 artifacts:
     their spread coverage requirement
 - Quickstart: `specs/008-agent-frontend-v1/quickstart.md`
 
-Status: phases 1+2+3 (US1 MVP), phase 4 (US2 curated questions),
-phase 5 (US3 multi-turn + reset), and phase 6 (US4 — SQL viewer
-+ data preview + run metadata) all merged on the branch
-`008-agent-frontend-v1`. Remaining: phase 7 (US5 — Docker compose
-service), phase 8 (Polish). The branch was rebased over `main`
-on 2026-05-07 to pull in 009's schema-context join-graph fix,
-and again on 2026-05-08 to pull in 010's JSONB NaN sanitization
-fix.
+Status: phases 1 through 7 are on `main` (the frontend runs as a
+service in `docker-compose.yml`). Phase 8 (Polish) is unfinished:
+tasks T054–T058 in `specs/008-agent-frontend-v1/tasks.md` remain
+unchecked (typecheck/test gates, no-db-deps guard, no-unsafe-html
+guard, empty-state copy).
 
-In-flight follow-on (current): **`015-classifier-carryover`**
-(branch `015-classifier-carryover`) — agent-side hardening
+Prior feature: **`015-classifier-carryover`** (merged to main
+2026-05-11) — agent-side hardening
 triggered by thread `9214f7fb-...` on 2026-05-11, where two
 short follow-up questions ("and what is the second one?" and
 "and the top 5?") were rejected as `clarification_needed`
@@ -204,13 +207,12 @@ Resolved scope decisions still in force:
   `["http://localhost:5173", "http://localhost:3000"]`,
   `allow_credentials = False`.
 
-Constitution: `.specify/memory/constitution.md` (v1.2.0). 008 does
-**NOT** require a constitution amendment to begin. The plan does
-recommend a follow-up **PATCH** amendment (Principle VI's prose
-"two independently deployable components" → "two or more") to be
-landed after 008 merges; the operational rules of Principle VI
-already accommodate a third component. See plan §"Constitution
-amendment recommendation".
+Constitution: `.specify/memory/constitution.md` (v1.2.1, amended
+2026-07-05). The PATCH amendment recommended by 008's plan and
+re-recommended by 017's plan **has landed**: Principle VI is now
+"Components & Contracts" — "two or more independently deployable
+components", listing all four (`etl/`, `agent/`, `frontend/`,
+`collection-agent/`); its operational rules are unchanged.
 
 The constitution prevails on any conflict.
 <!-- SPECKIT END -->

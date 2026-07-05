@@ -1,8 +1,10 @@
-# Discogs Analytics Agent
+# Discogs AI Agent
 
-A three-component system that turns the public [Discogs](https://www.discogs.com)
-XML dumps into a queryable analytics surface, lets you ask natural-language
-questions over it, and serves the answers in a browser.
+AI agents over [Discogs](https://www.discogs.com) data, in two shapes: a
+**catalog analytics stack** that turns the public Discogs XML dumps into a
+queryable analytics surface with a natural-language agent and a browser UI,
+and a standalone **personal collection agent** — a terminal conversation
+over the owner's live Discogs collection. Four components:
 
 - **`etl/`** — local-first batch tool. Streams the monthly Discogs
   `releases.xml` / `masters.xml` / `artists.xml` dumps, materializes
@@ -17,19 +19,30 @@ questions over it, and serves the answers in a browser.
   data preview + run metadata inline. Runs as a service in
   `docker-compose.yml` alongside the agent. Never touches DuckDB,
   Postgres, or local data files directly.
+- **`collection-agent/`** — terminal conversational agent over the
+  owner's **live Discogs collection** (personal access token). Two-phase
+  resumable sync into a local JSON snapshot; analytics, filtered
+  listings, and media links answered instantly from the snapshot; folder
+  moves execute live and only after the CLI itself asks for confirmation
+  (the LLM can only *propose*). Also hosts `collection_matcher`, an
+  offline batch matcher (messy DJ record lists → confident Discogs
+  matches against the published DuckDB).
 
-The components meet at **two contract boundaries, and nowhere else**:
+The components meet at **explicit contract boundaries, and nowhere else**:
 
-- **`etl` ↔ `agent`** — coupled only through the published DuckDB and the
-  contracts in `specs/001-discogs-etl/contracts/duckdb-schema.md` and
-  `specs/003-masters-artists/contracts/duckdb-schema.md`. This boundary is
-  governed by Principle VI ("Two Components, One Contract") of the project
-  constitution at
+- **`etl` ↔ readers of the catalog** — coupled only through the published
+  DuckDB and the contracts in
+  `specs/001-discogs-etl/contracts/duckdb-schema.md` and
+  `specs/003-masters-artists/contracts/duckdb-schema.md`. Consumed by
+  `agent` and (read-only, offline) by `collection_matcher`. This boundary
+  is governed by Principle VI of the project constitution at
   [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 - **`frontend` ↔ `agent`** — coupled only through the agent's HTTP API plus a
-  single CORS allowance (`http://localhost:5173`). The frontend was added as a
-  third component on top of this contract; the matching PATCH amendment to
-  Principle VI's prose is tracked as a follow-up.
+  single CORS allowance (`http://localhost:5173`).
+- **`collection-agent` ↔ everything else** — nothing. It talks to the live
+  Discogs API and its own local snapshot; it imports no code from, and needs
+  no process of, any other component (statically enforced by
+  `collection-agent/tests/unit/test_no_cross_imports.py`).
 
 Each component has its own dependency manifest, its own test suite, and runs
 independently.
@@ -70,6 +83,14 @@ with retry edges from `sql_safety_checker` and `chart_validator` back
 to `code_generator`, capped at `MAX_RETRIES`. The compiled graph is
 checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 
+The **collection agent** sits outside this diagram entirely: a standalone
+terminal CLI (`sync` / `status` / `chat`) built as an OpenAI tool-calling
+loop over deterministic tools — no LangGraph, no codegen, no sandbox, no
+DuckDB. It syncs the owner's live Discogs collection into a local snapshot
+(`collection-agent/data/snapshot.json`, gitignored) and answers from it at
+conversational speed. See
+[`collection-agent/README.md`](collection-agent/README.md).
+
 ---
 
 ## Repository layout
@@ -79,6 +100,7 @@ checked in at [`agent/docs/graph.mmd`](agent/docs/graph.mmd).
 ├── etl/                  # ETL component (Python CLI, Parquet/DuckDB)
 ├── agent/                # Agent component (FastAPI + LangGraph + sandbox)
 ├── frontend/             # Frontend component (React + Vite + TypeScript SPA)
+├── collection-agent/     # Collection agent (terminal CLI over live Discogs) + offline matcher
 ├── specs/                # Spec Kit feature specs — one NNN-name dir per feature (SDD source of truth)
 ├── docs/                 # Original design notes (pre-Spec Kit)
 ├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
@@ -171,6 +193,27 @@ restart, admin endpoints, configuration knobs) lives in
 [`agent/README.md`](agent/README.md) and
 [`specs/004-agent-v1/quickstart.md`](specs/004-agent-v1/quickstart.md).
 
+### 5. Standalone: the collection agent
+
+Independent of steps 1–4 — needs no ETL run, no Docker. Requires a
+Discogs personal access token (`DISCOGS_USER_TOKEN`) and an
+`OPENAI_API_KEY` in the repo-root `.env`:
+
+```bash
+cd collection-agent
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+python -m collection_agent sync      # first sync: minutes-scale, resumable
+python -m collection_agent status    # snapshot age / completeness / counts / value
+python -m collection_agent chat      # converse over your collection
+```
+
+Runbook and environment variables:
+[`collection-agent/README.md`](collection-agent/README.md); full
+walkthrough:
+[`specs/017-discogs-collection-agent/quickstart.md`](specs/017-discogs-collection-agent/quickstart.md).
+
 ---
 
 ## Development model
@@ -181,7 +224,7 @@ the Spec Kit cycle (`/speckit-specify` → `/speckit-clarify` →
 non-trivial change goes through a feature spec under `specs/`.
 
 - **Constitution** — [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
-  (v1.2.0). The constitution prevails on any conflict with this
+  (v1.2.1). The constitution prevails on any conflict with this
   README, with `CLAUDE.md`, or with a feature plan.
 - **Active feature** — pinned in `.specify/feature.json`. CLAUDE.md
   always points at the currently in-flight feature.
@@ -224,10 +267,14 @@ cd agent && pytest tests/golden/
 
 # Agent — docker-compose smoke (gated, burns OpenAI credit)
 cd agent && AGENT_DOCKER_SMOKE=1 pytest tests/integration/test_docker_smoke.py
+
+# Collection agent — unit + integration (~106 tests, no live API calls)
+cd collection-agent && pytest
 ```
 
 Component-specific test details live in
-[`etl/README.md`](etl/README.md) and [`agent/README.md`](agent/README.md).
+[`etl/README.md`](etl/README.md), [`agent/README.md`](agent/README.md),
+and [`collection-agent/README.md`](collection-agent/README.md).
 
 ---
 
@@ -240,6 +287,8 @@ Component-specific test details live in
   nginx serving a static bundle). V1 ships the dev-server inside
   the container — see `specs/008-agent-frontend-v1/research.md` §R1.
 - MCP wrappers; RAG; multi-tenant auth.
+- Collection-agent v2 (YouTube playlists / search enrichment) — explicitly
+  out of scope for 017.
 - `artist_dim` table in DuckDB (`clean_artists.parquet` is produced
   as foundation; surfacing waits on a future spec).
 - `release_genre_bridge`, `company_bridge`, and a `master_id` denorm
