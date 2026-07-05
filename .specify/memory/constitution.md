@@ -1,18 +1,21 @@
 <!--
 SYNC IMPACT REPORT
-- Version change: 1.1.0 → 1.2.0
-- Bump rationale: Added Principle VII ("Implementation Discipline") with
-  three sub-rules — (a) Configuration sources, (b) Prompt-authoring
-  discipline, (c) Read-only runtime mechanics. Each codifies a recurring
-  silent-failure mode that surfaced during 005-agent-schema-context and
-  was post-mortemed in 006-bugfix-postmortem. Updated workflow/governance
-  references from "Principles I–VII" to "Principles I–VIII". MINOR per the
-  constitution's own policy (new principle added; no existing principle
-  redefined or removed).
+- Version change: 1.2.0 → 1.2.1
+- Bump rationale: PATCH — wording only. Principle VI's prose said the
+  repository hosts "two independently deployable components"; the repo
+  has hosted four since 017-discogs-collection-agent merged (etl, agent,
+  frontend, collection-agent). This amendment was recommended by 008's
+  plan ("two" → "two or more") and re-recommended by 017's plan; the
+  principle's operational rules already accommodated additional
+  components, so no rule changes — the prose and the component list are
+  brought up to date, and the Repository layout constraint drops the
+  stale "working names etl/ and agent/" parenthetical. No principle
+  added, removed, or redefined.
 - Modified principles:
-  * (none redefined. Principle VII added.)
-- Added sections:
-  * Core Principles → VII. Implementation Discipline
+  * VI. Components & Contracts (renamed from "Two Components, One
+    Contract"; rules unchanged — component list updated to four,
+    coupling rules restated component-neutrally)
+- Added sections: none
 - Removed sections: none
 - Templates requiring updates:
   * .specify/templates/plan-template.md          ✅ aligned (Constitution
@@ -21,7 +24,11 @@ SYNC IMPACT REPORT
   * .specify/templates/tasks-template.md         ✅ aligned
   * .specify/templates/checklist-template.md     ✅ aligned
   * CLAUDE.md                                    ✅ aligned
+  * README.md                                    ✅ aligned (four-component
+    description + v1.2.1 reference)
 - Prior history:
+  * 1.2.0 (2026-05-04) — added Principle VII (Implementation Discipline)
+    after the 006-bugfix-postmortem.
   * 1.1.0 (2026-04-25) — added Principle VI (Two Components, One Contract)
     and expanded Technical Constraints.
   * 1.0.0 (2026-04-25) — first ratified constitution; Principles I–V plus
@@ -111,24 +118,34 @@ extra table, every inconsistent name, every implicit grain change is a place
 where the LLM hallucinates or miscounts. Surface minimalism is a correctness
 property, not a stylistic one.
 
-### VI. Two Components, One Contract
+### VI. Components & Contracts
 
-This repository hosts two independently deployable components:
+This repository hosts two or more independently deployable components —
+four as of 017-discogs-collection-agent:
 
 - **`etl`** — a local-first batch tool that produces the published DuckDB
   artifact from Discogs XML dumps. Runs on a developer laptop.
 - **`agent`** — a containerized analytics agent service that answers
   natural-language questions over the published DuckDB. Targets AWS for
   deployment.
+- **`frontend`** — a browser SPA (added by 008) coupled to `agent` only
+  through the agent's HTTP API plus a single CORS allowance. Never touches
+  DuckDB, Postgres, or local data files.
+- **`collection-agent`** — a terminal conversational agent over the owner's
+  live Discogs collection (added by 017). Coupled to no other component:
+  it consumes the live Discogs API and a component-local snapshot. Its
+  offline sibling package `collection_matcher` reads the published DuckDB
+  read-only under the same table contracts as `agent`.
 
-The two components are coupled **only** through the published DuckDB artifact
-and the table contracts described in Principle V. Specifically:
+Components are coupled **only** through explicitly documented contracts —
+the published DuckDB artifact and the table contracts of Principle V for
+everything that reads the catalog, and the agent's HTTP API (+ CORS
+allowance) for `frontend` ↔ `agent`. Specifically:
 
-- The agent MUST consume DuckDB tables/views. It MUST NOT read raw XML,
-  staging Parquet, or clean Parquet directly.
-- The agent MUST NOT import code from the ETL package, and the ETL MUST NOT
-  import code from the agent package. Each component MUST run end-to-end
-  without the other component's process.
+- A consumer of the published DuckDB MUST consume tables/views. It MUST
+  NOT read raw XML, staging Parquet, or clean Parquet directly.
+- No component may import code from another component's package. Each
+  component MUST run end-to-end without any other component's process.
 - Each component MUST live under its own top-level directory with its own
   dependency manifest (e.g., its own `pyproject.toml` / `requirements.txt`).
   Shared utilities, if introduced later, MUST be justified rather than
@@ -136,15 +153,15 @@ and the table contracts described in Principle V. Specifically:
   through cross-component imports.
 - A change that alters the DuckDB schema is a cross-component change and
   MUST follow Principle I (contract-first): update the contract, the
-  producer (ETL), the consumer (agent), and the relevant DQ checks within
-  the same change set.
+  producer (ETL), every consumer (agent, `collection_matcher`), and the
+  relevant DQ checks within the same change set.
 
-**Rationale:** The two components have fundamentally different runtime
-shapes — slow batch on a laptop vs. an online container on AWS. Conflating
-them would force one runtime's constraints onto the other and would couple
-deploy cycles that have no reason to be coupled. Treating the published
-DuckDB as the only contact surface keeps both components free to evolve
-within their own envelope.
+**Rationale:** The components have fundamentally different runtime shapes —
+slow batch on a laptop, an online container targeting AWS, a browser SPA,
+an interactive terminal CLI. Conflating them would force one runtime's
+constraints onto the others and would couple deploy cycles that have no
+reason to be coupled. Treating the documented contract surfaces as the only
+contact points keeps every component free to evolve within its own envelope.
 
 ### VII. Implementation Discipline
 
@@ -240,9 +257,8 @@ not stylistic preferences.
 ### Repository layout
 
 - The repo is a monorepo. Each component lives under its own top-level
-  directory (working names `etl/` and `agent/`; final names confirmed at
-  the first `/speckit-specify` for each component). Each directory owns
-  its dependency manifest, its tests, and its packaging.
+  directory (`etl/`, `agent/`, `frontend/`, `collection-agent/`). Each
+  directory owns its dependency manifest, its tests, and its packaging.
 - `data/` (raw, staging, clean, analytics, published, manifests, logs) is
   shared between components but is gitignored except for any small
   fixtures explicitly added under e.g. `tests/fixtures/`.
@@ -317,4 +333,4 @@ lives in `CLAUDE.md` and the active feature plan under `specs/<feature>/`.
 Those documents MUST be consistent with this constitution; on conflict, this
 constitution prevails.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-25 | **Last Amended**: 2026-05-04
+**Version**: 1.2.1 | **Ratified**: 2026-04-25 | **Last Amended**: 2026-07-05
