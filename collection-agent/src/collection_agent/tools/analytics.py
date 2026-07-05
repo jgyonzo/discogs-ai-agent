@@ -50,8 +50,12 @@ def _display(rec: CollectionRecord) -> dict[str, Any]:
     }
 
 
-def make_analytics_tools(settings: Settings, store: SnapshotStore) -> list[ToolDef]:
-    registry = build_registry(settings)
+def make_analytics_tools(
+    settings: Settings,
+    store: SnapshotStore,
+    registry: AttributeRegistry | None = None,
+) -> list[ToolDef]:
+    registry = registry or build_registry(settings)
 
     # -- aggregate_by ----------------------------------------------------------
 

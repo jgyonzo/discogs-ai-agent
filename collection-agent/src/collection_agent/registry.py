@@ -41,6 +41,7 @@ class AttributeSpec:
     multi: bool = False  # multi-valued per record (genre, label, format…)
     unknown_label: str = "unknown"
     description: str = ""  # one-liner for the prompt's attribute block
+    normalize_value: Callable[[str], str] | None = None  # user value → canonical
 
     @property
     def ops(self) -> tuple[str, ...]:
@@ -74,7 +75,76 @@ class AttributeRegistry:
         return self.resolve(name) is not None
 
 
+# --- filter matching (contracts/agent-tools.md §3; FR-011/012/013) -------------
+
+
+class UnsupportedOp(ValueError):
+    pass
+
+
+def matches(spec: AttributeSpec, record: CollectionRecord, op: str, value: Any) -> bool:
+    """Kind-appropriate match of one record against one criterion.
+    Multi-valued attributes match if ANY value matches. Records with a
+    missing attribute only match the numeric `missing` op."""
+    if op not in spec.ops:
+        raise UnsupportedOp(f"op {op!r} not valid for {spec.kind} attribute {spec.name!r}")
+
+    extracted = spec.extract(record)
+    if op == "missing":
+        return extracted is None
+    if extracted is None or extracted == []:
+        return False
+    values = extracted if isinstance(extracted, list) else [extracted]
+
+    if spec.kind == "categorical":
+        norm = spec.normalize_value or (lambda s: s)
+        if op == "eq":
+            target = fold(norm(str(value)))
+            return any(fold(str(v)) == target for v in values)
+        if op == "in":
+            targets = {fold(norm(str(t))) for t in (value if isinstance(value, list) else [value])}
+            return any(fold(str(v)) in targets for v in values)
+
+    elif spec.kind == "numeric":
+        try:
+            if op == "between":
+                lo, hi = (float(value[0]), float(value[1]))
+                return any(lo <= float(v) <= hi for v in values)
+            target = float(value)
+        except (TypeError, ValueError, IndexError):
+            raise UnsupportedOp(f"value {value!r} is not numeric for {spec.name!r}")
+        cmp = {
+            "eq": lambda v: v == target,
+            "lt": lambda v: v < target,
+            "lte": lambda v: v <= target,
+            "gt": lambda v: v > target,
+            "gte": lambda v: v >= target,
+        }[op]
+        return any(cmp(float(v)) for v in values)
+
+    elif spec.kind == "text":
+        if op == "contains":
+            return any(fold(str(value)) in fold(str(v)) for v in values)
+        if op == "eq":
+            return any(fold(str(v)) == fold(str(value)) for v in values)
+
+    raise UnsupportedOp(f"unhandled op {op!r} for kind {spec.kind!r}")
+
+
 # --- derived extractors -------------------------------------------------------
+
+
+def _normalize_decade_value(raw: str) -> str:
+    """'90s' / 'the 90s' / 'los 90' / '1990' / '1990s' → '1990s'."""
+    import re as _re
+
+    m = _re.search(r"(\d{2,4})", raw)
+    if not m:
+        return raw
+    n = int(m.group(1))
+    if n < 100:  # two-digit decade: 20s–90s → 1920s–1990s; 00s/10s → 2000s/2010s
+        n += 1900 if n >= 20 else 2000
+    return f"{(n // 10) * 10}s"
 
 
 def _decade(rec: CollectionRecord) -> str | None:
@@ -134,7 +204,8 @@ def build_registry(settings: Settings) -> AttributeRegistry:
             "decade", ("década", "decada", "decades", "décadas", "decadas"),
             "categorical", _decade,
             unknown_label="unknown decade",
-            description='release decade derived from year ("1990s")',
+            description='release decade derived from year ("1990s"; accepts "90s", "los 90")',
+            normalize_value=_normalize_decade_value,
         ),
         AttributeSpec(
             "label", ("sello", "sellos", "labels", "discográfica", "discografica"),
