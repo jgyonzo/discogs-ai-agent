@@ -23,7 +23,29 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `COLLECTION_AGENT_MODEL` | no | `gpt-4o-mini` | OpenAI model id |
 | `SNAPSHOT_PATH` | no | `collection-agent/data/snapshot.json` | Snapshot location |
 
-Quickstart: `specs/017-discogs-collection-agent/quickstart.md`.
+## Run the agent
+
+```bash
+cd collection-agent
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+python -m collection_agent sync      # first sync: minutes-scale, resumable (Ctrl-C safe)
+python -m collection_agent status    # snapshot age / completeness / counts / value
+python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
+```
+
+Analytics, filtered listings, and media links are answered instantly from
+the local snapshot (`data/snapshot.json`, gitignored); moving records /
+creating folders executes **live** against Discogs and only after the CLI
+itself asks `¿Confirmás? [y/N]` — the LLM can only *propose* moves.
+
+Exit codes: `0` ok · `1` unexpected error · `2` configuration error
+(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
+
+Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md` ·
+API notes: `docs/discogs_api_reference.md` ·
+Tests: `pytest` (102 tests, no live API calls).
 
 ---
 

@@ -114,8 +114,8 @@
 
 ## Phase 7: Polish & cross-cutting
 
-- [ ] T035 [P] Rewrite `collection-agent/README.md` for the two-package component: matcher (moved paths, unchanged behavior) + conversational agent (setup → sync → chat, env vars, exit codes), linking `specs/017-discogs-collection-agent/quickstart.md` and `docs/discogs_api_reference.md`.
-- [ ] T036 [P] Secrets & log hygiene sweep: assert token never printed/logged (grep test or unit assertion on client logging paths), snapshot contains no credentials (snapshot-schema invariant 5), error messages never echo the token.
+- [x] T035 [P] Rewrite `collection-agent/README.md` for the two-package component: matcher (moved paths, unchanged behavior) + conversational agent (setup → sync → chat, env vars, exit codes), linking `specs/017-discogs-collection-agent/quickstart.md` and `docs/discogs_api_reference.md`.
+- [x] T036 [P] Secrets & log hygiene sweep: assert token never printed/logged (grep test or unit assertion on client logging paths), snapshot contains no credentials (snapshot-schema invariant 5), error messages never echo the token.
 - [ ] T037 Run the full quickstart.md validation walkthrough (§7 table) against the real account: sync bounds (SC-006), analytics reconciliation (SC-001/002), filter spot-checks (SC-003), links verbatim (SC-004), move+confirm on discogs.com (SC-005), groundedness/basis statements (SC-007). Record results in `specs/017-discogs-collection-agent/quickstart.md` notes or PR description.
 
 ---
