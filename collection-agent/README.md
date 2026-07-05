@@ -109,10 +109,9 @@ own `pending_discogs.csv`.
 
 ## Run it
 
-```bash
-# from repo root — installs into the existing .venv
-.venv/bin/python -m pip install -r collection-agent/requirements.txt
-```
+Installed together with the agent — `pip install -e ".[dev]"` inside
+`collection-agent/` (see "Run the agent" above) puts both
+`collection_agent` and `collection_matcher` on the path.
 
 Requires the published DuckDB to exist (`data/published/duckdb/discogs.duckdb`).
 If it's missing, run the ETL first — see the repo `README.md` §Quickstart.
@@ -120,9 +119,8 @@ If it's missing, run the ETL first — see the repo `README.md` §Quickstart.
 **Review a batch in the terminal** (nothing written):
 
 ```bash
-# from collection-agent/ (or add collection-agent/src to PYTHONPATH from repo root)
-cd collection-agent
-PYTHONPATH=src ../.venv/bin/python -m collection_matcher.review_batch Lote-Feb
+# from collection-agent/, with its .venv active
+python -m collection_matcher.review_batch Lote-Feb
 ```
 
 Prints a queue sorted worst-confidence-first, with a high-confidence count
@@ -131,13 +129,9 @@ Prints a queue sorted worst-confidence-first, with a high-confidence count
 **Export a batch to a review CSV** for clicking through on Discogs:
 
 ```bash
-cd collection-agent
-PYTHONPATH=src ../.venv/bin/python -m collection_matcher.export_batch Lote-Feb
+python -m collection_matcher.export_batch Lote-Feb
 # -> collection-agent/data/Lote-Feb_review.csv
 ```
-
-(Once the component's `pyproject.toml` lands — next step in feature 017 —
-`pip install -e .` makes the `PYTHONPATH=src` prefix unnecessary.)
 
 Columns in the exported CSV:
 
