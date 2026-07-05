@@ -78,6 +78,21 @@ the effective op. Replay evidence: the assistant frequently omits `op`
 entirely, and `title eq "<phrase>"` recreates the false-absence failure
 deterministically.
 
+## 2c. Deterministic fallback listing (`filter_records`, FR-011)
+
+On zero matches with ≥1 text-kind criterion **and** ≥1 non-text criterion:
+
+| Field | Value |
+|---|---|
+| `fallback_matches` | records matching the non-text criteria only, same display shape as `matches`, capped at the effective limit |
+| `fallback_count` | total records matching the non-text criteria (pre-cap) |
+| `note` | explains: the text criterion matched nothing; `fallback_matches` are the records matching the remaining criteria — inspect for a near-miss title and affirm it if it clearly is the requested record; only report absence if none fits; do not invent results |
+| session `last_listing_instance_ids` | set to the shown fallback records (enables "show me details", "their links" follow-ups) |
+
+Not emitted when: there are matches; there is no text criterion (plain
+FR-009/FR-013b notes apply); or there are no non-text criteria left
+(text-only search — whole-collection fallback would be noise).
+
 ## 3. Unchanged entities (for reviewer orientation)
 
 - `CollectionRecord.title: str` — already synced and displayed in every

@@ -76,6 +76,23 @@ string; no new fields).
 (2026-07-05): the LLM frequently omits `op`, and a silent `eq` default on
 title recreates the false-absence failure regardless of prompt guidance.
 
+## Delta 5 — deterministic fallback listing on text-criterion zero-match (FR-011)
+
+When `filter_records` matches zero records and the applied criteria
+include at least one text-kind criterion **and** at least one non-text
+criterion, the payload additionally carries `fallback_matches` (records
+matching the non-text criteria only, same display shape, capped at the
+effective limit) and `fallback_count`, with a note instructing the agent
+to inspect the fallback for a near-miss title before reporting absence.
+The session's last-listing refs point at the fallback records. Not
+emitted for text-only or non-text-only zero-matches.
+
+Rationale (second replay, 2026-07-05): the Delta-3 note improved but did
+not guarantee the agent's self-retry in batch turns; per the 013→014
+precedent the retry is promoted from steering to deterministic tool
+behavior. Additive: two new optional payload fields; existing fields and
+their semantics are unchanged.
+
 ## Compatibility
 
 - Additive only: no existing attribute, op, tool signature, or payload

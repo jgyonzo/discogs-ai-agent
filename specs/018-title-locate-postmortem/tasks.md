@@ -113,6 +113,9 @@ zero-match note), and narrating found records as "related".
 - [x] T016 [US2] Add failing tests in `collection-agent/tests/unit/test_filters.py` for FR-010: a `title` criterion with omitted `op` behaves as `contains` (and `criteria_applied` reports `contains`); an explicit `op="eq"` on `title` stays exact
 - [x] T017 [US2] Implement the kind-aware default op in `collection-agent/src/collection_agent/tools/browse.py` per data-model §2b (`model_fields_set` check; text-kind → effective op `contains`); update the `FilterCriterion.op` field description so the LLM sees the kind-aware default
 - [ ] T018 Re-run full suite + live batch replay (supersedes T015's replay if executed together)
+- [ ] T019 [US2] Add failing tests in `collection-agent/tests/unit/test_filters.py` for FR-011: zero-match artist+title returns `fallback_matches` (non-text criteria re-evaluated, display shape, capped) + `fallback_count`, note says to inspect for near-miss titles, session last-listing refs point at the fallback; no `fallback_matches` for text-only zero-match (loosen note stays) nor for non-text zero-match (plain note stays)
+- [ ] T020 [US2] Implement the deterministic fallback in `collection-agent/src/collection_agent/tools/browse.py` per data-model §2c; update rule 4 of the "Locating a specific record" section in `prompts/system.md` to reference `fallback_matches` (keeping the retry/artist-only phrasing)
+- [ ] T021 Re-run full suite + live batch replay — typo-class queries ("gone astral", "Espaco tempo") must surface their near-miss records deterministically in the tool payload and be answered without false absence
 
 ---
 

@@ -200,6 +200,20 @@ the incident queries.
   demonstrably obeys in-result notes over standing instructions at the
   zero-match decision point; the note must push toward the retry, not away
   from it.
+- **FR-011**: When a record listing with at least one text-kind criterion
+  AND at least one non-text criterion matches zero records, the listing
+  tool MUST itself re-evaluate the non-text criteria and return those
+  records as an explicitly-labeled fallback listing (with its own count and
+  the standard cap), so near-miss titles are present in the tool result and
+  the assistant never depends on choosing to re-query. The fallback listing
+  MUST be clearly distinguished from primary matches, MUST populate the
+  session's "last listing" for follow-ups, and MUST NOT fire when there are
+  no remaining criteria (a text-only search falling back to the whole
+  collection would be noise, not signal). Rationale (second replay,
+  2026-07-05): the FR-009 note improved but did not guarantee the retry —
+  in batch turns the assistant still sometimes answered "not found" and
+  merely *offered* to adjust the search; determinism follows the 013→014
+  escalation precedent (prompt steering → static enforcement).
 - **FR-007**: Records with a missing/empty title MUST simply not match any
   title criterion, without error.
 - **FR-008**: All pre-existing behavior MUST be preserved: every existing
