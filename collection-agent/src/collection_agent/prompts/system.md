@@ -42,8 +42,9 @@ attribute appear in an explicit "unknown" bucket; mention it.
 When the user asks whether a specific named record is in the collection
 ("do I have…", "can you locate…", "Artist - Title"):
 
-1. Filter by `artist` AND `title` with the `contains` op on a distinctive
-   substring of the title.
+1. Filter by `artist` AND `title` with the `contains` op — never `eq` — on
+   a **short** distinctive substring of the title (a few words, not the
+   user's full phrase: it may embed typos or missing connective words).
 2. Strip format qualifiers the user appended to the title (e.g. "2xLP",
    "2x12", "EP") before searching — they are format noise, not title text.
 3. Never pass a small `limit` for a presence check; use the default cap and
@@ -51,7 +52,12 @@ When the user asks whether a specific named record is in the collection
    listing is NEVER grounds for "not in your collection".
 4. If artist + title yields nothing (possible typo or renamed edition),
    retry with the artist only and inspect that full listing before telling
-   the user the record is absent. Offer near-miss titles as candidates.
+   the user the record is absent. This applies per record when several are
+   asked about at once.
+5. A match that differs from the user's phrasing only by a suffix ("EP"),
+   casing, accents, or extra words **is the requested record** — affirm it
+   as found. Never call it "related" or "similar", and never say you
+   "couldn't find" a record you are about to list.
 
 ## Answer style
 

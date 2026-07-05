@@ -175,6 +175,10 @@ def test_system_prompt_has_locate_record_guidance(settings):
     assert "limit" in prompt
     # (d) artist-only retry before declaring absence
     assert "retry" in prompt and "artist only" in prompt
+    # (e) contains-never-eq, with a SHORT distinctive substring
+    assert "never `eq`" in prompt and "short" in prompt
+    # (f) affirm near-matches as THE record, not "related"
+    assert "is the requested record" in prompt and "related" in prompt
 
 
 def test_all_expected_tools_registered(settings, store, complete_snapshot):

@@ -185,6 +185,57 @@ def test_title_reads_title_field_only(incident_shaped_tool, session):
     assert {m["instance_id"] for m in res["matches"]} == {2}  # not Styleways (1)
 
 
+def test_text_criterion_defaults_to_contains_when_op_omitted(incident_shaped_tool, session):
+    """FR-010: the LLM often omits op; a silent eq default on title would
+    recreate the false-absence failure."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "value": "focus on"}])  # no op
+    assert res["count"] == 1
+    assert res["matches"][0]["title"] == "Focus On Guido Schneider"
+    assert res["criteria_applied"] == [
+        {"attribute": "title", "op": "contains", "value": "focus on"}
+    ]
+
+
+def test_text_criterion_explicit_eq_stays_exact(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "title", "op": "eq", "value": "focus on"}])
+    assert res["count"] == 0
+    res2 = run_filter(incident_shaped_tool, session,
+                      [{"attribute": "title", "op": "eq",
+                        "value": "focus on guido schneider"}])
+    assert res2["count"] == 1
+
+
+def test_non_text_criterion_keeps_eq_default(incident_shaped_tool, session):
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"}])  # no op
+    assert res["criteria_applied"][0]["op"] == "eq"
+    assert res["count"] == 2
+
+
+def test_zero_match_with_text_criterion_note_says_loosen(incident_shaped_tool, session):
+    """FR-009: a zero-match listing that applied a text criterion must steer
+    the LLM toward loosening the search, not toward declaring absence."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "artist", "value": "Troy Pierce"},
+                      {"attribute": "title", "op": "contains", "value": "gone astral"}])
+    assert res["count"] == 0
+    note = res["note"]
+    assert "no records matched" in note
+    assert "shorter" in note and "drop" in note  # loosen-before-absence
+    assert "do not invent" in note               # anti-hallucination stays
+
+
+def test_zero_match_without_text_criterion_keeps_plain_note(incident_shaped_tool, session):
+    """FR-009: non-text zero-matches keep the FR-013b 'say so explicitly' note."""
+    res = run_filter(incident_shaped_tool, session,
+                     [{"attribute": "genre", "value": "Polka"}])
+    assert res["count"] == 0
+    assert "say so explicitly" in res["note"]
+    assert "shorter" not in res["note"]
+
+
 def test_title_in_attribute_block(settings):
     """FR-005: title auto-renders into the prompt attribute block."""
     from collection_agent.registry import render_attribute_block
