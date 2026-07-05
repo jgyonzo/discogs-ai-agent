@@ -21,7 +21,7 @@ is tests-first, no live API calls.
 
 **Purpose**: Confirm the 018 baseline before touching payloads.
 
-- [ ] T001 Run the baseline suite (`cd collection-agent && pytest`) and confirm all 131 tests green on branch `019-listing-link-integrity`
+- [X] T001 Run the baseline suite (`cd collection-agent && pytest`) and confirm all 131 tests green on branch `019-listing-link-integrity`
 
 ---
 
@@ -32,9 +32,9 @@ change depends on (research R2/R3; data-model §1–2).
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 [P] Add `discogs_web_base_url: str` (alias `DISCOGS_WEB_BASE_URL`, default `https://www.discogs.com`, no trailing slash) to `collection-agent/src/collection_agent/settings.py`, alongside the existing API-base field
-- [ ] T003 [P] Write failing unit tests for the URL helper in `collection-agent/tests/unit/test_release_url.py`: fixture record with `instance_id != release_id`; assert the URL equals `{settings.discogs_web_base_url}/release/{release_id}`, embeds `release_id`, never contains the `instance_id` digits (data-model §2 id-space invariant); assert env override via `DISCOGS_WEB_BASE_URL`
-- [ ] T004 Implement `release_page_url(settings, record) -> str` in `collection-agent/src/collection_agent/tools/common.py` (no URL literals outside the settings default — Constitution VII(a)); make T003 pass (depends on T002, T003)
+- [X] T002 [P] Add `discogs_web_base_url: str` (alias `DISCOGS_WEB_BASE_URL`, default `https://www.discogs.com`, no trailing slash) to `collection-agent/src/collection_agent/settings.py`, alongside the existing API-base field
+- [X] T003 [P] Write failing unit tests for the URL helper in `collection-agent/tests/unit/test_release_url.py`: fixture record with `instance_id != release_id`; assert the URL equals `{settings.discogs_web_base_url}/release/{release_id}`, embeds `release_id`, never contains the `instance_id` digits (data-model §2 id-space invariant); assert env override via `DISCOGS_WEB_BASE_URL`
+- [X] T004 Implement `release_page_url(settings, record) -> str` in `collection-agent/src/collection_agent/tools/common.py` (no URL literals outside the settings default — Constitution VII(a)); make T003 pass (depends on T002, T003)
 
 **Checkpoint**: Helper green — payload changes can proceed in any story order.
 
@@ -52,14 +52,14 @@ impossible by construction (unit-tested).
 
 ### Tests for User Story 1
 
-- [ ] T005 [P] [US1] Write failing unit tests in `collection-agent/tests/unit/test_filters.py`: every `matches[]` entry carries `release_url` per data-model §3.1; `fallback_matches[]` entries (zero-match text+non-text path) carry it too; id-space assertion with `instance_id != release_id`; `instance_id` key/type unchanged
-- [ ] T006 [P] [US1] Write failing prompt-surface test in `collection-agent/tests/integration/test_agent_loop.py`: rendered system prompt contains the link-sourcing rule (page links only from `release_url`; media links only from `media_links`; URL construction from any identifier forbidden — contract delta 7)
+- [X] T005 [P] [US1] Write failing unit tests in `collection-agent/tests/unit/test_filters.py`: every `matches[]` entry carries `release_url` per data-model §3.1; `fallback_matches[]` entries (zero-match text+non-text path) carry it too; id-space assertion with `instance_id != release_id`; `instance_id` key/type unchanged
+- [X] T006 [P] [US1] Write failing prompt-surface test in `collection-agent/tests/integration/test_agent_loop.py`: rendered system prompt contains the link-sourcing rule (page links only from `release_url`; media links only from `media_links`; URL construction from any identifier forbidden — contract delta 7)
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Add `"release_url": release_page_url(settings, rec)` to `_display` in `collection-agent/src/collection_agent/tools/browse.py` (single point — covers `matches` and `fallback_matches`; thread `settings` if not already in scope); make T005 pass
-- [ ] T008 [US1] Extend ground rule 1 in `collection-agent/src/collection_agent/prompts/system.md` with the delta-7 sentences (page link only from `release_url`; media only from `media_links`; never build a URL from `instance_id` or any identifier, including for absent records); make T006 pass
-- [ ] T009 [US1] Checkpoint run: `cd collection-agent && pytest` — full suite green; SC-004 regression check (move/ordinal/last-listing tests untouched and passing)
+- [X] T007 [US1] Add `"release_url": release_page_url(settings, rec)` to `_display` in `collection-agent/src/collection_agent/tools/browse.py` (single point — covers `matches` and `fallback_matches`; thread `settings` if not already in scope); make T005 pass
+- [X] T008 [US1] Extend ground rule 1 in `collection-agent/src/collection_agent/prompts/system.md` with the delta-7 sentences (page link only from `release_url`; media only from `media_links`; never build a URL from `instance_id` or any identifier, including for absent records); make T006 pass
+- [X] T009 [US1] Checkpoint run: `cd collection-agent && pytest` — full suite green; SC-004 regression check (move/ordinal/last-listing tests untouched and passing)
 
 **Checkpoint**: US1 fully functional — link asks answerable from tool output.
 
@@ -76,12 +76,12 @@ in the session's tool output.
 
 ### Tests for User Story 2
 
-- [ ] T010 [P] [US2] Write failing unit tests in `collection-agent/tests/unit/test_analytics.py`: `top_n` entries for every basis carry `release_url` per data-model §3.2, id-space asserted, existing basis fields unchanged
-- [ ] T011 [P] [US2] Write failing integration test in `collection-agent/tests/integration/test_agent_loop.py`: every listing-shaped tool payload (`filter_records` matches + fallback_matches, `top_n`) carries `release_url` on each per-record entry (contract delta 6 invariant)
+- [X] T010 [P] [US2] Write failing unit tests in `collection-agent/tests/unit/test_analytics.py`: `top_n` entries for every basis carry `release_url` per data-model §3.2, id-space asserted, existing basis fields unchanged
+- [X] T011 [P] [US2] Write failing integration test in `collection-agent/tests/integration/test_agent_loop.py`: every listing-shaped tool payload (`filter_records` matches + fallback_matches, `top_n`) carries `release_url` on each per-record entry (contract delta 6 invariant)
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Add `"release_url": release_page_url(settings, rec)` to `_display` in `collection-agent/src/collection_agent/tools/analytics.py` (thread `settings` if not already in scope); make T010 and T011 pass
+- [X] T012 [US2] Add `"release_url": release_page_url(settings, rec)` to `_display` in `collection-agent/src/collection_agent/tools/analytics.py` (thread `settings` if not already in scope); make T010 and T011 pass
 
 **Checkpoint**: US1 + US2 — all filter/ranking listing shapes link-complete.
 
@@ -99,11 +99,11 @@ record's page (quickstart replay prompt 2, media half).
 
 ### Tests for User Story 3
 
-- [ ] T013 [P] [US3] Write failing unit tests in `collection-agent/tests/unit/test_media.py`: each `per_record` entry carries `release_url` per data-model §3.3 (id-space asserted); `links[]` uri/title/duration_s stay verbatim; `none` flag semantics unchanged; note text distinguishes release **page** from playable media
+- [X] T013 [P] [US3] Write failing unit tests in `collection-agent/tests/unit/test_media.py`: each `per_record` entry carries `release_url` per data-model §3.3 (id-space asserted); `links[]` uri/title/duration_s stay verbatim; `none` flag semantics unchanged; note text distinguishes release **page** from playable media
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] Add `release_url` to `per_record` entries and update the payload `note` in `collection-agent/src/collection_agent/tools/media.py` (contract deltas 6+8); make T013 pass
+- [X] T014 [US3] Add `release_url` to `per_record` entries and update the payload `note` in `collection-agent/src/collection_agent/tools/media.py` (contract deltas 6+8); make T013 pass
 
 **Checkpoint**: All three stories independently green.
 
@@ -111,8 +111,8 @@ record's page (quickstart replay prompt 2, media half).
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T015 Full-suite gate: `cd collection-agent && pytest` — record the new test count (was 131) and confirm zero pre-existing tests modified in their expectations (SC-003)
-- [ ] T016 [P] Cross-check `specs/019-listing-link-integrity/contracts/amendment-017-agent-tools.md` deltas 6–8 against the implementation (field name, settings alias/default, helper location, prompt sentences); fix any drift in the same change set
+- [X] T015 Full-suite gate: `cd collection-agent && pytest` — record the new test count (was 131) and confirm zero pre-existing tests modified in their expectations (SC-003)
+- [X] T016 [P] Cross-check `specs/019-listing-link-integrity/contracts/amendment-017-agent-tools.md` deltas 6–8 against the implementation (field name, settings alias/default, helper location, prompt sentences); fix any drift in the same change set
 - [ ] T017 Execute the quickstart replay (`specs/019-listing-link-integrity/quickstart.md`, live snapshot, chat) — prompts 1–4; SC-001 gate: zero `discogs.com` URLs in assistant answers absent from tool results. If any invented URL survives, record a replay-postmortem addendum in `specs/019-listing-link-integrity/spec.md` (018 precedent) before closing
 - [ ] T018 Manual SC-002 spot check: open one returned `release_url` in a browser and confirm it resolves to the correct release page (never automated)
 
