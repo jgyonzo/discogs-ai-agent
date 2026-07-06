@@ -45,6 +45,18 @@ class Settings(BaseSettings):
         default="https://www.discogs.com", alias="DISCOGS_WEB_BASE_URL"
     )
 
+    # --- YouTube play links (020) ---
+    # human-facing site for tool-built play links (youtube_links.py builds
+    # them); the agent never calls YouTube — it only emits URLs the user
+    # opens in a browser
+    youtube_web_base_url: str = Field(
+        default="https://www.youtube.com", alias="YOUTUBE_WEB_BASE_URL"
+    )
+    # observed play-link capacity; requests above it are chunked
+    youtube_playlist_max_ids: int = Field(
+        default=50, alias="YOUTUBE_PLAYLIST_MAX_IDS"
+    )
+
     # --- LLM ---
     collection_agent_model: str = Field(
         default="gpt-4o-mini", alias="COLLECTION_AGENT_MODEL"

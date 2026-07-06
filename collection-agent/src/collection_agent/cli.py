@@ -194,6 +194,13 @@ def _register_story_tools(agent, settings: Settings, store: SnapshotStore) -> No
             agent.register(tool)
     except ImportError:
         pass
+    try:
+        from collection_agent.tools.playlist import make_playlist_tools
+
+        for tool in make_playlist_tools(settings, store):
+            agent.register(tool)
+    except ImportError:
+        pass
 
 
 def _cmd_chat(settings: Settings) -> int:
