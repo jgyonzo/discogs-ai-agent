@@ -2,14 +2,68 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 023-scan-eval-harness** (branch
-`023-scan-eval-harness`) — eval dataset + harness for 022's scan
-identification pipeline. Plan: `specs/023-scan-eval-harness/plan.md`
-(spec, research R1–R10, data-model, quickstart, contracts:
-`eval-dataset.md`, `eval-results.md`,
-`amendment-017-discogs-consumption-2.md`).
+**No feature is currently in flight.** Most recently merged:
+**023-scan-eval-harness** (PR #13, merged to main 2026-07-07 — owner-only
+live validation still open: quickstart checklist SC-001 full dataset
+build, SC-002 first measured identification rate, SC-004 retained-photo
+labeling, SC-006 collection-unchanged audit, SC-007 interrupt/resume) —
+the measurement loop for 022's scan identification (closes the gap behind
+022's deferred SC-002 batch test; measures, never modifies, the
+pipeline). `collection-agent` only, zero new deps. Three pieces:
+(1) `eval-dataset` CLI subcommand (`eval/dataset.py`): distinct snapshot
+release_ids → `get_release` re-fetch consuming `images[]` (NEW fields on
+the already-contracted endpoint; snapshot schema deliberately untouched —
+research R1) → NEW `DiscogsClient.download_image` (absolute-URL GET
+through the governed `_request` path; CDN sends no ratelimit headers,
+governor ignores header-less responses — R2) → gitignored
+`data/eval/discogs-images/` labeled by release_id: secondary-preferred
+cap `COLLECTION_AGENT_EVAL_IMAGES_PER_RELEASE` (default 2), append-only
+fsync'd `manifest.jsonl` (run_header w/ snapshot completeness + one
+`release` line each: `downloaded`/`no_images`/`failed`; the MANIFEST, not
+the filename, is ground truth), resumable (done skipped, `failed` retried
+w/ fresh signed URIs, torn trailing line tolerated), `NOTICE.txt`
+licensing containment (uploader-copyrighted: local-only, never
+committed/redistributed; guard test pins the `.gitignore` `data/` rule +
+all dir defaults under `collection-agent/data/`).
+(2) `eval-run --source discogs|retained [--limit N]` (`eval/harness.py`):
+each labeled image through the PRODUCTION seams unmodified (FR-011) —
+`scan/vision.py::extract_evidence` w/ client from `cli._build_llm_client`
+(021 tracing + 45s vision cap apply) → `scan/search.py::find_candidates`
+w/ `pending_duplicate_checker` — into run-scoped
+`data/eval/runs/<run_id>/results.jsonl` (incremental, fsync'd; outcome
+taxonomy hit/miss/no_evidence/error/unlabeled, rank, producing rung =
+last rung tried, evidence_kinds, billable `vision_calls`, `elapsed_s`) +
+`summary.json` w/ normative sum invariants (identification/top-1 rates
+exclude `errors` from the denominator; unlabeled never evaluated = never
+billed). Per-image failures are typed data (`vision_error`/
+`discogs_error`), never a run abort. STRUCTURALLY read-only: AST guard
+(`test_eval_readonly_guard.py`) forbids write-method references and
+`scan.journal`/`scan.session` imports in `eval/` (013→014 precedent).
+(3) opt-in photo retention (`scan/retention.py::PhotoRetainer` + a
+flag-gated hook in `scan/server.py`): `COLLECTION_AGENT_SCAN_RETAIN_
+PHOTOS` (default OFF ⇒ byte-identical to 022, all 40 pre-existing scan
+tests pass unmodified) saves original upload bytes post-size-gate as
+`data/eval/scan-photos/<session>/pending-<n>.<ext>`, atomically renamed
+to `<scan_id>.<ext>` at cycle-id assignment; vision-error/superseded
+uploads stay `pending-*` = permanently unlabeled; retention I/O failure
+is ONE loud log warning, never a scan failure (deliberate contrast w/ the
+loud-500 journal rule — journal is audit, retention is diagnostics).
+Ground truth joins lazily in `eval/sources.py`: journal `added` line
+matching the filename's scan_id → labeled; anything else unlabeled
+(journal schema untouched). Five new `Settings` fields (VII(a)); 410
+tests (`cd collection-agent && pytest`), no live API calls. Recorded
+honesty caveat: Discogs images are clean scans ⇒ discogs-source results
+are an UPPER BOUND of real phone accuracy; the retained source is the
+true distribution and starts empty. Artifacts:
+`specs/023-scan-eval-harness/` (spec, plan, research R1–R10, data-model,
+quickstart + owner live-validation checklist, tasks T001–T028 all
+complete, contracts: `eval-dataset.md`, `eval-results.md`,
+`amendment-017-discogs-consumption-2.md` — SECOND amendment to 017's
+discogs-consumption contract: +`images[]` fields, +image binary GET,
+explicitly zero new writes). Out of scope kept: pipeline/prompt changes,
+CI eval integration, image preprocessing/augmentation, fine-tuning.
 
-Most recently merged:
+Prior feature:
 **022-phone-record-scan** (PR #12, merged to main 2026-07-07 — implemented
 2026-07-07 on branch `022-phone-record-scan`; owner-only live
 validation T038–T041 still open) — scan physical records with the
