@@ -308,18 +308,18 @@ response shape as `/api/scan` (`source: manual_search`), flows through
 duplicate markers, confirmation, and journaling identically (spec US4
 acceptance 1–3).
 
-- [ ] T031 [US4] Add `GET /api/search` to
+- [x] T031 [US4] Add `GET /api/search` to
       `collection-agent/src/collection_agent/scan/server.py`: blank
       `q` → 400 `empty_query`; otherwise free-text rung of the T017
       pipeline (`q=` search), same response model, allowlist
       registration, `evidence_summary.kinds=["text"]`,
       `source="manual_search"`.
-- [ ] T032 [US4] Page support in
+- [x] T032 [US4] Page support in
       `collection-agent/src/collection_agent/scan/static/index.html`:
       manual-search box offered on no-match and via "none of these";
       results reuse the same candidate/confirm components; skip/add
       logged as usual.
-- [ ] T033 [US4] Integration tests (part 4) in
+- [x] T033 [US4] Integration tests (part 4) in
       `collection-agent/tests/integration/test_scan_server.py`:
       response-shape parity with `/api/scan`, empty query → 400,
       manual-search add journals with `source="manual_search"`,

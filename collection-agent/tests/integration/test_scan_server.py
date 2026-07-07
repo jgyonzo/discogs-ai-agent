@@ -500,3 +500,67 @@ class TestSessionLog:
         resp = client.post("/api/skip", json={"scan_id": scan_id})
         assert resp.status_code == 500
         assert resp.json()["error"]["code"] == "journal_error"
+
+
+class TestManualSearchFlow:
+    """US4 T033: shape parity with /api/scan, empty-query 400, journaling
+    with source=manual_search, no-match + skip -> no_match."""
+
+    def test_response_shape_parity_with_scan(
+        self, settings, store, complete_snapshot
+    ):
+        client, _, _ = make_client(
+            settings, store,
+            search_responses={
+                "q": payloads.search_page([payloads.search_result(1)])
+            },
+            snapshot=complete_snapshot,
+        )
+        body = client.get("/api/search", params={"q": "simple things"}).json()
+        assert body["source"] == "manual_search"
+        assert body["evidence_summary"]["kinds"] == ["text"]
+        assert set(body.keys()) == {
+            "scan_id", "source", "evidence_summary", "candidates",
+            "more_matches", "message",
+        }
+        candidate = body["candidates"][0]
+        # identical candidate shape incl. the duplicate overlay (release 1
+        # is in the snapshot twice)
+        assert candidate["duplicate"]["state"] == "in_collection"
+        assert candidate["duplicate"]["copies"] == 2
+
+    def test_empty_query_rejected(self, settings, store):
+        client, _, _ = make_client(settings, store)
+        resp = client.get("/api/search", params={"q": "   "})
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "empty_query"
+
+    def test_manual_add_journals_manual_search_source(self, settings, store):
+        client, discogs, session = make_client(
+            settings, store,
+            search_responses={
+                "q": payloads.search_page([payloads.search_result(301)])
+            },
+        )
+        scan_id = client.get(
+            "/api/search", params={"q": "some record"}
+        ).json()["scan_id"]
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 301}
+        ).json()
+        assert body["status"] == "added"
+        assert discogs.adds == [("test_user", 1, 301)]
+        assert session.log[-1].source == "manual_search"
+        assert session.log[-1].evidence_kinds == ["text"]
+
+    def test_no_match_manual_search_then_skip_journals_no_match(
+        self, settings, store
+    ):
+        client, _, session = make_client(settings, store)  # empty q rung
+        body = client.get("/api/search", params={"q": "white label promo"}).json()
+        assert body["candidates"] == []
+        assert body["message"] is not None
+        assert session.log == []  # search itself is side-effect-free
+        client.post("/api/skip", json={"scan_id": body["scan_id"]})
+        assert session.log[-1].outcome == "no_match"
+        assert session.log[-1].source == "manual_search"
