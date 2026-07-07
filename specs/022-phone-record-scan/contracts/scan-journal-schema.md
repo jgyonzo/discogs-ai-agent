@@ -40,7 +40,10 @@ Unknown keys MUST be ignored by readers (forward compatibility).
 - `added` — live write succeeded; `release_id`, `release_title`,
   `instance_id` present.
 - `skipped` — owner saw candidates and moved on without adding
-  (`release_id` present if a specific candidate was open).
+  (`release_id` present if a specific candidate was open). Includes
+  auto-closed cycles (addendum 2, FR-022): a cycle abandoned by
+  starting the next scan is journaled `skipped` with
+  `detail="auto-closed: superseded by a new scan"`.
 - `no_match` — identification/search produced no candidates and the
   owner acknowledged (or abandoned) the cycle.
 - `failed` — a cycle that reached a definite failure (add rejected by

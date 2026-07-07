@@ -96,6 +96,17 @@ Semantics:
   title or lead track, label). `ScanEvidence` carries a `tracks` field
   (lead track doubles as the 12″-single title); it appears in
   `evidence_summary.fields` like any other field.
+- Addendum 2 (FR-022/023) — cycle lifecycle: every `POST /api/scan` or
+  `GET /api/search` begins a new cycle, which first (a) auto-closes
+  all prior open cycles (journaled `skipped`, detail
+  `"auto-closed: superseded by a new scan"`) and (b) supersedes any
+  in-flight identification: the superseded request's results are
+  discarded (no journal entry, no allowlist registration) and it
+  answers `409 {"error":{"code":"superseded", …}}`. The page aborts
+  its own pending scan/search fetch when a new one starts and ignores
+  `superseded` responses silently. Concurrent scan requests MUST NOT
+  block one another; the vision call carries the settings-driven
+  timeout `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` (default 45 s).
 - Candidates de-duplicated by `release_id`, capped at
   `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` (default 8); `more_matches`
   true when Discogs pagination reports more items than shown (FR-006).

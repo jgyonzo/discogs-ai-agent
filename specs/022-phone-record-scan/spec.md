@@ -394,3 +394,42 @@ values (never the photo) belong in the journal line.
 **Out of scope for this addendum**: model choice (the vision model is
 already a settings knob; the owner repointed it independently),
 client-side image downscaling, and any change to write gating.
+
+## Replay addendum 2 (2026-07-07) — abandoned cycles & in-flight scans
+
+**Findings.** Live sessions surfaced two related loop-ergonomics gaps
+(owner request after SC-006 validation):
+
+1. *Orphan cycles* (F4). Abandoning a candidate list by simply
+   photographing the next record (never tapping Skip / "none of
+   these") leaves the cycle unjournaled — session 2 accumulated three
+   such orphans, including the SC-006 validation re-scan itself. The
+   batch-review guarantee (US3) wants every cycle accounted for.
+2. *In-flight scans are never released* (F5). A slow vision call (the
+   recorded 80.6 s provider outlier) cannot be preempted: the phone
+   keeps waiting, and a new photo taken meanwhile queued behind the
+   old call (the scan handler blocked the server's event loop —
+   implementation defect found while diagnosing). The natural gesture
+   — "this is taking too long, just scan again" — must win.
+
+**Requirement deltas.**
+
+- **FR-022 (new)**: starting a new scan or manual search MUST
+  auto-close every prior cycle that is still open: journaled
+  `skipped` with an explicit auto-close detail (open cycles by
+  construction had candidates; no-match/failed cycles are closed at
+  their own time). The journal accounts for every cycle that produced
+  candidates, tapped or abandoned.
+- **FR-023 (new)**: a new scan or manual search supersedes any
+  in-flight identification. The page MUST abort its pending request
+  (client-side cancellation); the server MUST discard a superseded
+  request's results — no journal entry for itself, no allowlist
+  registration, a typed `superseded` response — and MUST process
+  concurrent scans without one blocking another. The vision call MUST
+  carry a settings-driven hard timeout
+  (`COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S`, default 45 s) so an
+  abandoned provider call cannot run unbounded.
+
+**Out of scope**: cancelling the provider-side HTTP request of a
+superseded vision call beyond the hard timeout (no clean cross-thread
+kill; the result is discarded and the timeout bounds the waste).
