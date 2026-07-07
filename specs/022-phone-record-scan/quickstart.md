@@ -80,10 +80,12 @@ to be run once with real records (spec SC-001..SC-007):
       (verify against the Discogs web UI history).
 - [x] SC-005: spot-check candidate fields/links/thumbnails against
       discogs.com — all verbatim, zero constructed values.
-- [ ] SC-006: known-owned records show the duplicate marker with the
-      right copy count. *(easy test: re-scan one of the two records
-      added on 2026-07-07 — it must show "already in your collection —
-      1 copy" and demand the second confirmation)*
+- [x] SC-006: known-owned records show the duplicate marker with the
+      right copy count. *(owner-validated 2026-07-07: re-scanned one of
+      the two just-added records after the re-sync; the "already in
+      your collection" marker appeared from the snapshot overlay. The
+      re-scan cycle itself is absent from the journal — abandoned
+      without tapping Skip, i.e. the documented orphan-cycle gap.)*
 - [x] SC-007: kill the server mid-session; the journal accounts for
       every completed cycle.
 - [x] After the session: run `python -m collection_agent sync` and
@@ -127,8 +129,9 @@ Validated (2026-07-07, scripted against the live API + traces):
   re-sync → `complete`, 393 → 395 instances, both new records present
   with matching instance ids.
 
-Open: SC-002 (10-record batch), SC-003 (tap-count observation),
-SC-006 (duplicate marker — re-scan an added record). Known minor gap
+Open: SC-002 (10-record batch), SC-003 (tap-count observation).
+SC-006 owner-validated 2026-07-07 (duplicate marker on re-scan of a
+just-added record, post-sync). Known minor gap
 (non-blocking): a cycle abandoned by simply scanning the next record
 (without tapping Skip/None-of-these) is never journaled — session 2
 has two such unclosed scan_ids. The contract only guarantees

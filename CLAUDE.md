@@ -55,8 +55,11 @@ longer needed to debug identification. Owner independently repointed
 (`20260707-160209Z`): 2/2 identified via the barcode rung and added
 (releases 724223, 297060); SC-004/005/007 + stale→sync→complete
 reconciliation validated same day (note in quickstart.md); still
-open: SC-002 10-record batch, SC-003 taps, SC-006 dup marker
-(T038/T039); one 80s vision-latency provider outlier on record. 339 tests
+open: SC-002 10-record batch + SC-003 taps (T038) and the T041
+LAN-exposure decision; SC-006 owner-validated (dup marker on re-scan,
+post-sync — T039 done); one 80s vision-latency provider outlier on
+record; known minor gap: cycles abandoned without Skip are not
+journaled. 339 tests
 (`cd collection-agent && pytest`), no live API calls; live replay
 tests use the verbatim failing vision replies; `FakeDiscogsClient`
 grew scriptable search/add. Artifacts: `specs/022-phone-record-scan/`

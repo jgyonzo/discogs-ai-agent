@@ -360,7 +360,7 @@ phase.** Checklist mirrors quickstart.md.
       scan`, open the LAN URL on the phone, scan a 10-record batch;
       validate SC-001 (<15 s to candidates), SC-002 (≥8/10 correct
       pressing present), SC-003 (≤3 taps per add, 4 for duplicates).
-- [ ] T039 ⛔ [OWNER] Write-gate & honesty audit on the live batch:
+- [x] T039 ⛔ [OWNER] Write-gate & honesty audit on the live batch:
       SC-004 (zero unconfirmed writes — cross-check Discogs web
       history), SC-005 (spot-check fields/links/thumbnails verbatim
       against discogs.com), SC-006 (duplicate markers + counts
