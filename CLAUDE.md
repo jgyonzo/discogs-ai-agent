@@ -2,7 +2,28 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 020-youtube-playlist-integration** (branch
+`020-youtube-playlist-integration`) — closes the deferred "v2 YouTube
+playlists" scope, **re-scoped 2026-07-06** from OAuth account writes to
+**anonymous play links** (owner decision; the OAuth path is summarized
+in research R6 as a deferred follow-up). New read-only `playlist_links`
+tool emits `{YOUTUBE_WEB_BASE_URL}/watch_videos?video_ids=…` links
+(endpoint verified live 2026-07-06): one click plays the resolved
+records' stored videos as a temporary playlist the owner saves/names
+on the YouTube site — the agent never touches any account (no OAuth,
+no credentials, no new deps, no write gate, no session/CLI changes).
+Video ids parsed deterministically from stored `MediaLink.uri` (never
+LLM-supplied, 019 precedent); links chunk at
+`YOUTUBE_PLAYLIST_MAX_IDS` (default 50) record-aligned with labels —
+no silent truncation; `videos_per_record` mode `all` (default) or
+`first`. YouTube *search* stays out of scope. Plan:
+`specs/020-youtube-playlist-integration/plan.md` (research R1–R6,
+data-model, quickstart, contracts: `youtube-playlists.md` + deltas
+9–10 in `amendment-017-agent-tools.md` — third amendment to 017's
+agent-tools contract; §4 write path untouched). Tasks not yet
+generated.
+
+Most recently merged:
 **019-listing-link-integrity** (PR #7, merged to main 2026-07-05) —
 same-day follow-up closing 018's invented-URL candidate: during 018
 replays the LLM fabricated `discogs.com/release/<instance_id>` links

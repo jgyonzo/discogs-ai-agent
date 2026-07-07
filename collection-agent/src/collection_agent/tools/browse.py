@@ -46,25 +46,60 @@ class FilterArgs(BaseModel):
     criteria: list[FilterCriterion] = Field(
         description="Criteria to AND together, e.g. genre=House AND decade=1990s."
     )
-    limit: int | None = Field(default=None, ge=1, le=200, description="Max records to list (default from settings).")
+    limit: int | None = Field(
+        default=None, ge=1, le=200,
+        description="Max records to list (default from settings). 'Show "
+        "all/more records' means MORE ROWS: raise this (max 200) — it never "
+        "changes the columns.",
+    )
+    include: list[str] = Field(
+        default_factory=list,
+        description="Extra per-record attributes — pass ONLY when the user "
+        "NAMES them ('show their formats', 'con carpeta', 'and the labels'). "
+        "'Show all/more records' is about row count, NOT attributes: use "
+        "'limit' for that and leave this empty. Default columns: artist, "
+        "title, year, country, Discogs link.",
+    )
 
 
 def _folder_names(snapshot: Snapshot) -> dict[int, str]:
     return {f.folder_id: f.name for f in snapshot.folders}
 
 
+# attributes every listing entry already carries — never duplicated as extras
+_DEFAULT_ATTRS = frozenset({"artist", "title", "year", "country"})
+
+
 def _display(
-    rec: CollectionRecord, folder_names: dict[int, str], settings: Settings
+    rec: CollectionRecord,
+    folder_names: dict[int, str],
+    settings: Settings,
+    extras: list[Any] = (),
 ) -> dict[str, Any]:
-    return {
+    # replay finding 6 (020): the entry shape IS the rendered table — a lean
+    # default beats prompt steering (013→014 precedent), and a capped title
+    # keeps tables readable and answers cheap (matching is unaffected)
+    title = rec.title
+    cap = settings.listing_title_max_chars
+    if len(title) > cap:
+        title = title[: cap - 1].rstrip() + "…"
+    entry: dict[str, Any] = {
         "instance_id": rec.instance_id,
         "artist": ", ".join(rec.artists) or "?",
-        "title": rec.title,
+        "title": title,
         "year": rec.year,
-        "format": ", ".join(rec.formats[:3]),
-        "folder": folder_names.get(rec.folder_id, str(rec.folder_id)),
+        "country": rec.country,
         "release_url": release_page_url(settings, rec),
     }
+    for spec in extras:
+        if spec.name == "folder":  # ids are internal; listings show names
+            entry["folder"] = folder_names.get(rec.folder_id, str(rec.folder_id))
+            continue
+        value = spec.extract(rec)
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value[:3])
+        entry[spec.name] = value
+    return entry
 
 
 def make_browse_tools(
@@ -104,6 +139,24 @@ def make_browse_tools(
             resolved.append((spec, op, crit.value))
             applied.append({"attribute": spec.name, "op": op, "value": crit.value})
 
+        # listing extras: user-requested attributes, plus criterion attributes
+        # whose op leaves per-record variety (eq/missing columns would repeat
+        # one value down the table — noise, not information)
+        extras: dict[str, Any] = {}
+        for name in args.include:
+            spec = registry.resolve(name)
+            if spec is None:
+                unsupported.append(
+                    {"attribute": name, "reason": "unknown attribute (include)",
+                     "supported": registry.supported_names()}
+                )
+            elif spec.name not in _DEFAULT_ATTRS:
+                extras[spec.name] = spec
+        for spec, op, _value in resolved:
+            if op not in ("eq", "missing") and spec.name not in _DEFAULT_ATTRS:
+                extras.setdefault(spec.name, spec)
+        extra_specs = list(extras.values())
+
         if not resolved:
             return with_warnings(ctx, {
                 "criteria_applied": [],
@@ -137,7 +190,7 @@ def make_browse_tools(
             "criteria_applied": applied,
             "unsupported_criteria": unsupported,
             "count": len(matched),
-            "matches": [_display(r, folder_names, settings) for r in shown],
+            "matches": [_display(r, folder_names, settings, extra_specs) for r in shown],
             "truncated": len(matched) > limit,
         }
         if len(matched) > limit:
@@ -155,7 +208,7 @@ def make_browse_tools(
                 ]
                 shown_fb = fallback[:limit]
                 payload["fallback_matches"] = [
-                    _display(r, folder_names, settings) for r in shown_fb
+                    _display(r, folder_names, settings, extra_specs) for r in shown_fb
                 ]
                 payload["fallback_count"] = len(fallback)
                 session.last_listing_instance_ids = [r.instance_id for r in shown_fb]
@@ -184,9 +237,10 @@ def make_browse_tools(
             name="filter_records",
             description="List the records matching AND-combined attribute criteria "
             "(genre, decade, label, country, artist, format, rating, scarcity, …). "
-            "Returns identity (artist/title/year), count, truncation, and names any "
-            "criteria it could not apply. Sets the session's 'last listing' for "
-            "follow-ups.",
+            "Entries carry artist/title/year/country/link by default; pass "
+            "'include' for extra attributes the user asks to see (format, folder, "
+            "…). Returns count, truncation, and names any criteria it could not "
+            "apply. Sets the session's 'last listing' for follow-ups.",
             params_model=FilterArgs,
             fn=filter_records,
         )

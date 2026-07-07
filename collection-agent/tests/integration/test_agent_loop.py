@@ -181,6 +181,43 @@ def test_system_prompt_has_locate_record_guidance(settings):
     assert "is the requested record" in prompt and "related" in prompt
 
 
+def test_language_reminder_rides_every_request_but_is_never_stored(
+    settings, store, complete_snapshot
+):
+    """020 replay finding 7: the language-mirroring instruction is injected
+    as the LAST message of every LLM request (decision point — after tool
+    results) and never persisted to the session transcript."""
+    from collection_agent.agent import LANGUAGE_REMINDER
+
+    agent, llm = build_agent(
+        settings, store,
+        script=[("tool", "aggregate_by", {"attribute": "genre"}), ("text", "ok")],
+        snapshot=complete_snapshot,
+    )
+    agent.run_turn("what genres do I have?")
+    assert len(llm.requests) == 2  # tool round + answer round
+    for req in llm.requests:
+        last = req["messages"][-1]
+        assert last["role"] == "system"
+        assert last["content"] == LANGUAGE_REMINDER
+    # the answer round saw it AFTER the tool result
+    roles = [m["role"] for m in llm.requests[1]["messages"]]
+    assert roles.index("tool") < len(roles) - 1 and roles[-1] == "system"
+    # never persisted: the session transcript carries no reminder
+    assert all(m.get("content") != LANGUAGE_REMINDER for m in agent.session.messages)
+
+
+def test_answer_style_listing_defaults(settings):
+    """Owner UX feedback (2026-07-06): default listing columns are Artist/
+    Title/Year/Country/link — Format and Folder only on request — and links
+    print as bare URLs, never [text](url) markdown."""
+    low = " ".join(render_system_prompt(build_registry(settings)).lower().split())
+    assert "artist, title, year, country" in low
+    assert "format," in low and "folder" in low  # named as opt-in extras
+    assert "bare urls" in low
+    assert "[text](url)" in low  # the forbidden shape, named
+
+
 def test_all_expected_tools_registered(settings, store, complete_snapshot):
     agent, llm = build_agent(
         settings, store, script=[("text", "hi")], snapshot=complete_snapshot

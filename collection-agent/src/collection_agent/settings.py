@@ -45,6 +45,18 @@ class Settings(BaseSettings):
         default="https://www.discogs.com", alias="DISCOGS_WEB_BASE_URL"
     )
 
+    # --- YouTube play links (020) ---
+    # human-facing site for tool-built play links (youtube_links.py builds
+    # them); the agent never calls YouTube — it only emits URLs the user
+    # opens in a browser
+    youtube_web_base_url: str = Field(
+        default="https://www.youtube.com", alias="YOUTUBE_WEB_BASE_URL"
+    )
+    # observed play-link capacity; requests above it are chunked
+    youtube_playlist_max_ids: int = Field(
+        default=50, alias="YOUTUBE_PLAYLIST_MAX_IDS"
+    )
+
     # --- LLM ---
     collection_agent_model: str = Field(
         default="gpt-4o-mini", alias="COLLECTION_AGENT_MODEL"
@@ -66,6 +78,11 @@ class Settings(BaseSettings):
 
     # --- Answer shaping ---
     filter_result_limit: int = Field(default=50, alias="FILTER_RESULT_LIMIT")
+    # listing display cap: longer titles are truncated with an ellipsis in
+    # listing payloads (table width + token economy; matching is unaffected)
+    listing_title_max_chars: int = Field(
+        default=70, alias="LISTING_TITLE_MAX_CHARS"
+    )
 
 
 def load_settings() -> Settings:
