@@ -130,9 +130,16 @@ Validated (2026-07-07, scripted against the live API + traces):
   re-sync → `complete`, 393 → 395 instances, both new records present
   with matching instance ids.
 
-Open: SC-002 (10-record batch), SC-003 (tap-count observation).
 SC-006 owner-validated 2026-07-07 (duplicate marker on re-scan of a
 just-added record, post-sync). The orphan-cycle gap observed in
 session 2 (cycles abandoned without tapping Skip were never
 journaled) is CLOSED by replay addendum 2 (FR-022 auto-close +
 FR-023 supersession of in-flight scans, owner-requested same day).
+
+**Deferred (owner decision 2026-07-07, closing 022 as-is):** SC-001
+formal batch timing, SC-002 (10-record identification rate), SC-003
+(tap counts) — i.e. T038 — and the T041 LAN-exposure decision remain
+open for a future session. The feature ships on the strength of
+sessions 1–2 (2/2 after addendum 1), SC-004/005/006/007, and the
+sync-reconciliation check; the journals will capture the batch data
+whenever it happens.

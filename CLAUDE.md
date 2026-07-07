@@ -55,7 +55,8 @@ longer needed to debug identification. Owner independently repointed
 (`20260707-160209Z`): 2/2 identified via the barcode rung and added
 (releases 724223, 297060); SC-004/005/007 + stale→sync→complete
 reconciliation validated same day (note in quickstart.md); still
-open: SC-002 10-record batch + SC-003 taps (T038) and the T041
+open, DEFERRED post-merge by owner decision 2026-07-07 ("close 022
+as-is"): SC-002 10-record batch + SC-003 taps (T038) and the T041
 LAN-exposure decision; SC-006 owner-validated (dup marker on re-scan,
 post-sync — T039 done); one 80s vision-latency provider outlier on
 record. **Replay addendum 2** (2026-07-07, owner request post-SC-006):

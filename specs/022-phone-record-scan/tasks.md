@@ -356,7 +356,7 @@ acceptance 1–3).
 account, and real writes. `/speckit-implement` MUST stop before this
 phase.** Checklist mirrors quickstart.md.
 
-- [ ] T038 ⛔ [OWNER] Live session: run `python -m collection_agent
+- [ ] T038 ⛔ [OWNER, DEFERRED 2026-07-07 — post-merge, another time] Live session: run `python -m collection_agent
       scan`, open the LAN URL on the phone, scan a 10-record batch;
       validate SC-001 (<15 s to candidates), SC-002 (≥8/10 correct
       pressing present), SC-003 (≤3 taps per add, 4 for duplicates).
@@ -370,7 +370,7 @@ phase.** Checklist mirrors quickstart.md.
       then `python -m collection_agent sync` and confirm the chat
       agent sees the additions. Record a live-validation note in
       `specs/022-phone-record-scan/quickstart.md` (021 precedent).
-- [ ] T041 ⛔ [OWNER] Decide whether/how to expose the scan server
+- [ ] T041 ⛔ [OWNER, DEFERRED 2026-07-07 — post-merge, another time] Decide whether/how to expose the scan server
       beyond the home LAN (auth, HTTPS) — explicitly out of v1 scope;
       record the decision in the spec if taken up.
 
