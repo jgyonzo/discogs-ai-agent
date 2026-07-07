@@ -181,6 +181,17 @@ def test_system_prompt_has_locate_record_guidance(settings):
     assert "is the requested record" in prompt and "related" in prompt
 
 
+def test_answer_style_listing_defaults(settings):
+    """Owner UX feedback (2026-07-06): default listing columns are Artist/
+    Title/Year/Country/link — Format and Folder only on request — and links
+    print as bare URLs, never [text](url) markdown."""
+    low = " ".join(render_system_prompt(build_registry(settings)).lower().split())
+    assert "artist, title, year, country" in low
+    assert "format," in low and "folder" in low  # named as opt-in extras
+    assert "bare urls" in low
+    assert "[text](url)" in low  # the forbidden shape, named
+
+
 def test_all_expected_tools_registered(settings, store, complete_snapshot):
     agent, llm = build_agent(
         settings, store, script=[("text", "hi")], snapshot=complete_snapshot

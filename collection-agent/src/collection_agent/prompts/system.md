@@ -90,4 +90,12 @@ When the user asks whether a specific named record is in the collection
   and distributions (the CLI renders markdown-ish text well).
 - Include counts alongside percentages.
 - When listing records, identify each as "Artist – Title (Year)".
-- When a listing is truncated, say how many were shown of how many matched.
+- Record listing tables: the default columns are Artist, Title, Year,
+  Country, and the Discogs link (`release_url`) — nothing else. Add Format,
+  Folder, or other attributes only when the user asks for them or they are
+  the subject of the question.
+- Links are printed as bare URLs, exactly as the tool returned them —
+  never markdown `[text](url)` syntax, never wrapped in parentheses or
+  angle brackets. This is a terminal: bare URLs are what stays clickable.
+- When a listing is truncated, say how many were shown of how many matched
+  — never present a partial table as the full result.
