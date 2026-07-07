@@ -2,7 +2,14 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 023-scan-eval-harness** (branch
+`023-scan-eval-harness`) — eval dataset + harness for 022's scan
+identification pipeline. Plan: `specs/023-scan-eval-harness/plan.md`
+(spec, research R1–R10, data-model, quickstart, contracts:
+`eval-dataset.md`, `eval-results.md`,
+`amendment-017-discogs-consumption-2.md`).
+
+Most recently merged:
 **022-phone-record-scan** (PR #12, merged to main 2026-07-07 — implemented
 2026-07-07 on branch `022-phone-record-scan`; owner-only live
 validation T038–T041 still open) — scan physical records with the
