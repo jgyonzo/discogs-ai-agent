@@ -26,6 +26,61 @@ def pending_duplicate_checker(_release_id: int) -> DuplicateStatus:
     return DuplicateStatus(state="unknown", reason="duplicate check pending")
 
 
+def snapshot_duplicate_checker(store, session) -> DuplicateChecker:
+    """Duplicate overlay (US2 T023, FR-009/010): snapshot instance counts +
+    this session's adds. Build one per request — it loads the snapshot once.
+
+    Degradation rules (data-model.md): missing/unreadable snapshot ->
+    unknown("no snapshot"); presence in ANY snapshot shows its count (plus
+    session adds); absence is `not_in_collection` ONLY from a complete
+    snapshot — a partial/stale snapshot's absence degrades to unknown,
+    never to a false "not in your collection". A release added this
+    session is always `in_collection` regardless of snapshot state.
+    """
+    from collection_agent.models import Completeness
+
+    snapshot = None
+    try:
+        snapshot = store.load()
+    except Exception:  # unreadable/corrupt file — degrade, never guess
+        snapshot = None
+
+    counts: dict[int, int] = {}
+    completeness = None
+    if snapshot is not None:
+        completeness = snapshot.meta.completeness
+        for record in snapshot.records:
+            counts[record.release_id] = counts.get(record.release_id, 0) + 1
+
+    def check(release_id: int) -> DuplicateStatus:
+        session_copies = session.added_release_ids.get(release_id, 0)
+        snap_copies = counts.get(release_id, 0)
+        if session_copies:
+            return DuplicateStatus(
+                state="in_collection",
+                copies=snap_copies + session_copies,
+                added_this_session=True,
+            )
+        if snapshot is None:
+            return DuplicateStatus(state="unknown", reason="no snapshot")
+        if snap_copies:
+            reason = (
+                None
+                if completeness == Completeness.COMPLETE
+                else f"count as of last sync (snapshot {completeness.value})"
+            )
+            return DuplicateStatus(
+                state="in_collection", copies=snap_copies, reason=reason
+            )
+        if completeness == Completeness.COMPLETE:
+            return DuplicateStatus(state="not_in_collection")
+        return DuplicateStatus(
+            state="unknown", reason=f"snapshot {completeness.value}"
+        )
+
+    return check
+
+
 def evidence_rungs(evidence: ScanEvidence) -> list[tuple[str, dict]]:
     """Search params per available evidence, strongest first (FR-004)."""
     rungs: list[tuple[str, dict]] = []

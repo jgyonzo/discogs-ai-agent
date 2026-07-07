@@ -34,7 +34,7 @@ from collection_agent.scan.models import (
 from collection_agent.scan.search import (
     find_candidates,
     find_candidates_text,
-    pending_duplicate_checker,
+    snapshot_duplicate_checker,
 )
 from collection_agent.scan.session import ScanSession
 from collection_agent.scan.vision import VisionExtractionError, extract_evidence
@@ -71,14 +71,6 @@ class _CycleContext:
         self.has_candidates = False
 
 
-def build_duplicate_checker(store: SnapshotStore, session: ScanSession):
-    """US1 placeholder: explicit unknown (FR-010 — unknown is never
-    presented as not-in-collection). Replaced by the snapshot+session
-    overlay in US2 (T023)."""
-    del store, session
-    return pending_duplicate_checker
-
-
 def create_app(
     settings: Settings,
     llm_client: Any,
@@ -89,7 +81,11 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="collection-agent scan", docs_url=None, redoc_url=None)
     cycles: dict[str, _CycleContext] = {}
-    duplicate_checker = build_duplicate_checker(store, session)
+
+    def _duplicate_checker():
+        # fresh per request: reads the snapshot as it is NOW (it may have
+        # been marked stale by a previous add this session) + session adds
+        return snapshot_duplicate_checker(store, session)
 
     def _snapshot_state() -> str:
         snap = store.load()
@@ -173,7 +169,7 @@ def create_app(
 
         try:
             candidates, more_matches, _tried = find_candidates(
-                discogs_client, settings, evidence, duplicate_checker
+                discogs_client, settings, evidence, _duplicate_checker()
             )
         except DiscogsError as exc:
             return _error(
@@ -209,7 +205,7 @@ def create_app(
             return _error(400, "empty_query", "Type something to search for.")
         try:
             candidates, more_matches = find_candidates_text(
-                discogs_client, settings, query, duplicate_checker
+                discogs_client, settings, query, _duplicate_checker()
             )
         except DiscogsError as exc:
             return _error(
@@ -240,7 +236,7 @@ def create_app(
         ctx = cycles.get(req.scan_id) or _CycleContext("photo", [])
         title = ctx.titles.get(req.release_id)
 
-        duplicate = duplicate_checker(req.release_id)
+        duplicate = _duplicate_checker()(req.release_id)
         is_duplicate = (
             duplicate.state == "in_collection" or duplicate.added_this_session
         )

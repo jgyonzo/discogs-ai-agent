@@ -259,3 +259,146 @@ class TestPageAndSecrets:
         for body in surfaces:
             assert TOKEN not in body
             assert FAKE_KEY not in body
+
+
+class TestDuplicateFlow:
+    """US2 T027: server-enforced double confirmation, mark_stale on success
+    only, session overlay, degraded-snapshot markers."""
+
+    def test_duplicate_marked_in_candidates(
+        self, settings, store, complete_snapshot
+    ):
+        # release 1 is in the snapshot twice (instances 1 and 4)
+        client, _, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(1)])
+            },
+            snapshot=complete_snapshot,
+        )
+        body = post_photo(client).json()
+        dup = body["candidates"][0]["duplicate"]
+        assert dup["state"] == "in_collection"
+        assert dup["copies"] == 2
+
+    def test_duplicate_add_requires_second_confirmation(
+        self, settings, store, complete_snapshot
+    ):
+        client, discogs, session = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(1)])
+            },
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+
+        first = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 1}
+        ).json()
+        assert first["status"] == "needs_duplicate_confirmation"
+        assert "2 copies" in first["detail"]
+        assert discogs.adds == []          # NO write on the first attempt
+        assert session.log == []           # and nothing journaled
+
+        second = client.post(
+            "/api/add",
+            json={"scan_id": scan_id, "release_id": 1, "confirm_duplicate": True},
+        ).json()
+        assert second["status"] == "added"
+        assert len(discogs.adds) == 1      # exactly one write
+        assert session.log[-1].duplicate_add is True
+
+    def test_non_duplicate_needs_single_confirmation(
+        self, settings, store, complete_snapshot
+    ):
+        client, discogs, session = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(999)])
+            },
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 999}
+        ).json()
+        assert body["status"] == "added"
+        assert len(discogs.adds) == 1
+        assert session.log[-1].duplicate_add is False
+
+    def test_mark_stale_on_success_only(
+        self, settings, store, complete_snapshot
+    ):
+        from collection_agent.models import Completeness
+
+        client, _, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(999)])
+            },
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 999})
+        assert store.load().meta.completeness == Completeness.STALE
+
+    def test_failed_add_leaves_snapshot_complete(
+        self, settings, store, complete_snapshot
+    ):
+        from collection_agent.discogs.client import DiscogsServerError
+        from collection_agent.models import Completeness
+
+        client, _, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(999)])
+            },
+            add_failures={999: DiscogsServerError("boom")},
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 999})
+        assert store.load().meta.completeness == Completeness.COMPLETE
+
+    def test_same_release_again_shows_session_add(
+        self, settings, store, complete_snapshot
+    ):
+        client, _, _ = make_client(
+            settings, store,
+            vision_script=[EVIDENCE_JSON, EVIDENCE_JSON],  # two scans
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(999)])
+            },
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 999})
+
+        # scanning the same record again: now marked via the session overlay
+        body = post_photo(client).json()
+        dup = body["candidates"][0]["duplicate"]
+        assert dup["state"] == "in_collection"
+        assert dup["added_this_session"] is True
+        assert dup["copies"] == 1
+
+        # and adding it again needs the extra confirmation
+        again = client.post(
+            "/api/add",
+            json={"scan_id": body["scan_id"], "release_id": 999},
+        ).json()
+        assert again["status"] == "needs_duplicate_confirmation"
+
+    def test_stale_snapshot_absence_shows_unknown_marker(
+        self, settings, store, stale_snapshot
+    ):
+        client, _, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(999)])
+            },
+            snapshot=stale_snapshot,
+        )
+        dup = post_photo(client).json()["candidates"][0]["duplicate"]
+        assert dup["state"] == "unknown"
+        assert dup["reason"] == "snapshot stale"

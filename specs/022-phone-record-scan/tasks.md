@@ -227,7 +227,7 @@ scanning a record resolving to X shows `in_collection` with the right
 count; adding X without `confirm_duplicate` never writes; with it,
 writes once and marks the snapshot stale (spec US2 acceptance 1–4).
 
-- [ ] T023 [US2] Implement duplicate-status computation in
+- [x] T023 [US2] Implement duplicate-status computation in
       `collection-agent/src/collection_agent/scan/search.py` (replace
       the T017 hook): per data-model.md rules — complete snapshot →
       `in_collection(count)`/`not_in_collection`; missing snapshot →
@@ -236,12 +236,12 @@ writes once and marks the snapshot stale (spec US2 acceptance 1–4).
       (never `not_in_collection` — FR-010); session-added releases
       always `in_collection` with `added_this_session=true` and
       session copies included.
-- [ ] T024 [P] [US2] Unit tests in
+- [x] T024 [P] [US2] Unit tests in
       `collection-agent/tests/unit/test_scan_search.py` (extend):
       each snapshot state (complete/partial/stale/missing) × presence
       matrix, session-add overlay, count arithmetic
       (snapshot instances + session adds).
-- [ ] T025 [US2] Wire the duplicate gate + reconciliation into
+- [x] T025 [US2] Wire the duplicate gate + reconciliation into
       `collection-agent/src/collection_agent/scan/server.py`
       `/api/add`: duplicate-status `in_collection` (or
       `added_this_session`) without `confirm_duplicate=true` → 200
@@ -250,13 +250,13 @@ writes once and marks the snapshot stale (spec US2 acceptance 1–4).
       `duplicate_add=true`, `SnapshotStore.mark_stale()` after every
       successful add (research R4), session `added_release_ids`
       update.
-- [ ] T026 [US2] Page support in
+- [x] T026 [US2] Page support in
       `collection-agent/src/collection_agent/scan/static/index.html`:
       render duplicate markers ("already in your collection — N
       copies" / "duplicate status unknown — <reason>"), drive the
       extra confirmation from the `needs_duplicate_confirmation`
       response (never send `confirm_duplicate:true` on first tap).
-- [ ] T027 [US2] Integration tests (part 2) in
+- [x] T027 [US2] Integration tests (part 2) in
       `collection-agent/tests/integration/test_scan_server.py`:
       duplicate double-confirm flow (first add attempt → no write;
       second with flag → exactly one write), `mark_stale` invoked on

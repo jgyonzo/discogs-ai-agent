@@ -156,3 +156,84 @@ class TestManualSearch:
         assert [c.release_id for c in candidates] == [103]
         assert more is False
         assert client.searches[0]["q"] == "Rhythim Is Rhythim Nude Photo"
+
+
+class TestDuplicateStatus:
+    """US2 T024: snapshot-state × presence matrix + session overlay
+    (data-model.md rules; FR-009/010)."""
+
+    def _checker(self, store, session_adds=None):
+        from collection_agent.scan.search import snapshot_duplicate_checker
+
+        class _FakeSession:
+            def __init__(self, adds):
+                self.added_release_ids = adds or {}
+
+        return snapshot_duplicate_checker(store, _FakeSession(session_adds))
+
+    def test_complete_snapshot_presence_counts_instances(
+        self, store, complete_snapshot
+    ):
+        store.save(complete_snapshot)
+        check = self._checker(store)
+        dup = check(1)  # release 1 has instances 1 and 4 (two copies)
+        assert dup.state == "in_collection"
+        assert dup.copies == 2
+        assert dup.added_this_session is False
+        assert dup.reason is None
+
+    def test_complete_snapshot_absence_is_not_in_collection(
+        self, store, complete_snapshot
+    ):
+        store.save(complete_snapshot)
+        assert self._checker(store)(999).state == "not_in_collection"
+
+    def test_missing_snapshot_is_unknown(self, store):
+        dup = self._checker(store)(1)
+        assert dup.state == "unknown"
+        assert dup.reason == "no snapshot"
+
+    def test_stale_snapshot_absence_degrades_to_unknown(
+        self, store, stale_snapshot
+    ):
+        store.save(stale_snapshot)
+        dup = self._checker(store)(999)
+        assert dup.state == "unknown"
+        assert dup.reason == "snapshot stale"
+
+    def test_partial_snapshot_absence_degrades_to_unknown(
+        self, store, partial_snapshot
+    ):
+        store.save(partial_snapshot)
+        assert self._checker(store)(999).state == "unknown"
+
+    def test_stale_snapshot_presence_still_shows_count(
+        self, store, stale_snapshot
+    ):
+        store.save(stale_snapshot)
+        dup = self._checker(store)(1)
+        assert dup.state == "in_collection"
+        assert dup.copies == 2
+        assert "as of last sync" in dup.reason
+
+    def test_session_add_overlays_any_snapshot_state(self, store):
+        # no snapshot at all, but added this session -> in_collection
+        dup = self._checker(store, session_adds={101: 1})(101)
+        assert dup.state == "in_collection"
+        assert dup.copies == 1
+        assert dup.added_this_session is True
+
+    def test_session_adds_stack_on_snapshot_copies(
+        self, store, complete_snapshot
+    ):
+        store.save(complete_snapshot)
+        dup = self._checker(store, session_adds={1: 1})(1)
+        assert dup.copies == 3  # 2 snapshot instances + 1 this session
+        assert dup.added_this_session is True
+
+    def test_unreadable_snapshot_degrades_to_unknown(self, store, settings):
+        settings.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        settings.snapshot_path.write_text("{ corrupt json", encoding="utf-8")
+        dup = self._checker(store)(1)
+        assert dup.state == "unknown"
+        assert dup.reason == "no snapshot"
