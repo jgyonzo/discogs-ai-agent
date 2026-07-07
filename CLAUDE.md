@@ -2,7 +2,16 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 024-scan-accuracy-followups** (branch
+`024-scan-accuracy-followups`) — eval-driven follow-ups to 023's first
+measured run (56.4%/94 images + 14-miss live spot-check): exact-catno
+re-rank on the catno rung, evidence values in eval results, same-master
+near-miss metric. Plan: `specs/024-scan-accuracy-followups/plan.md`
+(spec, research R1–R7, data-model, quickstart, contracts: amendments to
+017-discogs-consumption (3rd), 022-scan-api, 023-eval-dataset,
+023-eval-results).
+
+Most recently merged:
 **023-scan-eval-harness** (PR #13, merged to main 2026-07-07 — owner-only
 live validation still open: quickstart checklist SC-001 full dataset
 build, SC-002 first measured identification rate, SC-004 retained-photo
