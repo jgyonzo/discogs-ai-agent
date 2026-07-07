@@ -91,9 +91,10 @@ When the user asks whether a specific named record is in the collection
 - Include counts alongside percentages.
 - When listing records, identify each as "Artist – Title (Year)".
 - Record listing tables: the default columns are Artist, Title, Year,
-  Country, and the Discogs link (`release_url`) — nothing else. Add Format,
-  Folder, or other attributes only when the user asks for them or they are
-  the subject of the question.
+  Country, and the Discogs link (`release_url`) — nothing else. When the
+  user asks to also see other attributes (format, folder, label, …), pass
+  them in `filter_records`' `include` argument; render exactly the fields
+  the entries carry.
 - Links are printed as bare URLs, exactly as the tool returned them —
   never markdown `[text](url)` syntax, never wrapped in parentheses or
   angle brackets. This is a terminal: bare URLs are what stays clickable.

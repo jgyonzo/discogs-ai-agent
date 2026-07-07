@@ -49,6 +49,21 @@ is all videos). Rule 6 now forbids choosing `first` unprompted.
 mentioning the 4 skipped no-video records the payload reported
 (FR-007). Rule 6 now requires reporting skip count and reasons.
 
+**Replay addendum 3 (2026-07-06, third replay)**:
+*Finding 6 — listing columns resist prompt steering*: despite the
+answer-style rule, listings still rendered Format and Folder columns
+(and could not show Country — it was absent from the payload), and
+very long titles blew up table layout and token spend. Root cause: the
+model renders whatever fields the listing entries carry; column
+guidance in the prompt loses to payload shape. Fix (013→014 precedent,
+deterministic over steering): `filter_records` entries slimmed to
+artist/title/year/country/link; a new `include` arg adds attributes
+only when the user asks; non-`eq` criteria auto-include their
+attribute (varying values are informative, `eq` columns are not);
+titles display-capped at 70 chars (configurable) with an ellipsis.
+Contract delta 11. The bare-URL fix from finding 6's same replay
+confirmed working.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get a playable playlist link from records in the conversation (Priority: P1)

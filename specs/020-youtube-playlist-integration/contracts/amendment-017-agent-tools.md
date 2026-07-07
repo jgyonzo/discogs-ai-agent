@@ -2,8 +2,9 @@
 
 Amends `specs/017-discogs-collection-agent/contracts/agent-tools.md`.
 Third amendment to that contract (018 → deltas 1–5 against §3; 019 →
-deltas 6–8 against §1/§5). This amendment: **deltas 9–10** against §1
-and §5. The play-link surface itself is specified in this feature's
+deltas 6–8 against §1/§5). This amendment: **deltas 9–11** against §1
+and §5 (delta 11 added 2026-07-06 from replay finding 6). The
+play-link surface itself is specified in this feature's
 `contracts/youtube-playlists.md`.
 
 Re-scope note (2026-07-06): an earlier draft of this amendment
@@ -44,6 +45,31 @@ write path (no plan, no confirmation prompt).
 - Records without usable stored videos are reported as skipped; the
   agent never offers to find a substitute video (v2 search stays
   deferred).
+
+## Delta 11 — §1 read tools: lean `filter_records` listing entries (replay finding 6)
+
+Added 2026-07-06 after the third live replay: prompt-level column
+guidance lost to the payload shape (`gpt-4o-mini` rendered whatever
+fields the entries carried), so the entry shape itself changes — the
+013→014 enforcement-over-steering precedent applied to listings.
+
+- Default listing entry (matches **and** `fallback_matches`):
+  `instance_id`, `artist`, `title`, `year`, `country`, `release_url` —
+  nothing else. `format` and `folder` are no longer default fields
+  (supersedes the entry shape shown in 019's delta 6; `release_url`
+  semantics unchanged).
+- New `include` arg on `filter_records`: extra registry attributes
+  (aliases accepted) added per entry when the user asks to see them.
+  Unknown names land in `unsupported_criteria` with reason "unknown
+  attribute (include)" — never silently dropped (FR-013a family).
+  `folder` renders as the folder *name*, never the raw id.
+- Auto-include: a criterion whose op is not `eq`/`missing` adds its
+  attribute to the entries (values vary → informative); `eq` criteria
+  do not (a column repeating one value is noise).
+- `title` is display-capped at `settings.listing_title_max_chars`
+  (default 70, env `LISTING_TITLE_MAX_CHARS`) with a trailing ellipsis
+  — matching/locating is unaffected (it runs on snapshot data, not the
+  displayed string).
 
 ## Explicitly not amended
 

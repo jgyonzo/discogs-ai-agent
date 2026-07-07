@@ -392,3 +392,83 @@ def test_fallback_matches_carry_release_url(incident_shaped_tool, session):
     assert res["fallback_matches"]
     for m in res["fallback_matches"]:
         assert m["release_url"].startswith("https://www.discogs.com/release/")
+
+
+# --- 020 replay finding 6: lean listing entries (payload beats prompt) --------
+
+
+DEFAULT_ENTRY_KEYS = {"instance_id", "artist", "title", "year", "country", "release_url"}
+
+
+def test_default_entry_carries_exactly_the_lean_fields(filter_tool, session):
+    res = run_filter(filter_tool, session, [{"attribute": "genre", "value": "Jazz"}])
+    (entry,) = res["matches"]
+    assert set(entry) == DEFAULT_ENTRY_KEYS  # no format, no folder
+    assert entry["country"] == "US"
+
+
+def test_include_adds_requested_attributes(filter_tool, session):
+    args = filter_tool.params_model(
+        criteria=[{"attribute": "genre", "value": "Jazz"}], include=["format"]
+    )
+    (entry,) = filter_tool.fn(session, args)["matches"]
+    assert entry["format"] == 'Vinyl, 12"'
+
+
+def test_include_resolves_aliases_and_folder_shows_name(filter_tool, session):
+    args = filter_tool.params_model(
+        criteria=[{"attribute": "genre", "value": "Jazz"}], include=["carpeta"]
+    )
+    (entry,) = filter_tool.fn(session, args)["matches"]
+    assert entry["folder"] == "Uncategorized"  # name, never the raw id
+
+
+def test_unknown_include_reported_not_dropped(filter_tool, session):
+    args = filter_tool.params_model(
+        criteria=[{"attribute": "genre", "value": "Jazz"}], include=["bogus"]
+    )
+    res = filter_tool.fn(session, args)
+    assert any(
+        u["attribute"] == "bogus" and "include" in u["reason"]
+        for u in res["unsupported_criteria"]
+    )
+    assert res["count"] == 1  # the filter itself still ran
+
+
+def test_non_eq_criterion_auto_includes_its_attribute(filter_tool, session):
+    res = run_filter(
+        filter_tool, session, [{"attribute": "my_rating", "op": "gte", "value": 4}]
+    )
+    (entry,) = res["matches"]
+    assert entry["my_rating"] == 4  # values vary across records → informative
+
+
+def test_eq_criterion_does_not_add_a_redundant_column(filter_tool, session):
+    res = run_filter(filter_tool, session, [{"attribute": "genre", "value": "Electronic"}])
+    for entry in res["matches"]:
+        assert "genre" not in entry  # every row would say "Electronic"
+
+
+def test_include_of_default_attribute_is_a_noop(filter_tool, session):
+    args = filter_tool.params_model(
+        criteria=[{"attribute": "genre", "value": "Jazz"}], include=["title"]
+    )
+    (entry,) = filter_tool.fn(session, args)["matches"]
+    assert set(entry) == DEFAULT_ENTRY_KEYS
+
+
+def test_long_titles_truncated_with_ellipsis(settings, store, session):
+    from tests.conftest import make_record, make_snapshot
+
+    long_title = "A" * 100
+    store.save(make_snapshot([make_record(1, title=long_title)]))
+    (tool,) = make_browse_tools(settings, store)
+    res = run_filter(tool, session, [{"attribute": "genre", "value": "Electronic"}])
+    (entry,) = res["matches"]
+    assert len(entry["title"]) == settings.listing_title_max_chars
+    assert entry["title"].endswith("…")
+    # short titles pass through untouched
+    store.save(make_snapshot([make_record(1, title="Short Title")]))
+    (tool,) = make_browse_tools(settings, store)
+    res = run_filter(tool, session, [{"attribute": "genre", "value": "Electronic"}])
+    assert res["matches"][0]["title"] == "Short Title"

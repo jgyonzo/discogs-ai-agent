@@ -78,6 +78,11 @@ class Settings(BaseSettings):
 
     # --- Answer shaping ---
     filter_result_limit: int = Field(default=50, alias="FILTER_RESULT_LIMIT")
+    # listing display cap: longer titles are truncated with an ellipsis in
+    # listing payloads (table width + token economy; matching is unaffected)
+    listing_title_max_chars: int = Field(
+        default=70, alias="LISTING_TITLE_MAX_CHARS"
+    )
 
 
 def load_settings() -> Settings:
