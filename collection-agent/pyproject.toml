@@ -14,6 +14,8 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "rich>=13.0",
+    # 021 — LangSmith tracing over the plain OpenAI client (no LangChain)
+    "langsmith>=0.3",
     # collection_matcher — offline matcher against the ETL-published DuckDB
     "duckdb>=1.5",
     "pandas>=2.0",

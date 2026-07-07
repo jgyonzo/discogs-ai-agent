@@ -56,12 +56,13 @@ def test_no_source_prints_or_logs_the_token():
                 and node.func.attr == "get_secret_value"
             ):
                 offenders.append(f"{py.name}:{node.lineno}")
-    # sanctioned call sites only: the Discogs auth header (client.py) and the
-    # OpenAI SDK constructor (cli.py) — both hand the secret to an API client,
+    # sanctioned call sites only: the Discogs auth header (client.py), the
+    # OpenAI SDK constructor (cli.py), and the LangSmith env bridge
+    # (cli.py, 021) — each hands the secret to an API client/SDK,
     # never to a log/print/format.
     sanctioned = {"client.py", "cli.py"}
     unsanctioned = [o for o in offenders if o.split(":")[0] not in sanctioned]
-    assert len(offenders) == 2 and not unsanctioned, (
+    assert len(offenders) == 3 and not unsanctioned, (
         "get_secret_value() called outside the sanctioned sites: "
         f"{offenders} — audit each new call site for leaks"
     )

@@ -11,6 +11,12 @@ y/N itself. Unconfirmed writes are unreachable by construction.
 
 The system prompt's attribute documentation is rendered from the attribute
 registry at startup ({attribute_block}) — never hand-written (VII(b) analog).
+
+Observability (021): the loop carries an observe-only LangSmith layer —
+`run_turn` is the per-turn trace root and `_dispatch` emits one tool span
+per execution (contracts/tracing.md). Both are strict no-ops unless
+LANGSMITH_TRACING is set in the process env (the CLI bridges it from
+settings when tracing is configured); tracing never alters loop behavior.
 """
 
 from __future__ import annotations
@@ -21,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from langsmith import trace as ls_trace
+from langsmith import traceable
 from pydantic import BaseModel, ValidationError
 
 from collection_agent.models import WritePlan
@@ -115,6 +123,11 @@ class Agent:
 
     # -- conversation ----------------------------------------------------------
 
+    # no-op unless LANGSMITH_TRACING is in os.environ (the CLI sets it from
+    # settings when tracing is configured); when active, this is the root of
+    # the turn's trace tree — client-level llm runs and _dispatch tool spans
+    # nest under it via contextvars
+    @traceable(name="run_turn", run_type="chain")
     def run_turn(self, user_text: str) -> str:
         """One user turn: may involve several tool rounds; returns final text."""
         self.session.messages.append({"role": "user", "content": user_text})
@@ -172,6 +185,17 @@ class Agent:
     # -- dispatch ---------------------------------------------------------------
 
     def _dispatch(self, name: str, raw_arguments: str) -> dict[str, Any]:
+        # observe-only tool span (021): records the payload the LLM will
+        # receive — success or any error dict — never changes it. No-op
+        # without LANGSMITH_TRACING in the env, like run_turn above.
+        with ls_trace(
+            name=name, run_type="tool", inputs={"arguments": raw_arguments}
+        ) as span:
+            result = self._dispatch_impl(name, raw_arguments)
+            span.end(outputs=result)
+            return result
+
+    def _dispatch_impl(self, name: str, raw_arguments: str) -> dict[str, Any]:
         tool = self._tools.get(name)
         if tool is None:
             return {"error": f"unknown tool {name!r}; available: {self.tool_names()}"}

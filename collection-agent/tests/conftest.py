@@ -19,6 +19,22 @@ from collection_agent.settings import Settings
 from collection_agent.snapshot.store import SnapshotStore
 
 
+@pytest.fixture(autouse=True)
+def _scrub_langsmith_env(monkeypatch):
+    """Force tracing off for every test (021 FR-006/SC-003): a developer
+    shell that exported LANGSMITH_* must never flip @traceable live during
+    a test run and send test traffic to a real LangSmith project. Tests
+    that exercise the config surface re-set vars via monkeypatch."""
+    for var in (
+        "LANGSMITH_TRACING",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_ENDPOINT",
+        "LANGSMITH_PROJECT",
+        "COLLECTION_AGENT_LANGSMITH_PROJECT",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture()
 def settings(tmp_path) -> Settings:
     """Isolated settings: dummy token, tmp snapshot path, no .env file read."""

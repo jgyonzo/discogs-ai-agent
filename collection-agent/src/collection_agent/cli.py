@@ -12,6 +12,7 @@ tool, so unconfirmed writes are unreachable by construction.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from pydantic import ValidationError
@@ -141,20 +142,52 @@ def _print_meta(meta: SnapshotMeta) -> None:
 # --- chat -------------------------------------------------------------------
 
 
-def _build_agent(settings: Settings, store: SnapshotStore):
+def _build_llm_client(settings: Settings):
+    """The real OpenAI client, LangSmith-wrapped only when tracing is
+    effective (021 contracts/tracing.md §1): flag AND key present. Any
+    other combination returns the plain, unwrapped client — tracing-only
+    misconfiguration must never block chat (never EXIT_CONFIG)."""
     from openai import OpenAI
 
+    # the OpenAI SDK only reads os.environ; our key comes from the repo .env
+    # via pydantic-settings, so pass it explicitly.
+    client = OpenAI(api_key=settings.openai_api_key.get_secret_value())
+    if not settings.langsmith_tracing:
+        return client
+    if settings.langsmith_api_key is None:
+        console.print(
+            "[dim]tracing enabled but LANGSMITH_API_KEY is not set — "
+            "continuing without tracing[/dim]"
+        )
+        return client
+
+    # Same os.environ mismatch as the OpenAI key above: the langsmith SDK —
+    # including the @traceable no-op gate in agent.py — reads only
+    # os.environ, while our values come from the repo .env via
+    # pydantic-settings (VII(a)). This one-site bridge is the documented
+    # transport (research R2). LANGSMITH_PROJECT gets the COMPONENT's
+    # project name, never the .env value (that one belongs to agent/).
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key.get_secret_value()
+    if settings.langsmith_endpoint:
+        os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+
+    from langsmith.wrappers import wrap_openai
+
+    return wrap_openai(client)
+
+
+def _build_agent(settings: Settings, store: SnapshotStore):
     from collection_agent.agent import Agent
     from collection_agent.registry import build_registry
     from collection_agent.tools.base import make_base_tools
 
     registry = build_registry(settings)
-    # the OpenAI SDK only reads os.environ; our key comes from the repo .env
-    # via pydantic-settings, so pass it explicitly.
     agent = Agent(
         registry=registry,
         model=settings.collection_agent_model,
-        llm_client=OpenAI(api_key=settings.openai_api_key.get_secret_value()),
+        llm_client=_build_llm_client(settings),
     )
     for tool in make_base_tools(store, lambda full: _run_sync_with_progress(settings, full)):
         agent.register(tool)
