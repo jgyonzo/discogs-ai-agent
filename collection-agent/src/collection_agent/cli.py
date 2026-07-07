@@ -47,6 +47,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     scan_p.add_argument("--host", default=None, help="bind address (default: settings)")
     scan_p.add_argument("--port", type=int, default=None, help="port (default: settings)")
+    evds_p = sub.add_parser(
+        "eval-dataset",
+        help="build the labeled eval image dataset from the snapshot (023)",
+    )
+    evds_p.add_argument(
+        "--limit", type=int, default=None, help="process at most N releases"
+    )
+    evds_p.add_argument(
+        "--images-per-release", type=int, default=None,
+        help="download cap per release (default: settings)",
+    )
+    evrun_p = sub.add_parser(
+        "eval-run",
+        help="run the scan-identification eval (023; makes billable vision calls)",
+    )
+    evrun_p.add_argument(
+        "--source", choices=["discogs", "retained"], default="discogs",
+        help="which labeled dataset to evaluate (default: discogs)",
+    )
+    evrun_p.add_argument(
+        "--limit", type=int, default=None, help="evaluate at most N images"
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -67,6 +89,13 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_status(settings)
         if command == "scan":
             return _cmd_scan(settings, host=args.host, port=args.port)
+        if command == "eval-dataset":
+            return _cmd_eval_dataset(
+                settings, limit=args.limit,
+                images_per_release=args.images_per_release,
+            )
+        if command == "eval-run":
+            return _cmd_eval_run(settings, source=args.source, limit=args.limit)
         return _cmd_chat(settings)
     except KeyboardInterrupt:
         console.print("\n[dim]bye[/dim]")
@@ -336,6 +365,132 @@ def _maybe_confirm_pending_plan(agent, settings: Settings, store: SnapshotStore)
         outcome = "[green]ok[/green]" if m.result == "ok" else f"[red]failed[/red]: {m.error}"
         rt.add_row(m.display, outcome)
     console.print(rt)
+
+
+# --- eval (023) ---------------------------------------------------------------
+
+
+def _cmd_eval_dataset(
+    settings: Settings, limit: int | None, images_per_release: int | None
+) -> int:
+    """Build the labeled Discogs-image dataset (contracts/eval-dataset.md §1).
+    Local-only, gitignored output; resumable — interrupt and re-run freely."""
+    from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
+    from collection_agent.eval.dataset import DatasetError, build_dataset
+
+    store = SnapshotStore(settings.snapshot_path)
+    client = DiscogsClient(
+        settings, notify=lambda m: console.print(f"[yellow]{m}[/yellow]")
+    )
+    try:
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("downloading release images", total=None)
+
+            def on_progress(done: int, total: int) -> None:
+                progress.update(task, completed=done, total=total)
+
+            stats = build_dataset(
+                client, store, settings,
+                limit=limit, images_per_release=images_per_release,
+                on_progress=on_progress,
+            )
+    except DatasetError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return EXIT_CONFIG
+    except DiscogsAuthError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return EXIT_CONFIG
+    finally:
+        client.close()
+
+    t = Table(show_header=False, box=None)
+    t.add_row("dataset", str(settings.eval_dataset_dir))
+    t.add_row("releases processed", str(stats["processed"]))
+    t.add_row("with images", str(stats["downloaded"]))
+    t.add_row("no images on Discogs", str(stats["no_images"]))
+    t.add_row("failed (will retry on re-run)", str(stats["failed"]))
+    t.add_row("images downloaded", str(stats["images_downloaded"]))
+    t.add_row("already done (skipped)", str(stats["skipped_done"]))
+    console.print(t)
+    console.print(
+        "[dim]images are uploader-copyrighted: local use only, never "
+        "committed or shared (see NOTICE.txt)[/dim]"
+    )
+    return EXIT_OK
+
+
+def _cmd_eval_run(settings: Settings, source: str, limit: int | None) -> int:
+    """Run the identification eval (contracts/eval-results.md). Read-only
+    against Discogs; per-image errors are data, not process failure."""
+    if settings.openai_api_key is None:
+        console.print(
+            "[red]configuration error:[/red] OPENAI_API_KEY is not set "
+            "(needed for photo evidence extraction)."
+        )
+        return EXIT_CONFIG
+
+    from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
+    from collection_agent.eval.harness import run_eval
+    from collection_agent.eval.sources import SourceError
+
+    client = DiscogsClient(
+        settings, notify=lambda m: console.print(f"[yellow]{m}[/yellow]")
+    )
+    try:
+        run_dir, summary = run_eval(
+            llm_client=_build_llm_client(settings),
+            discogs_client=client,
+            settings=settings,
+            source=source,
+            limit=limit,
+            notify=lambda m: console.print(f"[dim]{m}[/dim]"),
+        )
+    except SourceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return EXIT_CONFIG
+    except DiscogsAuthError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return EXIT_CONFIG
+    finally:
+        client.close()
+
+    _print_eval_summary(summary)
+    console.print(f"[dim]results: {run_dir}[/dim]")
+    return EXIT_OK
+
+
+def _print_eval_summary(summary) -> None:
+    def pct(v: float | None) -> str:
+        return "n/a" if v is None else f"{v * 100:.1f}%"
+
+    t = Table(title=f"Eval {summary.run_id}")
+    t.add_column("metric")
+    t.add_column("value")
+    t.add_row("images", str(summary.images_total))
+    t.add_row("evaluated", str(summary.evaluated))
+    t.add_row("identification rate", pct(summary.identification_rate))
+    t.add_row("top-1 rate", pct(summary.top1_rate))
+    t.add_row(
+        "hits by rung",
+        ", ".join(f"{k}={v}" for k, v in summary.hits_by_rung.items()) or "—",
+    )
+    t.add_row("no evidence", str(summary.no_evidence))
+    t.add_row(
+        "errors",
+        ", ".join(f"{k}={v}" for k, v in summary.errors_by_kind.items())
+        or str(summary.errors),
+    )
+    if summary.source == "retained":
+        t.add_row("unlabeled (not scored)", str(summary.unlabeled))
+    t.add_row("billable vision calls", str(summary.vision_calls))
+    if summary.limited:
+        t.add_row("limited", "yes (--limit)")
+    console.print(t)
 
 
 # --- scan (022) --------------------------------------------------------------

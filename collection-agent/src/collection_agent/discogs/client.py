@@ -156,6 +156,23 @@ class DiscogsClient:
             "/database/search", params={**params, "type": "release"}
         )
 
+    def download_image(self, uri: str) -> bytes | None:
+        """Release-image binary (023 eval dataset; amendment-017-discogs-
+        consumption-2 §2). `uri` is the absolute `images[].uri` URL — httpx
+        sends absolute URLs as-is (base_url ignored), so the governed
+        `_request` path, User-Agent, and retry policy all still apply; the
+        image CDN sends no ratelimit headers and the governor ignores
+        header-less responses. Returns None on 403/404 (expired signed URI)
+        or a non-image payload — the caller records a failed download."""
+        resp = self._request("GET", uri)
+        if resp.status_code in (403, 404):
+            return None
+        resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "")
+        if not content_type.startswith("image/"):
+            return None
+        return resp.content
+
     def get_release_instances(
         self, username: str, release_id: int
     ) -> list[dict[str, Any]]:

@@ -117,6 +117,33 @@ class Settings(BaseSettings):
         alias="COLLECTION_AGENT_SCAN_JOURNAL_DIR",
     )
 
+    # --- Scan identification eval (023) ---
+    # All three eval directories default under <component>/data/ so the
+    # repo-root gitignore `data/` rule keeps uploader-copyrighted images
+    # out of git (contracts/eval-dataset.md §4; guard-tested).
+    eval_dataset_dir: Path = Field(
+        default=_COMPONENT_ROOT / "data" / "eval" / "discogs-images",
+        alias="COLLECTION_AGENT_EVAL_DATASET_DIR",
+    )
+    # per-release download cap; secondary images (back covers, labels) are
+    # preferred over the primary front cover (FR-003)
+    eval_images_per_release: int = Field(
+        default=2, alias="COLLECTION_AGENT_EVAL_IMAGES_PER_RELEASE"
+    )
+    eval_results_dir: Path = Field(
+        default=_COMPONENT_ROOT / "data" / "eval" / "runs",
+        alias="COLLECTION_AGENT_EVAL_RESULTS_DIR",
+    )
+    # opt-in retention of uploaded scan photos (FR-007): OFF by default —
+    # with the flag off the scan server behavior is byte-identical to 022
+    scan_retain_photos: bool = Field(
+        default=False, alias="COLLECTION_AGENT_SCAN_RETAIN_PHOTOS"
+    )
+    scan_retention_dir: Path = Field(
+        default=_COMPONENT_ROOT / "data" / "eval" / "scan-photos",
+        alias="COLLECTION_AGENT_SCAN_RETENTION_DIR",
+    )
+
     # --- Rate limiting ---
     rate_limit_floor: int = Field(default=2, alias="RATE_LIMIT_FLOOR")
 
