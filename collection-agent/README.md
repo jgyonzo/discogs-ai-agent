@@ -28,6 +28,20 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `YOUTUBE_WEB_BASE_URL` | no | `https://www.youtube.com` | Base for tool-built play links (020) |
 | `YOUTUBE_PLAYLIST_MAX_IDS` | no | `50` | Max video ids per play link (chunking threshold) |
 | `LISTING_TITLE_MAX_CHARS` | no | `70` | Title display cap in listing tables |
+| `LANGSMITH_TRACING` | no | off | Enable LangSmith tracing (021) — absent ⇒ strict no-op |
+| `LANGSMITH_API_KEY` | no | — | LangSmith key; if unset while tracing is on, chat continues untraced (one notice, never an error) |
+| `LANGSMITH_ENDPOINT` | no | SDK default | LangSmith endpoint override |
+| `COLLECTION_AGENT_LANGSMITH_PROJECT` | no | `discogs-collection-agent` | LangSmith project for THIS component — deliberately not `LANGSMITH_PROJECT`, which belongs to `agent/` |
+
+### Tracing (021)
+
+With `LANGSMITH_TRACING` + `LANGSMITH_API_KEY` set, every chat turn emits
+one trace tree to the `discogs-collection-agent` project on
+<https://smith.langchain.com>: a `run_turn` root, each LLM request with its
+as-sent payload and token usage, and one span per tool execution (errors
+included). Tracing observes only — it never blocks or fails a turn (trace
+delivery is background/batched), and without the env vars the client isn't
+even wrapped. Contract: `specs/021-langsmith-tracing/contracts/tracing.md`.
 
 ## Run the agent
 
@@ -56,7 +70,7 @@ Exit codes: `0` ok · `1` unexpected error · `2` configuration error
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (213 tests, no live API calls).
+Tests: `pytest` (223 tests, no live API calls).
 
 ---
 
