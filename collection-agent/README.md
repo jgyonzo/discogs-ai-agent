@@ -80,7 +80,8 @@ touches a YouTube account (no OAuth, no credentials, no quota).
 home LAN (the banner prints the URL to open on the phone — same Wi-Fi).
 Photograph a sleeve, center label, or barcode: a vision model extracts
 printed evidence, Discogs is searched in precision order (barcode →
-catalog number → artist+title, manual text search as fallback), and the
+catalog number → artist+title → a free-text query composed from
+whatever partial evidence was read; manual text search on top), and the
 matching pressings are shown with cover, year, country, format, catno,
 and an "already in your collection — N copies" marker. **Nothing is
 written until you tap a candidate and confirm** (duplicates ask twice;
@@ -101,7 +102,7 @@ Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
 record scan: `specs/022-phone-record-scan/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (317 tests, no live API calls).
+Tests: `pytest` (339 tests, no live API calls).
 
 ---
 

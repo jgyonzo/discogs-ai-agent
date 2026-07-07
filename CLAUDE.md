@@ -37,16 +37,32 @@ session journal at `data/scan-sessions/<session>.jsonl`
 500, never silent. Uploads capped 10 MiB
 (`COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES`) before any vision work.
 Seven new `Settings` fields total (VII(a)); secrets never on the wire
-(page is static — grep-guarded test). 317 tests
-(`cd collection-agent && pytest`), no live API calls; `FakeDiscogsClient`
+(page is static — grep-guarded test). **Replay addendum 1**
+(2026-07-07, live session `20260707-130810Z`: 0/4 identified on two
+Crosstown Rebels 12″ singles — diagnosed via the journal + 021's
+LangSmith traces): vision put barcode digits in `catno` twice, read
+the label as the artist, and parked lead tracks in `notes` (12″
+singles print no title); the ladder discarded partial evidence.
+Fixes: FR-003 prompt hardening (barcode-vs-catno, label≠artist,
+lead-track-is-title, new `tracks` field), FR-019 normalization
+(10+-digit separator-stripped catno ⇒ barcode), FR-020 final
+free-text rung composed from artist+title/lead-track+label when
+structured rungs are absent/empty (journal `evidence_kinds` = rungs
+actually TRIED, `text` incl.), FR-021 journal lines carry the compact
+extracted evidence values (photo) / query (manual) — LangSmith no
+longer needed to debug identification. Owner independently repointed
+`COLLECTION_AGENT_VISION_MODEL` to `gpt-5.4-mini`. 339 tests
+(`cd collection-agent && pytest`), no live API calls; live replay
+tests use the verbatim failing vision replies; `FakeDiscogsClient`
 grew scriptable search/add. Artifacts: `specs/022-phone-record-scan/`
-(spec, plan, research R1–R10, data-model, quickstart + owner
-live-validation checklist, tasks T001–T037 complete / T038–T041
-owner-only, contracts: `scan-api.md`, `scan-journal-schema.md`,
-`amendment-017-discogs-consumption.md` — FIRST amendment to 017's
-discogs-consumption contract: +`/database/search` read,
-+add-to-collection write). Out of scope kept: OAuth/YouTube, cover-art
-fingerprints, HTTPS/auth (owner decision T041).
+(spec + replay addendum 1, plan, research R1–R10, data-model,
+quickstart + owner live-validation checklist, tasks T001–T037 +
+T042–T046 complete / T038–T041 owner-only, contracts: `scan-api.md`,
+`scan-journal-schema.md`, `amendment-017-discogs-consumption.md` —
+FIRST amendment to 017's discogs-consumption contract:
++`/database/search` read, +add-to-collection write). Out of scope
+kept: OAuth/YouTube, cover-art fingerprints, HTTPS/auth (owner
+decision T041).
 
 Prior feature:
 **021-langsmith-tracing** (PR #11, merged to main 2026-07-07) —

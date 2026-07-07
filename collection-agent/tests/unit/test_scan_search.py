@@ -23,8 +23,9 @@ FULL = ScanEvidence(
 
 class TestLadder:
     def test_rung_order_strongest_first(self):
+        # addendum 1 (FR-020): the composed free-text fallback is last
         assert [r for r, _ in evidence_rungs(FULL)] == [
-            "barcode", "catno", "artist_title",
+            "barcode", "catno", "artist_title", "text",
         ]
 
     def test_catno_includes_label_when_present(self):
@@ -60,7 +61,7 @@ class TestLadder:
             FakeDiscogsClient(), settings, FULL
         )
         assert candidates == [] and more is False
-        assert tried == ["barcode", "catno", "artist_title"]
+        assert tried == ["barcode", "catno", "artist_title", "text"]
 
 
 class TestShaping:
@@ -237,3 +238,72 @@ class TestDuplicateStatus:
         dup = self._checker(store)(1)
         assert dup.state == "unknown"
         assert dup.reason == "no snapshot"
+
+
+class TestComposedFallback:
+    """FR-020 (addendum 1): free-text rung from partial evidence, fired
+    only when structured rungs are absent or all returned zero."""
+
+    def test_compose_query_full(self):
+        from collection_agent.scan.search import compose_query
+
+        ev = ScanEvidence(artist="dj silversurfer", title="Ace Of Spades",
+                          label="Crosstown Rebels")
+        assert compose_query(ev) == (
+            "dj silversurfer Ace Of Spades Crosstown Rebels"
+        )
+
+    def test_compose_query_lead_track_substitutes_title(self):
+        from collection_agent.scan.search import compose_query
+
+        ev = ScanEvidence(artist="frankie flowerz",
+                          tracks=["The Key", "Steppin' In"],
+                          label="CROSSTOWNREBELS")
+        assert compose_query(ev) == "frankie flowerz The Key CROSSTOWNREBELS"
+
+    def test_compose_query_none_when_only_codes(self):
+        from collection_agent.scan.search import compose_query
+
+        assert compose_query(ScanEvidence(barcode="720642442524")) is None
+
+    def test_live_cycle_1_label_only_now_searches(self, settings):
+        # addendum 1 F2: label-only evidence never queried Discogs
+        client = FakeDiscogsClient()
+        client.search_responses["q"] = payloads.search_page(
+            [payloads.search_result(501)]
+        )
+        ev = ScanEvidence(label="Crosstown Rebels")
+        candidates, _more, tried = find_candidates(client, settings, ev)
+        assert tried == ["text"]
+        assert client.searches[0]["q"] == "Crosstown Rebels"
+        assert [c.release_id for c in candidates] == [501]
+
+    def test_live_cycle_2_falls_through_to_text(self, settings):
+        # barcode rung (reclassified digits) empty -> composed q rung hits
+        client = FakeDiscogsClient()
+        client.search_responses["q"] = payloads.search_page(
+            [payloads.search_result(502)]
+        )
+        ev = ScanEvidence(artist="dj silversurfer", label="CROSSTOWNREBELS",
+                          catno="81824 11306",
+                          tracks=["Ace Of Spades", "Dirty Dishes"])
+        candidates, _more, tried = find_candidates(client, settings, ev)
+        assert tried == ["barcode", "text"]
+        assert client.searches[-1]["q"] == (
+            "dj silversurfer Ace Of Spades CROSSTOWNREBELS"
+        )
+        assert [c.release_id for c in candidates] == [502]
+
+    def test_structured_hit_prevents_fallback(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["barcode"] = payloads.search_page(
+            [payloads.search_result(101)]
+        )
+        ev = ScanEvidence(artist="A", title="T", barcode="720642442524")
+        _, _, tried = find_candidates(client, settings, ev)
+        assert tried == ["barcode"]
+
+    def test_all_rungs_including_text_empty(self, settings):
+        ev = ScanEvidence(artist="A", title="T", barcode="720642442524")
+        _, _, tried = find_candidates(FakeDiscogsClient(), settings, ev)
+        assert tried == ["barcode", "artist_title", "text"]

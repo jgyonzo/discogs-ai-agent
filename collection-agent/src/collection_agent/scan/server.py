@@ -62,11 +62,18 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 class _CycleContext:
     """Per-scan_id context the outcome journal needs later (source,
-    evidence kinds, candidate titles served)."""
+    evidence kinds/values, candidate titles served)."""
 
-    def __init__(self, source: str, evidence_kinds: list[str]):
+    def __init__(
+        self,
+        source: str,
+        evidence_kinds: list[str],
+        evidence_fields: dict | None = None,
+    ):
         self.source = source
         self.evidence_kinds = evidence_kinds
+        # FR-021: extracted values (photo) / query (manual) for the journal
+        self.evidence_fields = evidence_fields or {}
         self.titles: dict[int, str] = {}
         self.has_candidates = False
 
@@ -144,7 +151,9 @@ def create_app(
             )
 
         scan_id = session.next_scan_id()
-        ctx = _CycleContext("photo", list(evidence.evidence_kinds))
+        ctx = _CycleContext(
+            "photo", list(evidence.evidence_kinds), evidence.compact_dump()
+        )
         summary = EvidenceSummary(
             kinds=list(evidence.evidence_kinds),
             fields=evidence.model_dump(exclude={"notes"}),
@@ -153,7 +162,8 @@ def create_app(
         if evidence.is_empty:
             try:
                 session.record_outcome(
-                    scan_id, "no_match", "photo", evidence_kinds=[]
+                    scan_id, "no_match", "photo", evidence_kinds=[],
+                    evidence=ctx.evidence_fields,
                 )
             except JournalWriteError as exc:
                 return _error(500, "journal_error", str(exc))
@@ -168,7 +178,7 @@ def create_app(
             )
 
         try:
-            candidates, more_matches, _tried = find_candidates(
+            candidates, more_matches, tried = find_candidates(
                 discogs_client, settings, evidence, _duplicate_checker()
             )
         except DiscogsError as exc:
@@ -176,6 +186,9 @@ def create_app(
                 502, "discogs_unavailable", f"Discogs search failed: {exc}"
             )
 
+        # journal truth: the rungs actually attempted (incl. the FR-020
+        # free-text fallback), not just what was extracted
+        ctx.evidence_kinds = tried
         _register(scan_id, ctx, candidates)
         message = None
         if not candidates:
@@ -185,6 +198,7 @@ def create_app(
                     "no_match",
                     "photo",
                     evidence_kinds=ctx.evidence_kinds,
+                    evidence=ctx.evidence_fields,
                 )
             except JournalWriteError as exc:
                 return _error(500, "journal_error", str(exc))
@@ -212,7 +226,11 @@ def create_app(
                 502, "discogs_unavailable", f"Discogs search failed: {exc}"
             )
         scan_id = session.next_scan_id()
-        _register(scan_id, _CycleContext("manual_search", ["text"]), candidates)
+        _register(
+            scan_id,
+            _CycleContext("manual_search", ["text"], {"q": query}),
+            candidates,
+        )
         return ScanResponse(
             scan_id=scan_id,
             source="manual_search",
@@ -266,6 +284,7 @@ def create_app(
                     release_id=req.release_id,
                     release_title=title,
                     detail=f"add failed: {exc}",
+                    evidence=ctx.evidence_fields,
                 )
             except JournalWriteError as journal_exc:
                 return _error(500, "journal_error", str(journal_exc))
@@ -286,6 +305,7 @@ def create_app(
                 release_title=title,
                 instance_id=instance_id,
                 duplicate_add=is_duplicate,
+                evidence=ctx.evidence_fields,
             )
         except JournalWriteError as exc:
             # the live add DID happen — be honest about both facts
@@ -323,6 +343,7 @@ def create_app(
                 release_title=ctx.titles.get(req.release_id)
                 if req.release_id
                 else None,
+                evidence=ctx.evidence_fields,
             )
         except JournalWriteError as exc:
             return _error(500, "journal_error", str(exc))

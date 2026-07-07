@@ -65,6 +65,7 @@ class ScanSession:
         instance_id: int | None = None,
         duplicate_add: bool = False,
         detail: str | None = None,
+        evidence: dict | None = None,
     ) -> ScanCycleOutcome:
         """Append one completed-cycle outcome to journal + log (together;
         journal failure propagates so the caller reports the cycle failed)."""
@@ -80,6 +81,7 @@ class ScanSession:
             instance_id=instance_id,
             duplicate_add=duplicate_add,
             detail=detail,
+            evidence=evidence or None,
         )
         self.journal.append(entry)  # journal first: log never lies about disk
         self.log.append(entry)

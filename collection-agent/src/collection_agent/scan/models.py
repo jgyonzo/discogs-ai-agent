@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# FR-019 (addendum 1): a separator-stripped digit run this long is a
+# barcode, never a catalog number
+BARCODE_MIN_DIGITS = 10
 
 EvidenceKind = Literal["barcode", "catno", "artist_title", "text"]
 Outcome = Literal["added", "skipped", "no_match", "failed"]
@@ -27,6 +31,9 @@ class ScanEvidence(BaseModel):
     label: str | None = None
     catno: str | None = None
     barcode: str | None = None
+    # addendum 1: track titles as printed — searchable evidence (a 12"
+    # single's lead track doubles as its release title), unlike `notes`
+    tracks: list[str] = Field(default_factory=list)
     format_hints: list[str] = Field(default_factory=list)
     notes: str | None = None
 
@@ -46,11 +53,38 @@ class ScanEvidence(BaseModel):
             return None
         return v
 
+    @model_validator(mode="after")
+    def _reclassify_barcode_in_catno(self) -> "ScanEvidence":
+        """FR-019 (addendum 1, live finding F1): the vision step twice put
+        barcode digits in `catno`. A 10+-digit run (after stripping
+        spaces/hyphens/dots) can never match a catalog number — treat it
+        as barcode evidence and clear the catno."""
+        if self.catno:
+            stripped = self.catno.translate(str.maketrans("", "", " -."))
+            if stripped.isdigit() and len(stripped) >= BARCODE_MIN_DIGITS:
+                if not self.barcode:
+                    self.barcode = stripped
+                self.catno = None
+        return self
+
     @property
     def is_empty(self) -> bool:
         return not (
-            self.artist or self.title or self.label or self.catno or self.barcode
+            self.artist
+            or self.title
+            or self.label
+            or self.catno
+            or self.barcode
+            or self.tracks
         )
+
+    def compact_dump(self) -> dict[str, object]:
+        """Journal payload (FR-021): extracted values only, no None/empty."""
+        return {
+            k: v
+            for k, v in self.model_dump().items()
+            if v not in (None, "", [])
+        }
 
     @property
     def evidence_kinds(self) -> list[EvidenceKind]:
@@ -104,6 +138,9 @@ class ScanCycleOutcome(BaseModel):
     instance_id: int | None = None
     duplicate_add: bool = False
     detail: str | None = None
+    # FR-021 (addendum 1): compact extracted evidence values (photo) or
+    # {"q": ...} (manual search); never the image
+    evidence: dict[str, object] | None = None
 
 
 # -- API wire models (contracts/scan-api.md) ---------------------------------

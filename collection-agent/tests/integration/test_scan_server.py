@@ -564,3 +564,84 @@ class TestManualSearchFlow:
         client.post("/api/skip", json={"scan_id": body["scan_id"]})
         assert session.log[-1].outcome == "no_match"
         assert session.log[-1].source == "manual_search"
+
+
+class TestReplayRound1:
+    """Addendum 1 (session 20260707-130810Z): end-to-end replays of the
+    live failures with the verbatim vision replies, plus FR-021 evidence
+    values in the journal."""
+
+    LIVE_CYCLE_2 = json.dumps({
+        "artist": "dj silversurfer",
+        "label": "CROSSTOWNREBELS",
+        "catno": "81824 11306",
+        "notes": "a. ace of spades/ ft. kiki\naa. dirty dishes",
+    })
+    LIVE_CYCLE_1 = json.dumps({"label": "Crosstown Rebels"})
+
+    def test_cycle_2_reply_now_reaches_barcode_and_text_rungs(
+        self, settings, store
+    ):
+        client, discogs, session = make_client(
+            settings, store,
+            vision_script=[self.LIVE_CYCLE_2],
+            search_responses={
+                "q": payloads.search_page([payloads.search_result(601)])
+            },
+        )
+        body = post_photo(client).json()
+        # digit run reclassified: barcode rung queried, never catno
+        rungs = [
+            "barcode" if "barcode" in p else
+            "catno" if "catno" in p else
+            "artist_title" if "artist" in p else "q"
+            for p in discogs.searches
+        ]
+        assert rungs == ["barcode", "q"]
+        assert discogs.searches[0]["barcode"] == "8182411306"
+        # composed fallback found the record
+        assert [c["release_id"] for c in body["candidates"]] == [601]
+
+    def test_cycle_1_label_only_now_queries_discogs(self, settings, store):
+        client, discogs, session = make_client(
+            settings, store,
+            vision_script=[self.LIVE_CYCLE_1],
+            search_responses={
+                "q": payloads.search_page([payloads.search_result(602)])
+            },
+        )
+        body = post_photo(client).json()
+        assert discogs.searches[0]["q"] == "Crosstown Rebels"
+        assert [c["release_id"] for c in body["candidates"]] == [602]
+
+    def test_no_match_journal_carries_evidence_values(self, settings, store):
+        client, _, session = make_client(
+            settings, store, vision_script=[self.LIVE_CYCLE_2],
+        )  # all searches empty -> no_match
+        post_photo(client)
+        line = json.loads(
+            session.journal.path.read_text(encoding="utf-8").splitlines()[-1]
+        )
+        assert line["outcome"] == "no_match"
+        assert line["evidence_kinds"] == ["barcode", "text"]  # rungs tried
+        assert line["evidence"]["artist"] == "dj silversurfer"
+        assert line["evidence"]["barcode"] == "8182411306"
+        assert line["evidence"]["label"] == "CROSSTOWNREBELS"
+        assert "catno" not in line["evidence"]  # reclassified away
+
+    def test_added_journal_carries_evidence_values(self, settings, store):
+        client, _, session = make_client(
+            settings, store, search_responses=ONE_HIT,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 101})
+        entry = session.log[-1]
+        assert entry.outcome == "added"
+        assert entry.evidence["barcode"] == "720642442524"
+        assert entry.evidence_kinds == ["barcode"]  # first rung hit
+
+    def test_manual_search_journal_carries_query(self, settings, store):
+        client, _, session = make_client(settings, store)
+        body = client.get("/api/search", params={"q": "white label"}).json()
+        client.post("/api/skip", json={"scan_id": body["scan_id"]})
+        assert session.log[-1].evidence == {"q": "white label"}

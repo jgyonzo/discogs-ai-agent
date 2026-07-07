@@ -82,7 +82,9 @@ def snapshot_duplicate_checker(store, session) -> DuplicateChecker:
 
 
 def evidence_rungs(evidence: ScanEvidence) -> list[tuple[str, dict]]:
-    """Search params per available evidence, strongest first (FR-004)."""
+    """Search params per available evidence, strongest first (FR-004).
+    The composed free-text fallback (FR-020) is appended last: it fires
+    only when every structured rung is absent or returned zero results."""
     rungs: list[tuple[str, dict]] = []
     if evidence.barcode:
         rungs.append(("barcode", {"barcode": evidence.barcode}))
@@ -95,7 +97,24 @@ def evidence_rungs(evidence: ScanEvidence) -> list[tuple[str, dict]]:
         rungs.append(
             ("artist_title", {"artist": evidence.artist, "release_title": evidence.title})
         )
+    query = compose_query(evidence)
+    if query:
+        rungs.append(("text", {"q": query}))
     return rungs
+
+
+def compose_query(evidence: ScanEvidence) -> str | None:
+    """FR-020 (addendum 1, live finding F2): one free-text query from the
+    partial evidence — artist, title (or the lead track: on 12" singles
+    the lead track IS the release title), label. Barcode/catno are left
+    out: their structured rungs already ran, and digit runs pollute q=."""
+    parts = [
+        evidence.artist,
+        evidence.title or (evidence.tracks[0] if evidence.tracks else None),
+        evidence.label,
+    ]
+    query = " ".join(p for p in parts if p)
+    return query or None
 
 
 def _candidate_from_result(

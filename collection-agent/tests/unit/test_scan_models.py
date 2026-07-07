@@ -98,3 +98,67 @@ class TestScanCycleOutcome:
                 outcome="added",
                 source="telepathy",
             )
+
+
+class TestBarcodeInCatnoReclassification:
+    """FR-019 (addendum 1): the live session's vision replies put barcode
+    digit runs in catno — replayed here verbatim (session 20260707-130810Z)."""
+
+    def test_live_cycle_2_payload(self):
+        ev = ScanEvidence(
+            artist="dj silversurfer",
+            label="CROSSTOWNREBELS",
+            catno="81824 11306",
+        )
+        assert ev.catno is None
+        assert ev.barcode == "8182411306"
+
+    def test_live_cycle_4_payload(self):
+        ev = ScanEvidence(
+            artist="frankie flowerz",
+            label="CROSSTOWNREBELS",
+            catno="8 00505 200413",
+        )
+        assert ev.catno is None
+        assert ev.barcode == "800505200413"
+
+    def test_live_cycle_3_short_numeric_catno_kept(self):
+        # "009" is a plausible catno fragment, not a barcode
+        ev = ScanEvidence(artist="CROSSTOWN REBELS", catno="009")
+        assert ev.catno == "009"
+        assert ev.barcode is None
+
+    def test_lettered_catno_kept(self):
+        assert ScanEvidence(catno="WARPLP92").catno == "WARPLP92"
+        assert ScanEvidence(catno="CRM 009").catno == "CRM 009"
+
+    def test_nine_digits_stays_catno(self):
+        assert ScanEvidence(catno="123456789").catno == "123456789"
+
+    def test_existing_barcode_wins_junk_catno_dropped(self):
+        ev = ScanEvidence(barcode="720642442524", catno="81824 11306")
+        assert ev.barcode == "720642442524"
+        assert ev.catno is None
+
+    def test_dotted_digit_run_reclassified(self):
+        ev = ScanEvidence(catno="8.18240.11306")
+        assert ev.barcode == "81824011306" and ev.catno is None
+
+
+class TestTracksEvidence:
+    def test_tracks_count_as_evidence(self):
+        ev = ScanEvidence(tracks=["Ace Of Spades", "Dirty Dishes"])
+        assert not ev.is_empty
+        assert ev.evidence_kinds == []  # no structured rung, fallback only
+
+    def test_compact_dump_drops_empty(self):
+        ev = ScanEvidence(artist="A", catno=None, tracks=[], notes="")
+        assert ev.compact_dump() == {"artist": "A"}
+
+    def test_compact_dump_keeps_values(self):
+        ev = ScanEvidence(artist="A", barcode="720642442524",
+                          tracks=["The Key"])
+        dumped = ev.compact_dump()
+        assert dumped == {
+            "artist": "A", "barcode": "720642442524", "tracks": ["The Key"],
+        }
