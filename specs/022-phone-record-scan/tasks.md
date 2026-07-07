@@ -331,18 +331,18 @@ acceptance 1–3).
 
 ## Phase 7: Polish & repo consistency
 
-- [ ] T034 [P] Update `collection-agent/README.md`: new `scan`
+- [x] T034 [P] Update `collection-agent/README.md`: new `scan`
       subcommand section (run, config table from quickstart, LAN
       posture + no-auth risk note, journal location, test pointer).
-- [ ] T035 [P] Verify secrets-hygiene conventions: grep-style static
+- [x] T035 [P] Verify secrets-hygiene conventions: grep-style static
       audit that no scan module calls `get_secret_value` outside the
       sanctioned sites and the static page contains no templated
       config; extend the existing secrets-hygiene test if one guards
       this (`collection-agent/tests/` — locate and amend in place).
-- [ ] T036 Full suite gate: `cd collection-agent && pytest` — all
+- [x] T036 Full suite gate: `cd collection-agent && pytest` — all
       green, record the new test count; confirm zero network sockets
       (TestClient in-process; no live API markers).
-- [ ] T037 Write the post-merge CLAUDE.md merged-state block for 022
+- [x] T037 Write the post-merge CLAUDE.md merged-state block for 022
       on this branch (single-PR flow, owner decision 2026-07-07):
       replace the in-flight note with the merged-state summary
       (leave PR number/merge date as placeholders for the owner to

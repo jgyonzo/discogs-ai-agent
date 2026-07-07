@@ -66,3 +66,13 @@ def test_no_source_prints_or_logs_the_token():
         "get_secret_value() called outside the sanctioned sites: "
         f"{offenders} — audit each new call site for leaks"
     )
+
+
+def test_scan_page_is_static_with_no_secret_material():
+    """022: the phone page is served verbatim (FileResponse) — it must
+    contain no templated config and no secret-bearing identifiers; the
+    browser learns everything through the JSON API only (FR-017)."""
+    page = (SRC / "scan" / "static" / "index.html").read_text(encoding="utf-8")
+    for marker in ("DISCOGS_USER_TOKEN", "OPENAI_API_KEY", "LANGSMITH",
+                   "get_secret_value", "{{", "{%"):
+        assert marker not in page, f"secret/templating marker in page: {marker}"

@@ -2,17 +2,53 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 022-phone-record-scan** (branch
-`022-phone-record-scan`) — scan physical records with the phone
-(photo → vision evidence → Discogs search → owner-confirmed
-add-to-collection), inside `collection-agent` as a `scan` HTTP
-subcommand. Active plan: `specs/022-phone-record-scan/plan.md`
-(research R1–R10, data-model, quickstart, contracts: `scan-api.md`,
-`scan-journal-schema.md`, `amendment-017-discogs-consumption.md` —
-first amendment to 017's discogs-consumption contract). Nothing merges
-to main without the owner.
+**No feature is currently in flight.** Most recently merged:
+**022-phone-record-scan** (PR #TBD, merged to main TBD — implemented
+2026-07-07 on branch `022-phone-record-scan`; owner-only live
+validation T038–T041 still open) — scan physical records with the
+phone: a `scan` HTTP subcommand inside `collection-agent` (FastAPI +
+uvicorn + python-multipart — the component's first HTTP surface) serves
+a self-contained phone page (`scan/static/index.html`, native-camera
+`capture` input, NOT the `frontend` component) on the home LAN (plain
+HTTP, no page auth — recorded v1 risk; default `0.0.0.0:8022`).
+Pipeline: photo → `scan/vision.py::extract_evidence` (one
+`chat.completions` call w/ `json_object`, model from NEW
+`COLLECTION_AGENT_VISION_MODEL` default `gpt-4o-mini`, via 017/021's
+`_build_llm_client` seam so LangSmith wraps it; one retry then typed
+502) → `scan/search.py` precision ladder over NEW
+`DiscogsClient.search_releases` (`GET /database/search`, `type=release`
+forced): barcode → catno(+label) → artist+title, lower rung only on
+zero results; free-text rung for manual search; dedup, cap 8
+(`COLLECTION_AGENT_SCAN_CANDIDATES_MAX`), `more_matches` flag; every
+candidate field VERBATIM from the search payload (019 discipline,
+audited by unit test). Duplicate overlay
+(`snapshot_duplicate_checker`): snapshot counts + session adds;
+partial/stale-snapshot absence degrades to explicit `unknown`, never
+"not in collection" (FR-010). Write gate (017's y/N translated to
+HTTP, research R9): `POST /api/add` requires a session-allowlisted
+release_id (LLM output can never reach the write), duplicates need
+`confirm_duplicate=true` enforced server-side; add = NEW
+`DiscogsClient.add_to_collection` (`POST .../folders/{fid}/releases/
+{rid}`, folder `COLLECTION_AGENT_SCAN_FOLDER_ID` default 1, validated
+LIVE at startup) → journal `added` → `SnapshotStore.mark_stale()`
+(R4: never append sync-shaped records). Append-only fsync'd JSONL
+session journal at `data/scan-sessions/<session>.jsonl`
+(`COLLECTION_AGENT_SCAN_JOURNAL_DIR`); journal write failure = loud
+500, never silent. Uploads capped 10 MiB
+(`COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES`) before any vision work.
+Seven new `Settings` fields total (VII(a)); secrets never on the wire
+(page is static — grep-guarded test). 317 tests
+(`cd collection-agent && pytest`), no live API calls; `FakeDiscogsClient`
+grew scriptable search/add. Artifacts: `specs/022-phone-record-scan/`
+(spec, plan, research R1–R10, data-model, quickstart + owner
+live-validation checklist, tasks T001–T037 complete / T038–T041
+owner-only, contracts: `scan-api.md`, `scan-journal-schema.md`,
+`amendment-017-discogs-consumption.md` — FIRST amendment to 017's
+discogs-consumption contract: +`/database/search` read,
++add-to-collection write). Out of scope kept: OAuth/YouTube, cover-art
+fingerprints, HTTPS/auth (owner decision T041).
 
-Most recently merged:
+Prior feature:
 **021-langsmith-tracing** (PR #11, merged to main 2026-07-07) —
 LangSmith observability for the collection-agent via the `langsmith`
 SDK's plain-OpenAI integration, explicitly NOT a LangChain migration
