@@ -27,16 +27,16 @@ All paths relative to repo root.
 
 **Purpose**: dependencies, package skeleton, configuration surface.
 
-- [ ] T001 Add `fastapi`, `uvicorn`, `python-multipart` to
+- [x] T001 Add `fastapi`, `uvicorn`, `python-multipart` to
       `collection-agent/pyproject.toml` dependencies and refresh
       `collection-agent/uv.lock` (`cd collection-agent && uv lock` or
       `uv sync`); suite still passes untouched.
-- [ ] T002 [P] Create the scan subpackage skeleton:
+- [x] T002 [P] Create the scan subpackage skeleton:
       `collection-agent/src/collection_agent/scan/__init__.py` and
       empty module stubs `models.py`, `vision.py`, `search.py`,
       `session.py`, `journal.py`, `server.py`, plus
       `collection-agent/src/collection_agent/scan/static/` directory.
-- [ ] T003 Add the seven scan settings fields to
+- [x] T003 Add the seven scan settings fields to
       `collection-agent/src/collection_agent/settings.py` per research
       R2/R5–R9: `collection_agent_vision_model`
       (`COLLECTION_AGENT_VISION_MODEL`, default `gpt-4o-mini`),
@@ -49,7 +49,7 @@ All paths relative to repo root.
       (`COLLECTION_AGENT_SCAN_JOURNAL_DIR`, default
       `<component>/data/scan-sessions`) — existing alias/`Field` idiom,
       no hardcoded literals downstream (Constitution VII(a)).
-- [ ] T004 [P] Extend the `settings` fixture in
+- [x] T004 [P] Extend the `settings` fixture in
       `collection-agent/tests/conftest.py` so scan tests get
       `SNAPSHOT_PATH`- and `COLLECTION_AGENT_SCAN_JOURNAL_DIR`-style
       isolation under `tmp_path` (keep `_env_file=None` discipline);
