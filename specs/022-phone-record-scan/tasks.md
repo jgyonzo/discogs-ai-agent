@@ -278,14 +278,14 @@ interruption.
 contains one line per outcome, intact if the server is killed
 mid-session (spec US3 acceptance 1–3).
 
-- [ ] T028 [US3] Add `GET /api/session` to
+- [x] T028 [US3] Add `GET /api/session` to
       `collection-agent/src/collection_agent/scan/server.py` returning
       `{session_id, entries[]}` newest-first per contracts/scan-api.md.
-- [ ] T029 [US3] Add the session-log panel to
+- [x] T029 [US3] Add the session-log panel to
       `collection-agent/src/collection_agent/scan/static/index.html`:
       renders `/api/session`, refreshes after every completed cycle,
       shows outcome + release identity + duplicate_add badge.
-- [ ] T030 [US3] Integration tests (part 3) in
+- [x] T030 [US3] Integration tests (part 3) in
       `collection-agent/tests/integration/test_scan_server.py`: mixed
       added/skipped/no_match/failed sequence → `/api/session` order
       and contents correct; journal file on disk has exactly one

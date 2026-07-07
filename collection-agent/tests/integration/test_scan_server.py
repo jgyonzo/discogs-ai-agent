@@ -402,3 +402,101 @@ class TestDuplicateFlow:
         dup = post_photo(client).json()["candidates"][0]["duplicate"]
         assert dup["state"] == "unknown"
         assert dup["reason"] == "snapshot stale"
+
+
+class TestSessionLog:
+    """US3 T030: mixed-outcome ordering, on-disk journal contract, and the
+    interruption guarantee (every completed cycle on disk, immediately)."""
+
+    def _run_mixed_session(self, settings, store, complete_snapshot):
+        """added -> skipped -> no_match -> failed, in that order."""
+        from collection_agent.discogs.client import DiscogsServerError
+
+        client, discogs, session = make_client(
+            settings, store,
+            vision_script=[EVIDENCE_JSON] * 4,
+            search_responses={
+                "barcode": payloads.search_page(
+                    [payloads.search_result(201), payloads.search_result(202)]
+                )
+            },
+            snapshot=complete_snapshot,
+        )
+        # cycle 1: added
+        s1 = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": s1, "release_id": 201})
+        # cycle 2: skipped
+        s2 = post_photo(client).json()["scan_id"]
+        client.post("/api/skip", json={"scan_id": s2, "release_id": 202})
+        # cycle 3: no_match (empty search for this one)
+        discogs.search_responses["barcode"] = payloads.search_page([])
+        post_photo(client)
+        # cycle 4: failed add
+        discogs.search_responses["barcode"] = payloads.search_page(
+            [payloads.search_result(203)]
+        )
+        discogs.add_failures[203] = DiscogsServerError("boom")
+        s4 = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": s4, "release_id": 203})
+        return client, session
+
+    def test_session_endpoint_orders_newest_first(
+        self, settings, store, complete_snapshot
+    ):
+        client, _ = self._run_mixed_session(settings, store, complete_snapshot)
+        body = client.get("/api/session").json()
+        assert [e["outcome"] for e in body["entries"]] == [
+            "failed", "no_match", "skipped", "added",
+        ]
+        assert body["session_id"] == "20260707-183000Z"
+
+    def test_journal_file_matches_contract_line_by_line(
+        self, settings, store, complete_snapshot
+    ):
+        from collection_agent.scan.models import ScanCycleOutcome
+
+        _, session = self._run_mixed_session(settings, store, complete_snapshot)
+        lines = session.journal.path.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 4  # one line per completed cycle, no more
+        parsed = [ScanCycleOutcome.model_validate(json.loads(l)) for l in lines]
+        assert [e.outcome for e in parsed] == [
+            "added", "skipped", "no_match", "failed",
+        ]
+        assert [e.seq for e in parsed] == [1, 2, 3, 4]  # strictly increasing
+        assert all(e.source == "photo" for e in parsed)
+        assert parsed[0].release_id == 201 and parsed[0].instance_id is not None
+        assert parsed[3].detail and "boom" in parsed[3].detail
+
+    def test_journal_durable_without_shutdown(
+        self, settings, store, complete_snapshot
+    ):
+        """SC-007: the file accounts for every completed cycle at all times —
+        killing the server needs no flush/close step."""
+        client, session = self._run_mixed_session(
+            settings, store, complete_snapshot
+        )
+        on_disk = session.journal.path.read_text(encoding="utf-8")
+        assert len(on_disk.splitlines()) == len(session.log) == 4
+        # earlier bytes never rewritten by later appends
+        first_line = on_disk.splitlines()[0]
+        assert json.loads(first_line)["outcome"] == "added"
+
+    def test_journal_write_failure_surfaces_loudly(
+        self, settings, store, complete_snapshot
+    ):
+        client, _, session = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page([payloads.search_result(201)])
+            },
+            snapshot=complete_snapshot,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        # sabotage the journal dir AFTER the scan: replace it with a file
+        import shutil
+        shutil.rmtree(settings.scan_journal_dir, ignore_errors=True)
+        settings.scan_journal_dir.parent.mkdir(parents=True, exist_ok=True)
+        settings.scan_journal_dir.write_text("not a directory")
+        resp = client.post("/api/skip", json={"scan_id": scan_id})
+        assert resp.status_code == 500
+        assert resp.json()["error"]["code"] == "journal_error"
