@@ -2,7 +2,17 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 022-phone-record-scan** (branch
+`022-phone-record-scan`) — scan physical records with the phone
+(photo → vision evidence → Discogs search → owner-confirmed
+add-to-collection), inside `collection-agent` as a `scan` HTTP
+subcommand. Active plan: `specs/022-phone-record-scan/plan.md`
+(research R1–R10, data-model, quickstart, contracts: `scan-api.md`,
+`scan-journal-schema.md`, `amendment-017-discogs-consumption.md` —
+first amendment to 017's discogs-consumption contract). Nothing merges
+to main without the owner.
+
+Most recently merged:
 **021-langsmith-tracing** (PR #11, merged to main 2026-07-07) —
 LangSmith observability for the collection-agent via the `langsmith`
 SDK's plain-OpenAI integration, explicitly NOT a LangChain migration
