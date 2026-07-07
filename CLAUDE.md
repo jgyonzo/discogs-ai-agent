@@ -2,28 +2,45 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 020-youtube-playlist-integration** (branch
-`020-youtube-playlist-integration`) — closes the deferred "v2 YouTube
-playlists" scope, **re-scoped 2026-07-06** from OAuth account writes to
-**anonymous play links** (owner decision; the OAuth path is summarized
-in research R6 as a deferred follow-up). New read-only `playlist_links`
-tool emits `{YOUTUBE_WEB_BASE_URL}/watch_videos?video_ids=…` links
-(endpoint verified live 2026-07-06): one click plays the resolved
-records' stored videos as a temporary playlist the owner saves/names
-on the YouTube site — the agent never touches any account (no OAuth,
-no credentials, no new deps, no write gate, no session/CLI changes).
-Video ids parsed deterministically from stored `MediaLink.uri` (never
-LLM-supplied, 019 precedent); links chunk at
-`YOUTUBE_PLAYLIST_MAX_IDS` (default 50) record-aligned with labels —
-no silent truncation; `videos_per_record` mode `all` (default) or
-`first`. YouTube *search* stays out of scope. Plan:
-`specs/020-youtube-playlist-integration/plan.md` (research R1–R6,
-data-model, quickstart, contracts: `youtube-playlists.md` + deltas
-9–10 in `amendment-017-agent-tools.md` — third amendment to 017's
-agent-tools contract; §4 write path untouched). Tasks not yet
-generated.
+**No feature is currently in flight.** Most recently merged:
+**020-youtube-playlist-integration** (PR #9, merged to main
+2026-07-06) — closes the deferred "v2 YouTube playlists" scope with a
+**read-only** capability, re-scoped mid-flight (2026-07-06, owner
+decision) from OAuth account writes to **anonymous play links**; the
+OAuth path is preserved in research R6 as the documented follow-up
+candidate. New read tool `playlist_links` (`tools/playlist.py`) emits
+`{YOUTUBE_WEB_BASE_URL}/watch_videos?video_ids=…` click-to-play links
+over the resolved records' stored videos: one click opens a temporary
+playlist the owner saves/names **on the YouTube site** — the agent
+never touches a YouTube account (no OAuth, no credentials, no new
+deps, no write gate — 017's §4 untouched). Video ids come only from
+deterministic parsing of `MediaLink.uri`
+(`youtube_links.py::video_id_from_uri`; never LLM-supplied — 019
+precedent); the URL shape exists only in `build_watch_videos_url`
+(grep-enforced). Links chunk record-aligned at
+`YOUTUBE_PLAYLIST_MAX_IDS` (default 50) with per-link labels, no
+silent truncation; `videos_per_record` `all` (default) | `first`.
+Five owner replay rounds hardened it same-day (findings 1–8, spec
+replay addenda 1–5): CLI `soft_wrap` (rich's hard-wrap broke cmd+click
+mid-URL), honest "play links, never playlists I created" phrasing,
+**decision-point language reminder** (`agent.py::LANGUAGE_REMINDER`,
+transient system message appended last to every LLM request, never
+persisted — standing-prompt rule 4 kept losing to the registry's
+Spanish aliases), **lean listing entries** (`filter_records` defaults
+to artist/title/year/country/`release_url`; new `include` arg for
+user-named extras; non-eq criteria auto-include their attribute;
+titles capped at `LISTING_TITLE_MAX_CHARS` 70 — delta 11, supersedes
+019 delta 6's entry shape), and a rows-vs-columns arg-schema guardrail
+("show all records" = `limit`, not `include`). Live SC-002 audit:
+128/128 emitted ids verbatim from the snapshot. YouTube *search* stays
+out of scope. 213 tests (`cd collection-agent && pytest`), no live API
+calls in tests. Artifacts: `specs/020-youtube-playlist-integration/`
+(spec with 5 replay addenda, plan, research R1–R6, data-model,
+quickstart, tasks T001–T019, contracts: `youtube-playlists.md` +
+deltas 9–11 in `amendment-017-agent-tools.md` — the third amendment to
+017's agent-tools contract, after 018's 1–5 and 019's 6–8).
 
-Most recently merged:
+Prior feature:
 **019-listing-link-integrity** (PR #7, merged to main 2026-07-05) —
 same-day follow-up closing 018's invented-URL candidate: during 018
 replays the LLM fabricated `discogs.com/release/<instance_id>` links
@@ -119,8 +136,8 @@ Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
 `contracts/agent-tools.md`). API reference:
 `docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
 explicitly out of scope. Component runbook:
-`collection-agent/README.md`; ~106 tests at merge — 146 after 019
-(`cd collection-agent && pytest`), no live API calls.
+`collection-agent/README.md`; ~106 tests at merge — 146 after 019,
+213 after 020 (`cd collection-agent && pytest`), no live API calls.
 
 Prior feature: **016-frontend-plot-layout** — frontend polish: widened
 result/chart column in `frontend/src/App.tsx`, horizontal legend line
