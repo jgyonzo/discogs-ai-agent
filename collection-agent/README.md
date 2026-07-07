@@ -7,9 +7,11 @@ them):
   DJ lists → confident Discogs release matches, against the ETL-published
   DuckDB. Described below.
 - **`src/collection_agent/`** — conversational agent over the owner's **live
-  Discogs collection** (feature `specs/017-discogs-collection-agent/`):
-  sync-to-snapshot analytics, filtered listings, media links, and
-  confirmation-gated folder organization, from a terminal chat.
+  Discogs collection** (feature `specs/017-discogs-collection-agent/`,
+  extended by 018–020): sync-to-snapshot analytics, filtered listings,
+  media links, click-to-play YouTube playlist links
+  (`specs/020-youtube-playlist-integration/`), and confirmation-gated
+  folder organization, from a terminal chat.
 
 ## Environment variables (collection_agent)
 
@@ -22,6 +24,10 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `DISCOGS_USERNAME` | no | via `/oauth/identity` | Username override |
 | `COLLECTION_AGENT_MODEL` | no | `gpt-4o-mini` | OpenAI model id |
 | `SNAPSHOT_PATH` | no | `collection-agent/data/snapshot.json` | Snapshot location |
+| `DISCOGS_WEB_BASE_URL` | no | `https://www.discogs.com` | Base for tool-built release-page links (019) |
+| `YOUTUBE_WEB_BASE_URL` | no | `https://www.youtube.com` | Base for tool-built play links (020) |
+| `YOUTUBE_PLAYLIST_MAX_IDS` | no | `50` | Max video ids per play link (chunking threshold) |
+| `LISTING_TITLE_MAX_CHARS` | no | `70` | Title display cap in listing tables |
 
 ## Run the agent
 
@@ -35,17 +41,22 @@ python -m collection_agent status    # snapshot age / completeness / counts / va
 python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
 ```
 
-Analytics, filtered listings, and media links are answered instantly from
-the local snapshot (`data/snapshot.json`, gitignored); moving records /
-creating folders executes **live** against Discogs and only after the CLI
-itself asks `¿Confirmás? [y/N]` — the LLM can only *propose* moves.
+Analytics, filtered listings, media links, and YouTube playlist links are
+answered instantly from the local snapshot (`data/snapshot.json`,
+gitignored); moving records / creating folders executes **live** against
+Discogs and only after the CLI itself asks `¿Confirmás? [y/N]` — the LLM
+can only *propose* moves. Playlist links are click-to-play `watch_videos`
+URLs built from the records' stored videos: they open as a temporary
+playlist you can save and name **on the YouTube site** — the agent never
+touches a YouTube account (no OAuth, no credentials, no quota).
 
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
 (missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
 
-Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md` ·
+Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
+(playlists: `specs/020-youtube-playlist-integration/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (102 tests, no live API calls).
+Tests: `pytest` (213 tests, no live API calls).
 
 ---
 
