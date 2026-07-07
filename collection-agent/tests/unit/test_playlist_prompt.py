@@ -23,12 +23,14 @@ def test_play_links_sourced_only_from_playlist_links(settings):
 
 
 def test_saving_is_honest_and_on_site(settings):
-    low = prompt(settings).lower()
+    low = " ".join(prompt(settings).lower().split())  # unwrap line breaks
     assert "save" in low and "site" in low
     assert "suggested_name" in prompt(settings) or "save_hint" in prompt(settings)
-    # never claim account-side creation
+    # never claim account-side creation (T018 replay finding 2: the LLM
+    # opened with "I've created multiple YouTube playlists")
     assert "never claim" in low
     assert "created" in low and "saved" in low
+    assert "play links" in low and "never as playlists you created" in low
 
 
 def test_capability_surface(settings):

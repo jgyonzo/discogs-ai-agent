@@ -14,6 +14,22 @@ account connection, no credentials, no writes. The account-write
 (OAuth) path is deferred as a possible follow-up feature. The endpoint
 behavior was verified live with snapshot video ids on 2026-07-06.
 
+**Replay addendum (2026-07-06, T018 live replay)**: two findings from
+the owner's first live run (a 47-record slice → 5 chunked links, all
+structurally correct).
+*Finding 1 — wrapped links break cmd+click*: the CLI hard-wrapped long
+answers at terminal width, inserting real newlines inside play-link
+URLs; terminal URL detection stops at a newline, so cmd+click opened a
+playlist truncated to the first line's ids (exactly 17 at the owner's
+terminal width) while copy-paste worked. Fixed in the CLI print path
+(`soft_wrap` — no hard newlines in answers), which restores SC-001's
+"opened in a browser plays exactly the stored videos" for click-through
+as well as copy-paste.
+*Finding 2 — creation phrasing*: the agent opened with "I've created
+multiple YouTube playlists", brushing against FR-008 (nothing is
+created in any account). Ground rule 6 tightened: results are presented
+as play links, never as playlists the agent created.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get a playable playlist link from records in the conversation (Priority: P1)

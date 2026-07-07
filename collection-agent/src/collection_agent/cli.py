@@ -250,7 +250,10 @@ def _cmd_chat(settings: Settings) -> int:
             continue
 
         answer = agent.run_turn(user_text)
-        console.print(answer)
+        # soft_wrap: never insert hard newlines — a wrapped play link (020
+        # T018 replay finding) breaks terminal cmd+click URL detection at the
+        # line break, silently truncating the playlist to the first line's ids
+        console.print(answer, soft_wrap=True)
         _maybe_confirm_pending_plan(agent, settings, store)
 
 
