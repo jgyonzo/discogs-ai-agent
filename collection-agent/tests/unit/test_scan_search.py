@@ -307,3 +307,124 @@ class TestComposedFallback:
         ev = ScanEvidence(artist="A", title="T", barcode="720642442524")
         _, _, tried = find_candidates(FakeDiscogsClient(), settings, ev)
         assert tried == ["barcode", "artist_title", "text"]
+
+
+class TestExactCatnoRerank:
+    """024 US1 (T007): exact normalized catno matches surface first on the
+    catno rung; deeper single-page fetch; byte-identical everywhere else
+    (amendment-022-scan-api §2)."""
+
+    CATNO_ONLY = ScanEvidence(catno="SUB 15")
+
+    @staticmethod
+    def sub15_page():
+        """The measured drowning case: exact 'SUB 15' at source position 20
+        among 39 longer 'SUB 15x' prefix-neighbors."""
+        results = []
+        rid = 1000
+        for i in range(40):
+            rid += 1
+            if i == 19:
+                results.append(payloads.search_result(71852, catno="SUB 15"))
+            else:
+                results.append(
+                    payloads.search_result(rid, catno=f"SUB 15{i % 10}")
+                )
+        return payloads.search_page(results, items=len(results))
+
+    def test_sub15_replay_exact_match_first_and_capped(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = self.sub15_page()
+        candidates, more, tried = find_candidates(
+            client, settings, self.CATNO_ONLY
+        )
+        assert tried == ["catno"]
+        assert candidates[0].release_id == 71852  # SC-001
+        assert len(candidates) == settings.scan_candidates_max
+        assert more is True  # 40 found, 8 served — honest true-total flag
+
+    def test_catno_rung_fetches_depth_others_fetch_cap(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = self.sub15_page()
+        find_candidates(client, settings, FULL)
+        by_rung = {
+            ("barcode" if "barcode" in p else "catno" if "catno" in p else "?"):
+            p["per_page"]
+            for p in client.searches
+        }
+        assert by_rung["barcode"] == settings.scan_candidates_max
+        assert by_rung["catno"] == max(
+            settings.scan_catno_search_depth, settings.scan_candidates_max
+        )
+
+    def test_multiple_exacts_keep_source_order_ahead_of_non_exacts(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page([
+            payloads.search_result(1, catno="SUB 150"),
+            payloads.search_result(2, catno="sub-15"),
+            payloads.search_result(3, catno="SUB 151"),
+            payloads.search_result(4, catno="SUB15"),
+        ])
+        candidates, _more, _tried = find_candidates(
+            client, settings, self.CATNO_ONLY
+        )
+        # stable: exacts (2, 4) in source order, then non-exacts (1, 3)
+        assert [c.release_id for c in candidates] == [2, 4, 1, 3]
+
+    def test_normalization_rules(self):
+        from collection_agent.scan.search import normalize_catno
+
+        assert normalize_catno("SUB 15") == normalize_catno("sub-15")
+        assert normalize_catno("SUB 15") == normalize_catno("SUB15")
+        assert normalize_catno("SUB.15/") == normalize_catno("sub_15")
+        assert normalize_catno("SUB 150") != normalize_catno("SUB 15")
+
+    def test_multi_catno_comma_joined_any_match(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page([
+            payloads.search_result(1, catno="XX-9"),
+            payloads.search_result(2, catno="SUB 152, SUB152, SUB 15"),
+        ])
+        candidates, _m, _t = find_candidates(client, settings, self.CATNO_ONLY)
+        assert [c.release_id for c in candidates] == [2, 1]
+
+    def test_no_catno_result_is_never_exact(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page([
+            payloads.search_result(1, omit={"catno"}),
+            payloads.search_result(2, catno="SUB 15"),
+        ])
+        candidates, _m, _t = find_candidates(client, settings, self.CATNO_ONLY)
+        assert [c.release_id for c in candidates] == [2, 1]
+
+    def test_no_exact_match_keeps_source_order(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page([
+            payloads.search_result(1, catno="SUB 150"),
+            payloads.search_result(2, catno="SUB 151"),
+            payloads.search_result(3, catno="SUB 152"),
+        ])
+        candidates, _m, _t = find_candidates(client, settings, self.CATNO_ONLY)
+        assert [c.release_id for c in candidates] == [1, 2, 3]  # FR-004
+
+    def test_manual_text_search_unaffected(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["q"] = payloads.search_page(
+            [payloads.search_result(9, catno="SUB 15")]
+        )
+        find_candidates_text(client, settings, "SUB 15")
+        assert client.searches[0]["per_page"] == settings.scan_candidates_max
+
+    def test_candidate_fields_stay_verbatim_after_rerank(self, settings):
+        source = payloads.search_result(
+            2, catno="sub-15", master_id=263296, year="2001"
+        )
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page(
+            [payloads.search_result(1, catno="SUB 150"), source]
+        )
+        candidates, _m, _t = find_candidates(client, settings, self.CATNO_ONLY)
+        top = candidates[0]
+        assert (top.release_id, top.catno, top.master_id, top.year) == (
+            2, "sub-15", 263296, "2001",
+        )  # re-rank changed ORDER only; fields byte-equal to the payload

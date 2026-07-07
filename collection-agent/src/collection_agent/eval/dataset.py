@@ -73,6 +73,9 @@ class ManifestRelease(BaseModel):
     images: list[ManifestImage] = Field(default_factory=list)
     fetched_at: str
     detail: str | None = None
+    # 024: truth release's master id (Discogs 0/absent ⇒ None); recorded at
+    # build time from the already-fetched payload, or via --backfill-masters
+    master_id: int | None = None
 
 
 ManifestEntry = ManifestHeader | ManifestRelease
@@ -110,13 +113,26 @@ def load_manifest(dataset_dir: Path) -> list[ManifestEntry]:
     return entries
 
 
+def newest_release_lines(
+    entries: list[ManifestEntry],
+) -> dict[int, ManifestRelease]:
+    """Newest line per release wins (024, amendment-023-eval-dataset §2):
+    a backfilled or retried line supersedes older ones for status, images,
+    and master_id — without ever rewriting the append-only manifest."""
+    newest: dict[int, ManifestRelease] = {}
+    for e in entries:
+        if isinstance(e, ManifestRelease):
+            newest[e.release_id] = e
+    return newest
+
+
 def done_release_ids(entries: list[ManifestEntry]) -> set[int]:
-    """Resume rule (contract §1.2): downloaded/no_images are done; failed
-    releases are retried on the next run."""
+    """Resume rule (contract §1.2, newest-line-wins): downloaded/no_images
+    are done; failed releases are retried on the next run."""
     return {
-        e.release_id
-        for e in entries
-        if isinstance(e, ManifestRelease) and e.status in ("downloaded", "no_images")
+        rid
+        for rid, line in newest_release_lines(entries).items()
+        if line.status in ("downloaded", "no_images")
     }
 
 
@@ -161,10 +177,12 @@ def _process_release(
             detail="release not found (404)",
         )
 
+    master_id = payload.get("master_id") or None  # Discogs 0 ⇒ no master
     images = payload.get("images") or []
     if not images:
         return ManifestRelease(
-            release_id=release_id, status="no_images", fetched_at=_utc_now_iso()
+            release_id=release_id, status="no_images",
+            fetched_at=_utc_now_iso(), master_id=master_id,
         )
 
     recorded: list[ManifestImage] = []
@@ -206,8 +224,77 @@ def _process_release(
     )
     return ManifestRelease(
         release_id=release_id, status=status, images=recorded,
-        fetched_at=_utc_now_iso(),
+        fetched_at=_utc_now_iso(), master_id=master_id,
     )
+
+
+def backfill_masters(
+    client,
+    store,
+    settings: Settings,
+    limit: int | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, int]:
+    """024 (amendment-023-eval-dataset §3): add master ids to already-done
+    manifest releases. Metadata fetches only — never an image download.
+    Fetch failures/404s are counted and skipped (the old line stays
+    authoritative); a fetched release that genuinely has no master is
+    counted `no_master` and re-checked on a future run (no schema marker is
+    worth that rare repeat request)."""
+    dataset_dir = settings.eval_dataset_dir
+    entries = load_manifest(dataset_dir)
+    if not entries:
+        raise DatasetError(
+            f"no dataset manifest at {dataset_dir} — build one first: "
+            "python -m collection_agent eval-dataset"
+        )
+    newest = newest_release_lines(entries)
+    done = [l for l in newest.values() if l.status in ("downloaded", "no_images")]
+    todo = sorted(
+        (l for l in done if l.master_id is None), key=lambda l: l.release_id
+    )
+    stats = {
+        "already_have_master": len(done) - len(todo),
+        "backfilled": 0,
+        "backfill_failed": 0,
+        "no_master": 0,
+    }
+    if limit is not None:
+        todo = todo[:limit]
+
+    snapshot = store.load()
+    mpath = manifest_path(dataset_dir)
+    _append_line(mpath, ManifestHeader(
+        built_at=_utc_now_iso(),
+        snapshot_completeness=(
+            snapshot.meta.completeness.value if snapshot else "unknown"
+        ),
+        snapshot_synced_at=snapshot.meta.synced_at if snapshot else None,
+        images_per_release=settings.eval_images_per_release,
+    ))
+
+    for i, line in enumerate(todo, start=1):
+        try:
+            payload = client.get_release(line.release_id)
+        except DiscogsError:
+            stats["backfill_failed"] += 1
+            continue
+        finally:
+            if on_progress is not None:
+                on_progress(i, len(todo))
+        if payload is None:  # deleted from Discogs — old line stays
+            stats["backfill_failed"] += 1
+            continue
+        master_id = payload.get("master_id") or None
+        if master_id is None:
+            stats["no_master"] += 1
+            continue
+        # superseding copy: image ground truth verbatim, master added
+        _append_line(mpath, line.model_copy(
+            update={"master_id": master_id, "fetched_at": _utc_now_iso()}
+        ))
+        stats["backfilled"] += 1
+    return stats
 
 
 def build_dataset(

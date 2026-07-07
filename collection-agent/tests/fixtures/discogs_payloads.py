@@ -123,11 +123,13 @@ def search_result(
     thumb: str | None = None,
     cover_image: str | None = None,
     uri: str | None = None,
+    master_id: int | None = None,
     omit: set[str] | None = None,
 ) -> dict[str, Any]:
     """One /database/search result item (022). `omit` drops keys entirely
     so absent-field handling can be exercised (verbatim rule: absent stays
-    absent)."""
+    absent). `master_id` (024) is added only when given — absent by default
+    so verbatim-absent handling keeps being exercised."""
     item: dict[str, Any] = {
         "id": release_id,
         "type": "release",
@@ -146,6 +148,8 @@ def search_result(
         "uri": uri if uri is not None else f"/release/{release_id}",
         "resource_url": f"https://api.discogs.com/releases/{release_id}",
     }
+    if master_id is not None:
+        item["master_id"] = master_id
     for key in omit or set():
         item.pop(key, None)
     return item

@@ -32,8 +32,13 @@ def header(completeness: str = "complete") -> dict:
     }
 
 
-def release_line(release_id: int, files: list[str | None], status="downloaded") -> dict:
-    return {
+def release_line(
+    release_id: int,
+    files: list[str | None],
+    status="downloaded",
+    master_id: int | None = None,
+) -> dict:
+    line = {
         "type": "release", "release_id": release_id, "status": status,
         "fetched_at": "2026-07-07T18:00:05Z",
         "images": [
@@ -44,6 +49,9 @@ def release_line(release_id: int, files: list[str | None], status="downloaded") 
             for i, f in enumerate(files)
         ],
     }
+    if master_id is not None:
+        line["master_id"] = master_id
+    return line
 
 
 class TestDiscogsSource:
@@ -177,3 +185,36 @@ class TestRetainedSource:
     def test_empty_retention_dir_is_actionable(self, settings):
         with pytest.raises(SourceError, match="RETAIN_PHOTOS"):
             load_retained_source(settings)
+
+
+class TestNewestLineWinsAndMasters:
+    """024 T018 (sources half): newest-line-per-release dedup + truth-master
+    passthrough (amendment-023-eval-dataset §2)."""
+
+    def test_duplicate_release_lines_yield_each_image_once(self, settings):
+        d = settings.eval_dataset_dir
+        write_manifest(d, [
+            header(),
+            release_line(101, ["a.jpg"]),                      # original
+            release_line(101, ["a.jpg"], master_id=5309),      # backfill copy
+        ])
+        (d / "a.jpg").write_bytes(b"jpeg")
+        items, _ = load_discogs_source(settings)
+        assert len(items) == 1  # not doubled
+        assert items[0].truth_master_id == 5309  # newest line wins
+
+    def test_truth_master_none_when_manifest_lacks_it(self, settings):
+        d = settings.eval_dataset_dir
+        write_manifest(d, [header(), release_line(101, ["a.jpg"])])
+        (d / "a.jpg").write_bytes(b"jpeg")
+        items, _ = load_discogs_source(settings)
+        assert items[0].truth_master_id is None  # 023-format manifest
+
+    def test_retained_source_never_has_truth_master(self, settings):
+        add_photo(settings, SESSION, f"{SESSION}-1.jpg")
+        write_journal(settings, SESSION, [
+            journal_line(f"{SESSION}-1", "added", release_id=724223),
+        ])
+        item = load_retained_source(settings)[0]
+        assert item.truth_release_id == 724223
+        assert item.truth_master_id is None  # FR-014: no live lookups

@@ -15,9 +15,9 @@ import json
 from pathlib import Path
 
 from collection_agent.eval.dataset import (
-    ManifestRelease,
     load_manifest,
     newest_header,
+    newest_release_lines,
 )
 from collection_agent.eval.scoring import EvalItem
 from collection_agent.settings import Settings
@@ -52,9 +52,9 @@ def load_discogs_source(settings: Settings) -> tuple[list[EvalItem], str | None]
         )
     header = newest_header(entries)
     items: list[EvalItem] = []
-    for entry in entries:
-        if not isinstance(entry, ManifestRelease):
-            continue
+    # 024: newest line per release wins — a backfilled/retried line
+    # supersedes older ones, and each image is yielded exactly once
+    for entry in newest_release_lines(entries).values():
         for image in entry.images:
             if image.status != "downloaded" or not image.file:
                 continue
@@ -65,6 +65,7 @@ def load_discogs_source(settings: Settings) -> tuple[list[EvalItem], str | None]
                 image_path=path,
                 mime=_mime_for(path),
                 truth_release_id=entry.release_id,
+                truth_master_id=entry.master_id,
                 source="discogs",
                 meta={"kind": image.kind},
             ))

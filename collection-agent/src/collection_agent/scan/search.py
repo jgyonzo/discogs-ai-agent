@@ -21,6 +21,30 @@ from collection_agent.settings import Settings
 
 DuplicateChecker = Callable[[int], DuplicateStatus]
 
+# 024 (amendment-022-scan-api §2): separator characters ignored when
+# comparing catalog numbers — same character-class discipline as 022's
+# barcode-in-catno normalization (FR-019 there)
+_CATNO_SEPARATORS = str.maketrans("", "", " -./_")
+
+
+def normalize_catno(value: str) -> str:
+    """Separator-stripped, casefolded catno for exact-match comparison:
+    'SUB 15' ≡ 'sub-15' ≡ 'SUB15', while 'SUB 150' stays distinct."""
+    return value.translate(_CATNO_SEPARATORS).casefold()
+
+
+def _is_exact_catno(result: dict, searched_normalized: str) -> bool:
+    """True when ANY of the result's (comma-joined) catnos normalizes equal
+    to the searched catno; a result with no catno is never exact."""
+    raw = result.get("catno")
+    if not raw:
+        return False
+    return any(
+        normalize_catno(part) == searched_normalized
+        for part in str(raw).split(",")
+        if part.strip()
+    )
+
 
 def pending_duplicate_checker(_release_id: int) -> DuplicateStatus:
     return DuplicateStatus(state="unknown", reason="duplicate check pending")
@@ -134,6 +158,8 @@ def _candidate_from_result(
         catno=result.get("catno"),
         thumb_url=thumb,
         discogs_uri=result.get("uri"),
+        # 024: master_id verbatim; Discogs uses 0/absent for "no master"
+        master_id=int(result["master_id"]) if result.get("master_id") else None,
         duplicate=duplicate_checker(int(result["id"])),
     )
 
@@ -143,11 +169,22 @@ def _run_search(
     settings: Settings,
     params: dict,
     duplicate_checker: DuplicateChecker,
+    per_page: int | None = None,
+    exact_catno: str | None = None,
 ) -> tuple[list[Candidate], bool]:
     payload = client.search_releases(
-        {**params, "per_page": settings.scan_candidates_max, "page": 1}
+        {**params, "per_page": per_page or settings.scan_candidates_max, "page": 1}
     )
     results = payload.get("results") or []
+    if exact_catno is not None:
+        # 024 FR-002: stable partition on the RAW results — exact normalized
+        # catno matches first, source order preserved within each group;
+        # dedup/cap/verbatim Candidate build below are unchanged. When no
+        # exact match exists this is a no-op (byte-identical order).
+        searched = normalize_catno(exact_catno)
+        results = sorted(
+            results, key=lambda r: 0 if _is_exact_catno(r, searched) else 1
+        )
     candidates: list[Candidate] = []
     seen: set[int] = set()
     for result in results:
@@ -173,7 +210,19 @@ def find_candidates(
     tried: list[str] = []
     for rung, params in evidence_rungs(evidence):
         tried.append(rung)
-        candidates, more = _run_search(client, settings, params, duplicate_checker)
+        # 024 FR-001: the catno rung fetches a deeper single page so the
+        # exact-catno re-rank can surface matches Discogs' substring search
+        # buried; every other rung is byte-identical to pre-024 behavior
+        depth = (
+            max(settings.scan_catno_search_depth, settings.scan_candidates_max)
+            if rung == "catno"
+            else None
+        )
+        candidates, more = _run_search(
+            client, settings, params, duplicate_checker,
+            per_page=depth,
+            exact_catno=params.get("catno") if rung == "catno" else None,
+        )
         if candidates:
             return candidates, more, tried
     return [], False, tried

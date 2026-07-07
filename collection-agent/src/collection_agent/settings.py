@@ -116,6 +116,13 @@ class Settings(BaseSettings):
         default=_COMPONENT_ROOT / "data" / "scan-sessions",
         alias="COLLECTION_AGENT_SCAN_JOURNAL_DIR",
     )
+    # catno-rung fetch depth (024 FR-001): Discogs catno search
+    # substring-matches, so short catnos drown under longer neighbors
+    # (measured: "SUB 15" behind "SUB 150/152"); the deeper single page is
+    # fetched so the exact-catno re-rank can surface them. Catno rung ONLY.
+    scan_catno_search_depth: int = Field(
+        default=50, alias="COLLECTION_AGENT_SCAN_CATNO_SEARCH_DEPTH"
+    )
 
     # --- Scan identification eval (023) ---
     # All three eval directories default under <component>/data/ so the
