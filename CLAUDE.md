@@ -2,7 +2,31 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 021-langsmith-tracing** (branch
+`021-langsmith-tracing`, planned 2026-07-07, not yet implemented) —
+LangSmith tracing for the collection-agent via the `langsmith` SDK's
+plain-OpenAI integration, explicitly NOT a LangChain migration (017
+research R2's plain-SDK loop stays the architecture of record). One
+trace tree per user turn (`run_turn` chain root; client-level `llm`
+runs carrying the as-sent payload incl. the transient
+`LANGUAGE_REMINDER`, plus provider token usage; per-`_dispatch` tool
+spans incl. all four error-dict shapes). `wrap_openai` only at
+`cli.py::_build_agent` (017's injectable seam — stubs never wrapped);
+config via new `Settings` fields reusing the repo `.env`'s existing
+`LANGSMITH_TRACING`/`LANGSMITH_API_KEY`/`LANGSMITH_ENDPOINT` names +
+dedicated `COLLECTION_AGENT_LANGSMITH_PROJECT` (default
+`discogs-collection-agent`; never inherits `agent/`'s
+`LANGSMITH_PROJECT`), bridged settings→`os.environ` at one site
+(VII(a)); strict no-op when unconfigured (unwrapped client, autouse
+`LANGSMITH_*` env-scrub in conftest, existing 213 tests unmodified &
+offline). Single new dependency `langsmith>=0.3`. Artifacts:
+`specs/021-langsmith-tracing/` — plan.md (read this first),
+spec.md, research.md R1–R6, data-model.md, quickstart.md,
+contracts/tracing.md (a NEW contract; 017's agent-tools contract and
+its 018/019/020 deltas are untouched). Tasks not yet generated
+(`/speckit-tasks` is next).
+
+Most recently merged:
 **020-youtube-playlist-integration** (PR #9, merged to main
 2026-07-06) — closes the deferred "v2 YouTube playlists" scope with a
 **read-only** capability, re-scoped mid-flight (2026-07-06, owner
