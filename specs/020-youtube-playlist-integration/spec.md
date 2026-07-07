@@ -30,6 +30,25 @@ multiple YouTube playlists", brushing against FR-008 (nothing is
 created in any account). Ground rule 6 tightened: results are presented
 as play links, never as playlists the agent created.
 
+**Replay addendum 2 (2026-07-06, second replay on a new OpenAI
+account, same model id `gpt-4o-mini`)**: the deterministic layer held —
+an SC-002 audit of the 3 emitted links found all 128 video ids present
+verbatim in the snapshot, matching exactly the first stored video of
+each of the 132 matched records (128 with videos, 4 without): zero
+fabricated or altered ids across ~1,500 characters of transcribed URL.
+The narration layer drifted on three counts, all fixed by prompt
+tightening:
+*Finding 3 — language flip*: an English question got a Spanish answer
+(ground rule 4 violation; the prompt's bilingual alias examples likely
+biased a small model). Rule 4 now keys explicitly to the user's most
+recent message and disclaims prompt-internal Spanish as a signal.
+*Finding 4 — unprompted sampler mode*: the model passed
+`videos_per_record="first"` without the user asking (FR-006's default
+is all videos). Rule 6 now forbids choosing `first` unprompted.
+*Finding 5 — unrelayed skips*: the answer said "128 videos" without
+mentioning the 4 skipped no-video records the payload reported
+(FR-007). Rule 6 now requires reporting skip count and reasons.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get a playable playlist link from records in the conversation (Priority: P1)

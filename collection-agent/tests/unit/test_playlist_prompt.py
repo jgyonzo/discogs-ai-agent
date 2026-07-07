@@ -45,6 +45,20 @@ def test_capability_surface(settings):
     assert "substitute" in low
 
 
+def test_replay_hardening_clauses(settings):
+    """T018 replay findings 3–5 (second-account gpt-4o-mini drift): the
+    model flipped to Spanish on an English question, chose first-mode
+    unprompted, and dropped the skip report."""
+    low = " ".join(prompt(settings).lower().split())
+    # language: keyed to the user's most recent message; prompt Spanish ≠ signal
+    assert "most recent message" in low
+    assert "not a signal" in low
+    # mode: all videos by default, first only on explicit request
+    assert "explicitly" in low and "never choose it yourself" in low
+    # skips: always reported with count and reason
+    assert "always report" in low and "reason" in low
+
+
 def test_attribute_block_still_registry_rendered(settings):
     """VII(b) analog: the playlist prompt edits added no schema prose."""
     p = prompt(settings)
