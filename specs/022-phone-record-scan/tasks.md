@@ -65,7 +65,7 @@ deps importable.
 **Purpose**: domain models, Discogs client extensions + fakes, journal,
 session — everything every story builds on.
 
-- [ ] T005 [P] Implement scan domain models in
+- [x] T005 [P] Implement scan domain models in
       `collection-agent/src/collection_agent/scan/models.py` per
       data-model.md: `ScanEvidence` (all-optional fields, barcode
       digit-normalization validator, `is_empty`, `evidence_kinds`),
@@ -73,44 +73,44 @@ session — everything every story builds on.
       `discogs_uri`), `DuplicateStatus`, `ScanCycleOutcome`, and the
       API request/response models (`ScanResponse`, `AddRequest`,
       `AddResponse`, `SkipRequest`, `SessionResponse`).
-- [ ] T006 [P] Unit tests for the models in
+- [x] T006 [P] Unit tests for the models in
       `collection-agent/tests/unit/test_scan_models.py`: barcode
       normalization (spaces/hyphens stripped; garbage → None),
       `is_empty`, `evidence_kinds` derivation, outcome literal
       validation.
-- [ ] T007 [P] Add Discogs payload builders to
+- [x] T007 [P] Add Discogs payload builders to
       `collection-agent/tests/fixtures/discogs_payloads.py`:
       search-result page (`results[]` with `id,title,year,country,
       format,label,catno,thumb,cover_image,uri` + `pagination.items`)
       and add-to-collection response (`instance_id`, …), with
       field-omission knobs for absent-field cases.
-- [ ] T008 Add `search_releases(params: dict) -> dict` and
+- [x] T008 Add `search_releases(params: dict) -> dict` and
       `add_to_collection(username, folder_id, release_id) -> dict` to
       `collection-agent/src/collection_agent/discogs/client.py`, both
       through `_get_json`/`_request` so auth + governor apply
       (research R3; write mirrors `create_folder`/`move_instance`
       shape).
-- [ ] T009 [P] Unit tests for the two client methods in
+- [x] T009 [P] Unit tests for the two client methods in
       `collection-agent/tests/unit/test_discogs_client_scan.py` via
       injected `httpx.MockTransport`: correct path/params, auth header
       present, 429→backoff→retry path, 401→`DiscogsAuthError`,
       5xx→retries→`DiscogsServerError`, add POST returns instance
       payload.
-- [ ] T010 Extend `collection-agent/tests/fixtures/fake_client.py`
+- [x] T010 Extend `collection-agent/tests/fixtures/fake_client.py`
       `FakeDiscogsClient` with scriptable `search_releases` (canned
       pages per params-rung, so ladder tests can assert which rung
       fired) and `add_to_collection` (records calls, returns builder
       payload, scriptable failure).
-- [ ] T011 [P] Implement the append-only JSONL journal in
+- [x] T011 [P] Implement the append-only JSONL journal in
       `collection-agent/src/collection_agent/scan/journal.py` per
       contracts/scan-journal-schema.md: dir creation, one file per
       `session_id`, append+flush per `ScanCycleOutcome`, loud failure
       on I/O error (never silent drop).
-- [ ] T012 [P] Unit tests in
+- [x] T012 [P] Unit tests in
       `collection-agent/tests/unit/test_scan_journal.py`: line shape
       matches contract, append-only across events, flush-per-event
       (file readable mid-session), unknown-key tolerance on read-back.
-- [ ] T013 Implement `ScanSession` in
+- [x] T013 Implement `ScanSession` in
       `collection-agent/src/collection_agent/scan/session.py` per
       data-model.md: `session_id` stamp, monotonic `seq`/`scan_id`
       issuance, `seen_release_ids` allowlist, `added_release_ids`

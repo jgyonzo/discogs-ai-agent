@@ -145,6 +145,17 @@ class DiscogsClient:
     def get_collection_value(self, username: str) -> dict[str, Any]:
         return self._get_json(f"/users/{username}/collection/value")
 
+    def search_releases(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Release search (022 scan; amendment-017-discogs-consumption §1).
+
+        Caller supplies one evidence rung's params (barcode= | catno=[+label=]
+        | artist=+release_title= | q=) plus per_page; type=release is forced
+        here so no rung can widen the search space.
+        """
+        return self._get_json(
+            "/database/search", params={**params, "type": "release"}
+        )
+
     def get_release_instances(
         self, username: str, release_id: int
     ) -> list[dict[str, Any]]:
@@ -158,7 +169,21 @@ class DiscogsClient:
         resp.raise_for_status()
         return resp.json().get("releases", [])
 
-    # -- write endpoints (US4 only; called by the confirmed write path) -------
+    # -- write endpoints (called ONLY by confirmed write paths: 017 US4's
+    # execute_plan, 022's owner-confirmed /api/add) ----------------------------
+
+    def add_to_collection(
+        self, username: str, folder_id: int, release_id: int
+    ) -> dict[str, Any]:
+        """Add a release to a collection folder (022 scan; amendment-017-
+        discogs-consumption §2). Returns the created-instance payload."""
+        resp = self._request(
+            "POST",
+            f"/users/{username}/collection/folders/{folder_id}"
+            f"/releases/{release_id}",
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     def create_folder(self, username: str, name: str) -> dict[str, Any]:
         resp = self._request(

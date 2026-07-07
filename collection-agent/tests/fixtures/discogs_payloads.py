@@ -112,6 +112,78 @@ def release_detail(
     }
 
 
+def search_result(
+    release_id: int,
+    title: str = "Test Artist - Test Record",
+    year: str | None = "1995",
+    country: str | None = "Germany",
+    formats: list[str] | None = None,
+    labels: list[str] | None = None,
+    catno: str | None = "TL-001",
+    thumb: str | None = None,
+    cover_image: str | None = None,
+    uri: str | None = None,
+    omit: set[str] | None = None,
+) -> dict[str, Any]:
+    """One /database/search result item (022). `omit` drops keys entirely
+    so absent-field handling can be exercised (verbatim rule: absent stays
+    absent)."""
+    item: dict[str, Any] = {
+        "id": release_id,
+        "type": "release",
+        "title": title,
+        "year": year,
+        "country": country,
+        "format": formats if formats is not None else ["Vinyl", "LP"],
+        "label": labels if labels is not None else ["Test Label"],
+        "catno": catno,
+        "thumb": thumb
+        if thumb is not None
+        else f"https://i.discogs.com/thumb-{release_id}.jpg",
+        "cover_image": cover_image
+        if cover_image is not None
+        else f"https://i.discogs.com/cover-{release_id}.jpg",
+        "uri": uri if uri is not None else f"/release/{release_id}",
+        "resource_url": f"https://api.discogs.com/releases/{release_id}",
+    }
+    for key in omit or set():
+        item.pop(key, None)
+    return item
+
+
+def search_page(
+    results: list[dict[str, Any]],
+    items: int | None = None,
+    page: int = 1,
+    per_page: int = 8,
+) -> dict[str, Any]:
+    """/database/search envelope; `items` defaults to len(results) but can
+    be larger to exercise the more_matches flag."""
+    return {
+        "pagination": {
+            "page": page,
+            "pages": 1,
+            "per_page": per_page,
+            "items": items if items is not None else len(results),
+            "urls": {},
+        },
+        "results": results,
+    }
+
+
+def add_instance_response(
+    instance_id: int, release_id: int, folder_id: int = 1
+) -> dict[str, Any]:
+    """POST /users/{u}/collection/folders/{f}/releases/{r} response (022)."""
+    return {
+        "instance_id": instance_id,
+        "resource_url": (
+            f"https://api.discogs.com/users/test_user/collection/folders/"
+            f"{folder_id}/releases/{release_id}/instances/{instance_id}"
+        ),
+    }
+
+
 def default_collection() -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
     """5 instances over 4 unique releases (one duplicate copy), 2 pages."""
     instances = [

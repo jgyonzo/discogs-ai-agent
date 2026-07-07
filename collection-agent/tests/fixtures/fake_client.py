@@ -38,6 +38,16 @@ class FakeDiscogsClient:
         self.release_fetches: list[int] = []
         self.moves: list[tuple[int, int, int, int]] = []  # (folder, release, instance, target)
         self.created_folders: list[str] = []
+        # -- 022 scan --------------------------------------------------------
+        # search_responses: rung name ("barcode"|"catno"|"artist_title"|"q")
+        #   -> search_page payload; unscripted rungs return an empty page so
+        #   ladder tests can assert exactly which rungs fired (self.searches).
+        self.search_responses: dict[str, dict[str, Any]] = {}
+        self.searches: list[dict[str, Any]] = []
+        # add_failures: release_id -> Exception to raise from add_to_collection
+        self.add_failures: dict[int, Exception] = {}
+        self.adds: list[tuple[str, int, int]] = []  # (username, folder_id, release_id)
+        self._next_instance_id = 90001
         self._next_folder_id = 100
         # live instance state for US4 re-validation: instance_id -> (release_id, folder_id)
         self.live_instances: dict[int, tuple[int, int]] = {
@@ -91,7 +101,31 @@ class FakeDiscogsClient:
         self.release_fetches.append(release_id)
         return self._details[release_id]
 
+    def search_releases(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.searches.append(dict(params))
+        if "barcode" in params:
+            rung = "barcode"
+        elif "catno" in params:
+            rung = "catno"
+        elif "artist" in params:
+            rung = "artist_title"
+        else:
+            rung = "q"
+        return self.search_responses.get(rung, payloads.search_page([]))
+
     # -- write interface --------------------------------------------------------
+
+    def add_to_collection(
+        self, username: str, folder_id: int, release_id: int
+    ) -> dict[str, Any]:
+        failure = self.add_failures.get(release_id)
+        if failure is not None:
+            raise failure
+        self.adds.append((username, folder_id, release_id))
+        self._next_instance_id += 1
+        return payloads.add_instance_response(
+            self._next_instance_id, release_id, folder_id
+        )
 
     def create_folder(self, username: str, name: str) -> dict[str, Any]:
         self.created_folders.append(name)
