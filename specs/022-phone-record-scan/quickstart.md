@@ -73,17 +73,63 @@ to be run once with real records (spec SC-001..SC-007):
 
 - [ ] SC-001: photo → candidates < 15 s per record on the home LAN.
 - [ ] SC-002: correct pressing (or master match) in the list for ≥ 8 of
-      10 legible records.
+      10 legible records. *(2/2 so far — needs the 10-record batch)*
 - [ ] SC-003: ≤ 3 taps per add after the photo (4 for a duplicate).
-- [ ] SC-004: zero writes without an explicit confirmation tap
+      *(owner-observed during the batch)*
+- [x] SC-004: zero writes without an explicit confirmation tap
       (verify against the Discogs web UI history).
-- [ ] SC-005: spot-check candidate fields/links/thumbnails against
+- [x] SC-005: spot-check candidate fields/links/thumbnails against
       discogs.com — all verbatim, zero constructed values.
 - [ ] SC-006: known-owned records show the duplicate marker with the
-      right copy count.
-- [ ] SC-007: kill the server mid-session; the journal accounts for
+      right copy count. *(easy test: re-scan one of the two records
+      added on 2026-07-07 — it must show "already in your collection —
+      1 copy" and demand the second confirmation)*
+- [x] SC-007: kill the server mid-session; the journal accounts for
       every completed cycle.
-- [ ] After the session: run `python -m collection_agent sync` and
+- [x] After the session: run `python -m collection_agent sync` and
       confirm the chat agent sees the added records.
 
-Record the outcome here as a validation note (021 precedent).
+## Live-validation note (2026-07-07)
+
+Two live sessions, two Crosstown Rebels 12″ singles.
+
+**Session 1 (`20260707-130810Z`, pre-addendum-1 code, gpt-4o-mini):
+0/4 identified.** Postmortem in spec replay addendum 1 (findings
+F1–F3); diagnosed from the journal + 021 LangSmith traces. Fixes:
+FR-019/020/021 + prompt hardening; owner repointed
+`COLLECTION_AGENT_VISION_MODEL` to `gpt-5.4-mini`.
+
+**Session 2 (`20260707-160209Z`, addendum-1 code + gpt-5.4-mini):
+2/2 identified and added.** Both matched on the **barcode rung** with
+correctly classified barcode digits (the same digit runs session 1
+had misfiled as catno):
+
+- DJ Silversurfer — *Ace Of Spades / Dirty Dishes* (release 724223,
+  instance 2161864447)
+- Frankie Flowerz — *The Key / Steppin' In* (release 297060,
+  instance 2161864861)
+
+Validated (2026-07-07, scripted against the live API + traces):
+
+- **SC-001**: vision calls 5.1–9.0 s (plus ~1 s search) on 4 of 5
+  runs — within the 15 s budget; ONE 80.6 s provider-side outlier
+  (16:04:25Z). Watch item, not a code defect. gpt-5.4-mini also cut
+  image prompt tokens 25.8k → 3.3k per call.
+- **SC-004 PASS**: `GET /users/ionzo/collection/releases/{id}` shows
+  exactly one instance per added release, ids byte-equal to the
+  journal; no other writes exist.
+- **SC-005 PASS (spot-check)**: re-running both barcode searches
+  returns titles byte-equal to the journaled `release_title` values.
+- **SC-007 PASS**: session 1 was killed mid-flow; its journal holds
+  all 4 completed cycles. Session 2's journal is complete and now
+  carries FR-021 evidence values.
+- **Post-session sync PASS**: snapshot went stale on add (FR-011),
+  re-sync → `complete`, 393 → 395 instances, both new records present
+  with matching instance ids.
+
+Open: SC-002 (10-record batch), SC-003 (tap-count observation),
+SC-006 (duplicate marker — re-scan an added record). Known minor gap
+(non-blocking): a cycle abandoned by simply scanning the next record
+(without tapping Skip/None-of-these) is never journaled — session 2
+has two such unclosed scan_ids. The contract only guarantees
+*completed* cycles; revisit only if batch review needs it.

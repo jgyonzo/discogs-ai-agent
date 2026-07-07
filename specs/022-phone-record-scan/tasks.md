@@ -365,7 +365,7 @@ phase.** Checklist mirrors quickstart.md.
       history), SC-005 (spot-check fields/links/thumbnails verbatim
       against discogs.com), SC-006 (duplicate markers + counts
       correct).
-- [ ] T040 ⛔ [OWNER] Interruption drill: kill the server mid-session,
+- [x] T040 ⛔ [OWNER] Interruption drill: kill the server mid-session,
       verify SC-007 (journal accounts for every completed cycle);
       then `python -m collection_agent sync` and confirm the chat
       agent sees the additions. Record a live-validation note in
