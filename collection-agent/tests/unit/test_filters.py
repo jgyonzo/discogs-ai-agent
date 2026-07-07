@@ -472,3 +472,15 @@ def test_long_titles_truncated_with_ellipsis(settings, store, session):
     (tool,) = make_browse_tools(settings, store)
     res = run_filter(tool, session, [{"attribute": "genre", "value": "Electronic"}])
     assert res["matches"][0]["title"] == "Short Title"
+
+
+def test_arg_descriptions_disambiguate_rows_from_columns(filter_tool):
+    """020 replay finding 8: 'show ALL records' was misread as 'all
+    attributes' and routed into include. The guardrail lives in the arg
+    schema — the decision point for argument choices."""
+    fields = filter_tool.params_model.model_fields
+    include_desc = fields["include"].description
+    limit_desc = fields["limit"].description
+    assert "NAMES them" in include_desc
+    assert "row count" in include_desc and "leave this empty" in include_desc
+    assert "MORE ROWS" in limit_desc and "never" in limit_desc

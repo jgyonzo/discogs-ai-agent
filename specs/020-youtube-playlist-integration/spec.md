@@ -81,6 +81,18 @@ the escalation path if drift persists is a stronger model via
 `gpt-5.4-mini` undercuts `gpt-4o` on price — prefer it; the model id is
 pure VII(a) configuration, no code change).
 
+**Replay addendum 5 (2026-07-06, fifth replay)**:
+*Finding 8 — "all records" misread as "all attributes"*: the first
+answer was correct (lean columns, truncation disclosed, bare URLs —
+findings 6/7 fixes holding); the follow-up "show all of the records"
+was answered with Format/Folder/Label columns — the model routed
+"all" into the finding-6 `include` escape hatch instead of `limit`.
+Fix at the argument-choice decision point: `include`'s schema
+description now requires the user to NAME the attributes and
+explicitly routes "all/more records" to `limit`; `limit`'s description
+states it adds rows and never changes columns. If misrouting recurs,
+it joins the model-escalation path of finding 7.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get a playable playlist link from records in the conversation (Priority: P1)

@@ -46,13 +46,19 @@ class FilterArgs(BaseModel):
     criteria: list[FilterCriterion] = Field(
         description="Criteria to AND together, e.g. genre=House AND decade=1990s."
     )
-    limit: int | None = Field(default=None, ge=1, le=200, description="Max records to list (default from settings).")
+    limit: int | None = Field(
+        default=None, ge=1, le=200,
+        description="Max records to list (default from settings). 'Show "
+        "all/more records' means MORE ROWS: raise this (max 200) — it never "
+        "changes the columns.",
+    )
     include: list[str] = Field(
         default_factory=list,
-        description="Extra per-record attributes to include in the listing "
-        "(e.g. format, folder, label, my_rating) — pass ONLY when the user "
-        "asks to see them. The default listing carries artist, title, year, "
-        "country and the Discogs link.",
+        description="Extra per-record attributes — pass ONLY when the user "
+        "NAMES them ('show their formats', 'con carpeta', 'and the labels'). "
+        "'Show all/more records' is about row count, NOT attributes: use "
+        "'limit' for that and leave this empty. Default columns: artist, "
+        "title, year, country, Discogs link.",
     )
 
 
