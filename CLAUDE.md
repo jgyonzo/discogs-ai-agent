@@ -3,6 +3,85 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**022-phone-record-scan** (PR #12, merged to main 2026-07-07 — implemented
+2026-07-07 on branch `022-phone-record-scan`; owner-only live
+validation T038–T041 still open) — scan physical records with the
+phone: a `scan` HTTP subcommand inside `collection-agent` (FastAPI +
+uvicorn + python-multipart — the component's first HTTP surface) serves
+a self-contained phone page (`scan/static/index.html`, native-camera
+`capture` input, NOT the `frontend` component) on the home LAN (plain
+HTTP, no page auth — recorded v1 risk; default `0.0.0.0:8022`).
+Pipeline: photo → `scan/vision.py::extract_evidence` (one
+`chat.completions` call w/ `json_object`, model from NEW
+`COLLECTION_AGENT_VISION_MODEL` default `gpt-4o-mini`, via 017/021's
+`_build_llm_client` seam so LangSmith wraps it; one retry then typed
+502) → `scan/search.py` precision ladder over NEW
+`DiscogsClient.search_releases` (`GET /database/search`, `type=release`
+forced): barcode → catno(+label) → artist+title, lower rung only on
+zero results; free-text rung for manual search; dedup, cap 8
+(`COLLECTION_AGENT_SCAN_CANDIDATES_MAX`), `more_matches` flag; every
+candidate field VERBATIM from the search payload (019 discipline,
+audited by unit test). Duplicate overlay
+(`snapshot_duplicate_checker`): snapshot counts + session adds;
+partial/stale-snapshot absence degrades to explicit `unknown`, never
+"not in collection" (FR-010). Write gate (017's y/N translated to
+HTTP, research R9): `POST /api/add` requires a session-allowlisted
+release_id (LLM output can never reach the write), duplicates need
+`confirm_duplicate=true` enforced server-side; add = NEW
+`DiscogsClient.add_to_collection` (`POST .../folders/{fid}/releases/
+{rid}`, folder `COLLECTION_AGENT_SCAN_FOLDER_ID` default 1, validated
+LIVE at startup) → journal `added` → `SnapshotStore.mark_stale()`
+(R4: never append sync-shaped records). Append-only fsync'd JSONL
+session journal at `data/scan-sessions/<session>.jsonl`
+(`COLLECTION_AGENT_SCAN_JOURNAL_DIR`); journal write failure = loud
+500, never silent. Uploads capped 10 MiB
+(`COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES`) before any vision work.
+Seven new `Settings` fields total (VII(a)); secrets never on the wire
+(page is static — grep-guarded test). **Replay addendum 1**
+(2026-07-07, live session `20260707-130810Z`: 0/4 identified on two
+Crosstown Rebels 12″ singles — diagnosed via the journal + 021's
+LangSmith traces): vision put barcode digits in `catno` twice, read
+the label as the artist, and parked lead tracks in `notes` (12″
+singles print no title); the ladder discarded partial evidence.
+Fixes: FR-003 prompt hardening (barcode-vs-catno, label≠artist,
+lead-track-is-title, new `tracks` field), FR-019 normalization
+(10+-digit separator-stripped catno ⇒ barcode), FR-020 final
+free-text rung composed from artist+title/lead-track+label when
+structured rungs are absent/empty (journal `evidence_kinds` = rungs
+actually TRIED, `text` incl.), FR-021 journal lines carry the compact
+extracted evidence values (photo) / query (manual) — LangSmith no
+longer needed to debug identification. Owner independently repointed
+`COLLECTION_AGENT_VISION_MODEL` to `gpt-5.4-mini`. Live session 2
+(`20260707-160209Z`): 2/2 identified via the barcode rung and added
+(releases 724223, 297060); SC-004/005/007 + stale→sync→complete
+reconciliation validated same day (note in quickstart.md); still
+open, DEFERRED post-merge by owner decision 2026-07-07 ("close 022
+as-is"): SC-002 10-record batch + SC-003 taps (T038) and the T041
+LAN-exposure decision; SC-006 owner-validated (dup marker on re-scan,
+post-sync — T039 done); one 80s vision-latency provider outlier on
+record. **Replay addendum 2** (2026-07-07, owner request post-SC-006):
+FR-022 — a new scan/search auto-closes every still-open cycle
+(journaled `skipped`, detail "auto-closed: superseded by a new
+scan"), closing the orphan-cycle gap; FR-023 — a new scan supersedes
+in-flight identification (page AbortController + server generation
+counter: superseded results discarded, 409 `superseded`, no journal/
+allowlist effects; scan handlers moved to sync-def threadpool — the
+old async handler blocked the event loop during the 80s vision
+outlier) + NEW `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` (default 45s)
+hard-caps each vision call. 344 tests
+(`cd collection-agent && pytest`), no live API calls; live replay
+tests use the verbatim failing vision replies; `FakeDiscogsClient`
+grew scriptable search/add. Artifacts: `specs/022-phone-record-scan/`
+(spec + replay addendum 1, plan, research R1–R10, data-model,
+quickstart + owner live-validation checklist, tasks T001–T037 +
+T042–T050 complete / T038–T041 owner-only, contracts: `scan-api.md`,
+`scan-journal-schema.md`, `amendment-017-discogs-consumption.md` —
+FIRST amendment to 017's discogs-consumption contract:
++`/database/search` read, +add-to-collection write). Out of scope
+kept: OAuth/YouTube, cover-art fingerprints, HTTPS/auth (owner
+decision T041).
+
+Prior feature:
 **021-langsmith-tracing** (PR #11, merged to main 2026-07-07) —
 LangSmith observability for the collection-agent via the `langsmith`
 SDK's plain-OpenAI integration, explicitly NOT a LangChain migration

@@ -88,6 +88,35 @@ class Settings(BaseSettings):
         default=_COMPONENT_ROOT / "data" / "snapshot.json", alias="SNAPSHOT_PATH"
     )
 
+    # --- Phone record scan (022) ---
+    # vision-capable model for photo evidence extraction; separate knob from
+    # the chat loop's collection_agent_model so each can be repointed alone
+    collection_agent_vision_model: str = Field(
+        default="gpt-4o-mini", alias="COLLECTION_AGENT_VISION_MODEL"
+    )
+    scan_host: str = Field(default="0.0.0.0", alias="COLLECTION_AGENT_SCAN_HOST")
+    scan_port: int = Field(default=8022, alias="COLLECTION_AGENT_SCAN_PORT")
+    # target collection folder for adds (1 = Uncategorized); validated live
+    # against GET /users/{u}/collection/folders at scan-server startup
+    scan_target_folder_id: int = Field(
+        default=1, alias="COLLECTION_AGENT_SCAN_FOLDER_ID"
+    )
+    scan_candidates_max: int = Field(
+        default=8, alias="COLLECTION_AGENT_SCAN_CANDIDATES_MAX"
+    )
+    scan_max_image_bytes: int = Field(
+        default=10_485_760, alias="COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES"
+    )
+    # hard cap on one vision call (addendum 2 FR-023): an abandoned/hung
+    # provider call must not run unbounded after the owner re-scans
+    scan_vision_timeout_s: float = Field(
+        default=45.0, alias="COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S"
+    )
+    scan_journal_dir: Path = Field(
+        default=_COMPONENT_ROOT / "data" / "scan-sessions",
+        alias="COLLECTION_AGENT_SCAN_JOURNAL_DIR",
+    )
+
     # --- Rate limiting ---
     rate_limit_floor: int = Field(default=2, alias="RATE_LIMIT_FLOOR")
 

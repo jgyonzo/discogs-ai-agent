@@ -16,6 +16,10 @@ dependencies = [
     "rich>=13.0",
     # 021 — LangSmith tracing over the plain OpenAI client (no LangChain)
     "langsmith>=0.3",
+    # 022 — phone record scan: LAN HTTP server + multipart photo uploads
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
     # collection_matcher — offline matcher against the ETL-published DuckDB
     "duckdb>=1.5",
     "pandas>=2.0",

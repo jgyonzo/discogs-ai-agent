@@ -8,10 +8,12 @@ them):
   DuckDB. Described below.
 - **`src/collection_agent/`** — conversational agent over the owner's **live
   Discogs collection** (feature `specs/017-discogs-collection-agent/`,
-  extended by 018–020): sync-to-snapshot analytics, filtered listings,
+  extended by 018–022): sync-to-snapshot analytics, filtered listings,
   media links, click-to-play YouTube playlist links
-  (`specs/020-youtube-playlist-integration/`), and confirmation-gated
-  folder organization, from a terminal chat.
+  (`specs/020-youtube-playlist-integration/`), confirmation-gated
+  folder organization, from a terminal chat — plus a phone
+  **record-scan** mode (`specs/022-phone-record-scan/`) that adds
+  physical records to the collection from photos.
 
 ## Environment variables (collection_agent)
 
@@ -28,6 +30,14 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `YOUTUBE_WEB_BASE_URL` | no | `https://www.youtube.com` | Base for tool-built play links (020) |
 | `YOUTUBE_PLAYLIST_MAX_IDS` | no | `50` | Max video ids per play link (chunking threshold) |
 | `LISTING_TITLE_MAX_CHARS` | no | `70` | Title display cap in listing tables |
+| `COLLECTION_AGENT_VISION_MODEL` | no | `gpt-4o-mini` | Vision model for photo evidence extraction (022) |
+| `COLLECTION_AGENT_SCAN_HOST` | no | `0.0.0.0` | Scan server bind address (022) |
+| `COLLECTION_AGENT_SCAN_PORT` | no | `8022` | Scan server port (022) |
+| `COLLECTION_AGENT_SCAN_FOLDER_ID` | no | `1` (Uncategorized) | Target folder for scan adds; validated live at startup (022) |
+| `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` | no | `8` | Candidate list cap per scan (022) |
+| `COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES` | no | `10485760` | Photo upload cap, 10 MiB (022) |
+| `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | no | `collection-agent/data/scan-sessions` | Per-session scan journal location (022) |
+| `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | no | `45` | Hard cap per vision call; a re-scan supersedes the pending one (022 addendum 2) |
 | `LANGSMITH_TRACING` | no | off | Enable LangSmith tracing (021) — absent ⇒ strict no-op |
 | `LANGSMITH_API_KEY` | no | — | LangSmith key; if unset while tracing is on, chat continues untraced (one notice, never an error) |
 | `LANGSMITH_ENDPOINT` | no | SDK default | LangSmith endpoint override |
@@ -53,6 +63,7 @@ pip install -e ".[dev]"
 python -m collection_agent sync      # first sync: minutes-scale, resumable (Ctrl-C safe)
 python -m collection_agent status    # snapshot age / completeness / counts / value
 python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
+python -m collection_agent scan      # phone record-scan server (022); --host/--port
 ```
 
 Analytics, filtered listings, media links, and YouTube playlist links are
@@ -64,13 +75,35 @@ URLs built from the records' stored videos: they open as a temporary
 playlist you can save and name **on the YouTube site** — the agent never
 touches a YouTube account (no OAuth, no credentials, no quota).
 
+### Record scan (022)
+
+`python -m collection_agent scan` serves a phone-friendly page on the
+home LAN (the banner prints the URL to open on the phone — same Wi-Fi).
+Photograph a sleeve, center label, or barcode: a vision model extracts
+printed evidence, Discogs is searched in precision order (barcode →
+catalog number → artist+title → a free-text query composed from
+whatever partial evidence was read; manual text search on top), and the
+matching pressings are shown with cover, year, country, format, catno,
+and an "already in your collection — N copies" marker. **Nothing is
+written until you tap a candidate and confirm** (duplicates ask twice;
+enforced server-side). Adds go to the configured folder; the snapshot
+is marked stale so the chat agent re-syncs before trusting counts.
+Every outcome lands in an append-only session journal
+(`data/scan-sessions/<session>.jsonl`) for post-session review.
+
+Plain-HTTP LAN service with **no page auth** (v1 assumption: trusted
+single-occupant network — anyone on the LAN who finds the port can
+trigger adds); do not expose it beyond the LAN. Secrets never reach the
+browser.
+
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
 (missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
 
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
-(playlists: `specs/020-youtube-playlist-integration/quickstart.md`) ·
+(playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
+record scan: `specs/022-phone-record-scan/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (223 tests, no live API calls).
+Tests: `pytest` (344 tests, no live API calls).
 
 ---
 

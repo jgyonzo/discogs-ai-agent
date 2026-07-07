@@ -37,11 +37,13 @@ def _scrub_langsmith_env(monkeypatch):
 
 @pytest.fixture()
 def settings(tmp_path) -> Settings:
-    """Isolated settings: dummy token, tmp snapshot path, no .env file read."""
+    """Isolated settings: dummy token, tmp snapshot path, no .env file read.
+    Scan (022) paths are tmp-isolated too so no test touches data/."""
     return Settings(
         _env_file=None,
         DISCOGS_USER_TOKEN="test-token-not-real",
         SNAPSHOT_PATH=tmp_path / "snapshot.json",
+        COLLECTION_AGENT_SCAN_JOURNAL_DIR=tmp_path / "scan-sessions",
     )
 
 

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Record Scan</title>
+<style>
+  :root {
+    --bg: #111417; --card: #1c2126; --text: #e8e6e3; --dim: #9aa0a6;
+    --accent: #4fb477; --warn: #e0a458; --err: #e06c5c; --line: #2a3138;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, system-ui, sans-serif; padding: 12px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.1rem; margin: 4px 0 12px; }
+  h1 small { color: var(--dim); font-weight: normal; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
+  .primary { background: var(--accent); color: #08130c; font-weight: 600; width: 100%; font-size: 1.15rem; padding: 16px; }
+  .secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  .danger-confirm { background: var(--warn); color: #1d1405; font-weight: 600; }
+  #status { margin: 12px 0; color: var(--dim); min-height: 1.4em; }
+  #status.error { color: var(--err); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; gap: 10px; }
+  .card img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; background: #000; flex: none; }
+  .card .noimg { width: 72px; height: 72px; border-radius: 8px; background: #000; color: var(--dim); display: flex; align-items: center; justify-content: center; font-size: .7rem; flex: none; }
+  .card .info { flex: 1; min-width: 0; }
+  .card .title { font-weight: 600; overflow-wrap: anywhere; }
+  .card .meta { color: var(--dim); font-size: .85rem; }
+  .dup { display: inline-block; margin-top: 4px; font-size: .8rem; padding: 2px 8px; border-radius: 999px; }
+  .dup.in { background: #3b2f1a; color: var(--warn); }
+  .dup.unknown { background: #232a31; color: var(--dim); }
+  .actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  #manual { display: none; margin: 12px 0; gap: 8px; }
+  #manual.show { display: flex; }
+  #manual input { flex: 1; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  #log { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 10px; }
+  #log h2 { font-size: .9rem; color: var(--dim); margin-bottom: 6px; }
+  .logline { font-size: .85rem; padding: 4px 0; border-bottom: 1px dashed var(--line); color: var(--dim); overflow-wrap: anywhere; }
+  .logline b.added { color: var(--accent); }
+  .logline b.failed { color: var(--err); }
+  .logline b.skipped, .logline b.no_match { color: var(--warn); }
+  #more { color: var(--dim); font-size: .85rem; margin: 4px 0 10px; }
+  footer { margin-top: 16px; color: var(--dim); font-size: .75rem; }
+</style>
+</head>
+<body>
+<h1>Record Scan <small id="snapstate"></small></h1>
+
+<input type="file" id="photo" accept="image/*" capture="environment" hidden>
+<button class="primary" id="scanBtn">📷 Scan a record</button>
+
+<div id="status"></div>
+<div id="candidates"></div>
+<div id="more"></div>
+
+<div id="manual">
+  <input type="search" id="q" placeholder="Search Discogs manually…" autocomplete="off">
+  <button class="secondary" id="searchBtn">Search</button>
+</div>
+
+<div id="log"><h2>This session</h2><div id="entries"></div></div>
+<footer id="foot"></footer>
+
+<script>
+(function () {
+  "use strict";
+  var photo = document.getElementById("photo");
+  var scanBtn = document.getElementById("scanBtn");
+  var statusEl = document.getElementById("status");
+  var candidatesEl = document.getElementById("candidates");
+  var moreEl = document.getElementById("more");
+  var manualEl = document.getElementById("manual");
+  var qEl = document.getElementById("q");
+  var entriesEl = document.getElementById("entries");
+  var current = null; // {scan_id, candidates, hadCandidates}
+  var inflight = null; // AbortController for the pending scan/search fetch
+
+  function beginRequest() {
+    // FR-023: a new scan/search supersedes the pending one — abort it
+    if (inflight) inflight.abort();
+    inflight = new AbortController();
+    return inflight;
+  }
+
+  function isStale(ctrl, payload) {
+    if (ctrl !== inflight) return true; // an even newer request started
+    if (payload && payload.error && payload.error.code === "superseded") return true;
+    return false;
+  }
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || "";
+    statusEl.className = isError ? "error" : "";
+  }
+
+  function cameraReady() {
+    current = null;
+    candidatesEl.innerHTML = "";
+    moreEl.textContent = "";
+    manualEl.classList.add("show"); // manual search is always one tap away
+    refreshLog();
+  }
+
+  function apiError(payload, fallback) {
+    if (payload && payload.error && payload.error.message) return payload.error.message;
+    return fallback;
+  }
+
+  function dupBadge(dup) {
+    if (!dup) return "";
+    if (dup.state === "in_collection") {
+      var copies = dup.copies === 1 ? "1 copy" : dup.copies + " copies";
+      var extra = dup.added_this_session ? " (incl. this session)" : "";
+      return '<span class="dup in">already in your collection — ' + copies + extra + "</span>";
+    }
+    if (dup.state === "unknown") {
+      return '<span class="dup unknown">duplicate status unknown — ' + (dup.reason || "") + "</span>";
+    }
+    return "";
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function renderCandidates(data) {
+    current = { scan_id: data.scan_id, hadCandidates: data.candidates.length > 0 };
+    candidatesEl.innerHTML = "";
+    moreEl.textContent = data.more_matches
+      ? "More matches exist on Discogs — refine with manual search if yours isn't here."
+      : "";
+    data.candidates.forEach(function (c) {
+      var card = document.createElement("div");
+      card.className = "card";
+      var img = c.thumb_url
+        ? '<img src="' + esc(c.thumb_url) + '" alt="">'
+        : '<div class="noimg">no image</div>';
+      var meta = [c.year, c.country, (c.formats || []).join(", "),
+                  (c.labels || []).join(", "), c.catno]
+        .filter(Boolean).map(esc).join(" · ");
+      card.innerHTML =
+        img +
+        '<div class="info"><div class="title">' + esc(c.title) + "</div>" +
+        '<div class="meta">' + meta + "</div>" +
+        dupBadge(c.duplicate) +
+        '<div class="actions"></div></div>';
+      var actions = card.querySelector(".actions");
+      var addBtn = document.createElement("button");
+      addBtn.className = "secondary";
+      addBtn.textContent = "This one — add it";
+      addBtn.onclick = function () { confirmAdd(c, actions, false); };
+      actions.appendChild(addBtn);
+      candidatesEl.appendChild(card);
+    });
+    if (data.candidates.length) {
+      var none = document.createElement("button");
+      none.className = "secondary";
+      none.textContent = "None of these";
+      none.onclick = function () { skip(null); };
+      candidatesEl.appendChild(none);
+      setStatus("Tap the pressing that matches the record in your hand.");
+    } else {
+      setStatus(data.message || "No match found.");
+      manualEl.classList.add("show");
+      current = null; // no-match cycles are already closed server-side
+      refreshLog();
+    }
+  }
+
+  function confirmAdd(c, actions, confirmDuplicate) {
+    actions.innerHTML = "";
+    var yes = document.createElement("button");
+    yes.className = confirmDuplicate ? "danger-confirm" : "primary";
+    yes.style.width = "auto";
+    yes.style.fontSize = "1rem";
+    yes.style.padding = "12px 16px";
+    yes.textContent = confirmDuplicate ? "Yes, add another copy" : "Confirm add";
+    yes.onclick = function () { doAdd(c, actions, confirmDuplicate); };
+    var no = document.createElement("button");
+    no.className = "secondary";
+    no.textContent = "Cancel";
+    no.onclick = function () { skip(c.release_id); };
+    actions.appendChild(yes);
+    actions.appendChild(no);
+  }
+
+  function doAdd(c, actions, confirmDuplicate) {
+    setStatus("Adding…");
+    fetch("/api/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scan_id: current ? current.scan_id : "",
+        release_id: c.release_id,
+        confirm_duplicate: confirmDuplicate,
+      }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          setStatus(apiError(res.j, "Add failed."), true);
+          cameraReady();
+          return;
+        }
+        if (res.j.status === "needs_duplicate_confirmation") {
+          setStatus(res.j.detail || "Already in your collection — confirm again.");
+          confirmAdd(c, actions, true);
+          return;
+        }
+        if (res.j.status === "added") {
+          setStatus("✓ Added: " + c.title + " — ready for the next record.");
+        } else {
+          setStatus(res.j.detail || "Add failed — you can retry.", true);
+        }
+        cameraReady();
+      })
+      .catch(function () { setStatus("Network error — nothing confirmed as added.", true); cameraReady(); });
+  }
+
+  function skip(releaseId) {
+    if (!current) { cameraReady(); return; }
+    fetch("/api/skip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scan_id: current.scan_id, release_id: releaseId }),
+    }).finally(function () {
+      setStatus("Skipped — ready for the next record.");
+      cameraReady();
+    });
+  }
+
+  scanBtn.onclick = function () { photo.click(); };
+
+  photo.onchange = function () {
+    if (!photo.files || !photo.files.length) return;
+    var file = photo.files[0];
+    photo.value = "";
+    setStatus("Identifying… (reading the photo, then searching Discogs)");
+    candidatesEl.innerHTML = "";
+    moreEl.textContent = "";
+    var form = new FormData();
+    form.append("photo", file);
+    var ctrl = beginRequest();
+    fetch("/api/scan", { method: "POST", body: form, signal: ctrl.signal })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (isStale(ctrl, res.j)) return; // superseded — a newer scan owns the UI
+        if (!res.ok) {
+          setStatus(apiError(res.j, "Scan failed."), true);
+          manualEl.classList.add("show");
+          refreshLog();
+          return;
+        }
+        renderCandidates(res.j);
+      })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") return; // we superseded it ourselves
+        if (ctrl !== inflight) return;
+        setStatus("Network error — photo not processed. Try again.", true);
+      });
+  };
+
+  document.getElementById("searchBtn").onclick = runManualSearch;
+  qEl.addEventListener("keydown", function (e) { if (e.key === "Enter") runManualSearch(); });
+
+  function runManualSearch() {
+    var q = qEl.value.trim();
+    if (!q) return;
+    setStatus("Searching Discogs…");
+    var ctrl = beginRequest();
+    fetch("/api/search?q=" + encodeURIComponent(q), { signal: ctrl.signal })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (isStale(ctrl, res.j)) return;
+        if (!res.ok) { setStatus(apiError(res.j, "Search failed."), true); return; }
+        renderCandidates(res.j);
+      })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") return;
+        if (ctrl !== inflight) return;
+        setStatus("Network error — search not run.", true);
+      });
+  }
+
+  function refreshLog() {
+    fetch("/api/session")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        entriesEl.innerHTML = "";
+        data.entries.forEach(function (e) {
+          var div = document.createElement("div");
+          div.className = "logline";
+          var what = e.release_title ? " — " + esc(e.release_title) : "";
+          var dup = e.duplicate_add ? " (extra copy)" : "";
+          var detail = e.detail ? " · " + esc(e.detail) : "";
+          div.innerHTML =
+            "<b class=\"" + esc(e.outcome) + "\">" + esc(e.outcome) + "</b>" +
+            what + dup + ' <span>· ' + esc(e.ts) + detail + "</span>";
+          entriesEl.appendChild(div);
+        });
+      })
+      .catch(function () {});
+  }
+
+  fetch("/api/health")
+    .then(function (r) { return r.json(); })
+    .then(function (h) {
+      document.getElementById("snapstate").textContent = "· snapshot: " + h.snapshot;
+      document.getElementById("foot").textContent = "session " + h.session_id;
+    })
+    .catch(function () {});
+
+  cameraReady();
+})();
+</script>
+</body>
+</html>
