@@ -37,6 +37,7 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` | no | `8` | Candidate list cap per scan (022) |
 | `COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES` | no | `10485760` | Photo upload cap, 10 MiB (022) |
 | `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | no | `collection-agent/data/scan-sessions` | Per-session scan journal location (022) |
+| `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | no | `45` | Hard cap per vision call; a re-scan supersedes the pending one (022 addendum 2) |
 | `LANGSMITH_TRACING` | no | off | Enable LangSmith tracing (021) — absent ⇒ strict no-op |
 | `LANGSMITH_API_KEY` | no | — | LangSmith key; if unset while tracing is on, chat continues untraced (one notice, never an error) |
 | `LANGSMITH_ENDPOINT` | no | SDK default | LangSmith endpoint override |
@@ -102,7 +103,7 @@ Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
 record scan: `specs/022-phone-record-scan/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (339 tests, no live API calls).
+Tests: `pytest` (344 tests, no live API calls).
 
 ---
 

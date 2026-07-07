@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     scan_max_image_bytes: int = Field(
         default=10_485_760, alias="COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES"
     )
+    # hard cap on one vision call (addendum 2 FR-023): an abandoned/hung
+    # provider call must not run unbounded after the owner re-scans
+    scan_vision_timeout_s: float = Field(
+        default=45.0, alias="COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S"
+    )
     scan_journal_dir: Path = Field(
         default=_COMPONENT_ROOT / "data" / "scan-sessions",
         alias="COLLECTION_AGENT_SCAN_JOURNAL_DIR",

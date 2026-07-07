@@ -72,6 +72,20 @@
   var qEl = document.getElementById("q");
   var entriesEl = document.getElementById("entries");
   var current = null; // {scan_id, candidates, hadCandidates}
+  var inflight = null; // AbortController for the pending scan/search fetch
+
+  function beginRequest() {
+    // FR-023: a new scan/search supersedes the pending one — abort it
+    if (inflight) inflight.abort();
+    inflight = new AbortController();
+    return inflight;
+  }
+
+  function isStale(ctrl, payload) {
+    if (ctrl !== inflight) return true; // an even newer request started
+    if (payload && payload.error && payload.error.code === "superseded") return true;
+    return false;
+  }
 
   function setStatus(msg, isError) {
     statusEl.textContent = msg || "";
@@ -227,9 +241,11 @@
     moreEl.textContent = "";
     var form = new FormData();
     form.append("photo", file);
-    fetch("/api/scan", { method: "POST", body: form })
+    var ctrl = beginRequest();
+    fetch("/api/scan", { method: "POST", body: form, signal: ctrl.signal })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
+        if (isStale(ctrl, res.j)) return; // superseded — a newer scan owns the UI
         if (!res.ok) {
           setStatus(apiError(res.j, "Scan failed."), true);
           manualEl.classList.add("show");
@@ -238,7 +254,11 @@
         }
         renderCandidates(res.j);
       })
-      .catch(function () { setStatus("Network error — photo not processed. Try again.", true); });
+      .catch(function (err) {
+        if (err && err.name === "AbortError") return; // we superseded it ourselves
+        if (ctrl !== inflight) return;
+        setStatus("Network error — photo not processed. Try again.", true);
+      });
   };
 
   document.getElementById("searchBtn").onclick = runManualSearch;
@@ -248,13 +268,19 @@
     var q = qEl.value.trim();
     if (!q) return;
     setStatus("Searching Discogs…");
-    fetch("/api/search?q=" + encodeURIComponent(q))
+    var ctrl = beginRequest();
+    fetch("/api/search?q=" + encodeURIComponent(q), { signal: ctrl.signal })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
+        if (isStale(ctrl, res.j)) return;
         if (!res.ok) { setStatus(apiError(res.j, "Search failed."), true); return; }
         renderCandidates(res.j);
       })
-      .catch(function () { setStatus("Network error — search not run.", true); });
+      .catch(function (err) {
+        if (err && err.name === "AbortError") return;
+        if (ctrl !== inflight) return;
+        setStatus("Network error — search not run.", true);
+      });
   }
 
   function refreshLog() {

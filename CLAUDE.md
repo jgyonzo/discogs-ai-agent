@@ -58,14 +58,22 @@ reconciliation validated same day (note in quickstart.md); still
 open: SC-002 10-record batch + SC-003 taps (T038) and the T041
 LAN-exposure decision; SC-006 owner-validated (dup marker on re-scan,
 post-sync — T039 done); one 80s vision-latency provider outlier on
-record; known minor gap: cycles abandoned without Skip are not
-journaled. 339 tests
+record. **Replay addendum 2** (2026-07-07, owner request post-SC-006):
+FR-022 — a new scan/search auto-closes every still-open cycle
+(journaled `skipped`, detail "auto-closed: superseded by a new
+scan"), closing the orphan-cycle gap; FR-023 — a new scan supersedes
+in-flight identification (page AbortController + server generation
+counter: superseded results discarded, 409 `superseded`, no journal/
+allowlist effects; scan handlers moved to sync-def threadpool — the
+old async handler blocked the event loop during the 80s vision
+outlier) + NEW `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` (default 45s)
+hard-caps each vision call. 344 tests
 (`cd collection-agent && pytest`), no live API calls; live replay
 tests use the verbatim failing vision replies; `FakeDiscogsClient`
 grew scriptable search/add. Artifacts: `specs/022-phone-record-scan/`
 (spec + replay addendum 1, plan, research R1–R10, data-model,
 quickstart + owner live-validation checklist, tasks T001–T037 +
-T042–T046 complete / T038–T041 owner-only, contracts: `scan-api.md`,
+T042–T050 complete / T038–T041 owner-only, contracts: `scan-api.md`,
 `scan-journal-schema.md`, `amendment-017-discogs-consumption.md` —
 FIRST amendment to 017's discogs-consumption contract:
 +`/database/search` read, +add-to-collection write). Out of scope

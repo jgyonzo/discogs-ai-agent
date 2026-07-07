@@ -405,12 +405,12 @@ Live session `20260707-130810Z` (0/4 identified) — findings F1–F3.
 Owner request post-SC-006: orphan cycles (F4) + unpreemptable in-flight
 scans (F5).
 
-- [ ] T047 New settings field `scan_vision_timeout_s`
+- [x] T047 New settings field `scan_vision_timeout_s`
       (`COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S`, default 45) in
       `collection-agent/src/collection_agent/settings.py`; vision call
       passes it per-request in
       `collection-agent/src/collection_agent/scan/vision.py` (VII(a)).
-- [ ] T048 FR-022 auto-close + FR-023 supersession in
+- [x] T048 FR-022 auto-close + FR-023 supersession in
       `collection-agent/src/collection_agent/scan/server.py`:
       generation counter + state lock; new scan/search first
       auto-closes open cycles (journaled `skipped`,
@@ -418,11 +418,11 @@ scans (F5).
       (results discarded, 409 `superseded`); scan handler moved off
       the event loop so concurrent scans never queue behind a slow
       vision call.
-- [ ] T049 Page support in
+- [x] T049 Page support in
       `collection-agent/src/collection_agent/scan/static/index.html`:
       AbortController cancels the pending scan/search fetch when a new
       one starts; `superseded`/aborted responses ignored silently.
-- [ ] T050 Tests: vision timeout kwarg unit test; integration —
+- [x] T050 Tests: vision timeout kwarg unit test; integration —
       abandoned cycle auto-closed as `skipped` on next scan and on
       manual search; concurrent slow scan superseded (blocking-stub
       thread test: no journal entry, no allowlist registration, 409);

@@ -22,6 +22,7 @@
 | `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` | `8` | candidate list cap |
 | `COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES` | `10485760` | upload cap (10 MiB) |
 | `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | `collection-agent/data/scan-sessions` | session journal location |
+| `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | `45` | hard cap per vision call (addendum 2) |
 
 LangSmith tracing (021) applies to the vision call automatically when
 `LANGSMITH_TRACING` + `LANGSMITH_API_KEY` are set.
@@ -131,8 +132,7 @@ Validated (2026-07-07, scripted against the live API + traces):
 
 Open: SC-002 (10-record batch), SC-003 (tap-count observation).
 SC-006 owner-validated 2026-07-07 (duplicate marker on re-scan of a
-just-added record, post-sync). Known minor gap
-(non-blocking): a cycle abandoned by simply scanning the next record
-(without tapping Skip/None-of-these) is never journaled — session 2
-has two such unclosed scan_ids. The contract only guarantees
-*completed* cycles; revisit only if batch review needs it.
+just-added record, post-sync). The orphan-cycle gap observed in
+session 2 (cycles abandoned without tapping Skip were never
+journaled) is CLOSED by replay addendum 2 (FR-022 auto-close +
+FR-023 supersession of in-flight scans, owner-requested same day).

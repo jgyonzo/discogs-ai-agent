@@ -89,3 +89,11 @@ def test_image_sent_as_data_url_and_model_from_settings(settings):
     url = image_part["image_url"]["url"]
     assert url.startswith("data:image/png;base64,")
     assert base64.b64decode(url.split(",", 1)[1]) == IMAGE
+
+
+def test_vision_call_carries_settings_timeout(settings):
+    """FR-023 (addendum 2): per-request hard cap from settings (VII(a))."""
+    llm = StubVisionLLM(["{}"])
+    extract_evidence(llm, settings, IMAGE, "image/jpeg")
+    assert llm.requests[0]["timeout"] == settings.scan_vision_timeout_s
+    assert settings.scan_vision_timeout_s == 45.0  # default

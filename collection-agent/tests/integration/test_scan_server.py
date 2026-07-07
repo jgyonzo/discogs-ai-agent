@@ -645,3 +645,101 @@ class TestReplayRound1:
         body = client.get("/api/search", params={"q": "white label"}).json()
         client.post("/api/skip", json={"scan_id": body["scan_id"]})
         assert session.log[-1].evidence == {"q": "white label"}
+
+
+class TestReplayRound2:
+    """Addendum 2: FR-022 auto-close of abandoned cycles, FR-023
+    supersession of in-flight identification."""
+
+    def test_new_scan_autocloses_abandoned_cycle(self, settings, store):
+        client, _, session = make_client(
+            settings, store,
+            vision_script=[EVIDENCE_JSON, EVIDENCE_JSON],
+            search_responses=ONE_HIT,
+        )
+        first = post_photo(client).json()
+        assert first["candidates"]  # cycle A open, owner never taps anything
+        second = post_photo(client).json()
+        assert second["candidates"]
+        # cycle A journaled skipped with the auto-close detail
+        entry = next(e for e in session.log if e.scan_id == first["scan_id"])
+        assert entry.outcome == "skipped"
+        assert entry.detail == "auto-closed: superseded by a new scan"
+        assert entry.evidence["barcode"] == "720642442524"  # FR-021 kept
+        # cycle B is the only open cycle
+        assert not session.is_closed(second["scan_id"])
+
+    def test_manual_search_autocloses_abandoned_cycle(self, settings, store):
+        client, _, session = make_client(
+            settings, store, search_responses=ONE_HIT,
+        )
+        first = post_photo(client).json()
+        client.get("/api/search", params={"q": "something else"})
+        entry = next(e for e in session.log if e.scan_id == first["scan_id"])
+        assert entry.outcome == "skipped"
+        assert entry.detail == "auto-closed: superseded by a new scan"
+
+    def test_autoclose_is_not_triggered_for_closed_cycles(self, settings, store):
+        client, _, session = make_client(
+            settings, store,
+            vision_script=[EVIDENCE_JSON, EVIDENCE_JSON],
+            search_responses=ONE_HIT,
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 101})
+        post_photo(client)  # must NOT double-journal cycle A
+        entries_for_a = [e for e in session.log if e.scan_id == scan_id]
+        assert [e.outcome for e in entries_for_a] == ["added"]
+
+    def test_inflight_scan_superseded_and_discarded(self, settings, store):
+        """FR-023: scan A blocks in vision; scan B lands meanwhile. A must
+        return 409 superseded, journal nothing for itself, register no
+        candidates; B owns the cycle."""
+        import threading
+
+        release_gate = threading.Event()
+        entered = threading.Event()
+
+        class BlockingVisionLLM(StubVisionLLM):
+            def _create(self, **kwargs):
+                self.requests.append(kwargs)
+                if len(self.requests) == 1:  # scan A blocks until released
+                    entered.set()
+                    assert release_gate.wait(timeout=10)
+                from types import SimpleNamespace
+                msg = SimpleNamespace(content=EVIDENCE_JSON, tool_calls=None)
+                return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+        llm = BlockingVisionLLM([])
+        discogs = FakeDiscogsClient()
+        discogs.search_responses.update(ONE_HIT)
+        session = ScanSession(
+            ScanJournal(settings.scan_journal_dir, "20260707-180000Z"),
+            clock=_fixed_clock,
+        )
+        app = create_app(
+            settings=settings, llm_client=llm, discogs_client=discogs,
+            store=store, session=session, username="test_user",
+        )
+        client = TestClient(app)
+
+        result_a: dict = {}
+
+        def scan_a():
+            result_a["resp"] = post_photo(client)
+
+        t = threading.Thread(target=scan_a)
+        t.start()
+        assert entered.wait(timeout=10)      # A is inside its vision call
+        resp_b = post_photo(client)          # B supersedes A
+        assert resp_b.status_code == 200
+        assert resp_b.json()["candidates"]
+        release_gate.set()                   # let A's vision return
+        t.join(timeout=10)
+
+        assert result_a["resp"].status_code == 409
+        assert result_a["resp"].json()["error"]["code"] == "superseded"
+        # A journaled nothing for itself and registered nothing:
+        # exactly one open cycle (B's), zero journal entries so far
+        assert session.log == []
+        assert len(session.seen_release_ids) == 1  # only B's candidate set

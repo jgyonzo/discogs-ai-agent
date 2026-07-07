@@ -55,6 +55,9 @@ def extract_evidence(
                 model=settings.collection_agent_vision_model,
                 messages=messages,
                 response_format={"type": "json_object"},
+                # FR-023: hard per-request cap — a superseded call's result
+                # is discarded anyway; don't let it run unbounded
+                timeout=settings.scan_vision_timeout_s,
             )
         except Exception as exc:  # provider/network failure — no retry here,
             # the SDK already retries transport errors internally

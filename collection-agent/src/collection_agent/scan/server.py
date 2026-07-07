@@ -15,6 +15,7 @@ error bodies carry no token and no API key (FR-017).
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,10 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="collection-agent scan", docs_url=None, redoc_url=None)
     cycles: dict[str, _CycleContext] = {}
+    # FR-023: handlers are sync `def`s (threadpool) so a slow vision call
+    # never blocks other requests; this lock guards session/cycle state
+    state_lock = threading.Lock()
+    generation = {"current": 0}
 
     def _duplicate_checker():
         # fresh per request: reads the snapshot as it is NOW (it may have
@@ -104,6 +109,38 @@ def create_app(
             ctx.titles[c.release_id] = c.title
         cycles[scan_id] = ctx
         session.register_candidates([c.release_id for c in candidates])
+
+    def _begin_cycle() -> int:
+        """FR-022/023 (addendum 2): a new scan/search supersedes everything
+        before it — bump the generation (in-flight identifications discard
+        their results when they resume) and auto-close every still-open
+        cycle. Open cycles by construction had candidates (no-match/failed
+        cycles close at their own time), so the outcome is `skipped`.
+        Raises JournalWriteError (caller maps to 500)."""
+        with state_lock:
+            generation["current"] += 1
+            for scan_id, ctx in list(cycles.items()):
+                if not session.is_closed(scan_id):
+                    session.record_outcome(
+                        scan_id,
+                        "skipped",
+                        ctx.source,
+                        evidence_kinds=ctx.evidence_kinds,
+                        evidence=ctx.evidence_fields,
+                        detail="auto-closed: superseded by a new scan",
+                    )
+            return generation["current"]
+
+    def _superseded(gen: int) -> bool:
+        with state_lock:
+            return gen != generation["current"]
+
+    def _superseded_response() -> JSONResponse:
+        return _error(
+            409,
+            "superseded",
+            "A newer scan started — this one was discarded.",
+        )
 
     # -- page + health --------------------------------------------------------
 
@@ -122,14 +159,14 @@ def create_app(
     # -- identify --------------------------------------------------------------
 
     @app.post("/api/scan")
-    async def scan(photo: UploadFile = File(...)):
+    def scan(photo: UploadFile = File(...)):
         if photo.content_type is None or not photo.content_type.startswith("image/"):
             return _error(
                 415,
                 "unsupported_media_type",
                 "The upload wasn't an image. Send a photo (JPEG/PNG/WebP/HEIC).",
             )
-        image_bytes = await photo.read()
+        image_bytes = photo.file.read()
         if len(image_bytes) > settings.scan_max_image_bytes:
             cap_mib = settings.scan_max_image_bytes / (1024 * 1024)
             return _error(
@@ -140,34 +177,47 @@ def create_app(
             )
 
         try:
+            gen = _begin_cycle()
+        except JournalWriteError as exc:
+            return _error(500, "journal_error", str(exc))
+
+        try:
             evidence = extract_evidence(
                 llm_client, settings, image_bytes, photo.content_type
             )
         except VisionExtractionError as exc:
+            if _superseded(gen):
+                return _superseded_response()
             return _error(
                 502,
                 "vision_unavailable",
                 f"Could not read the photo right now: {exc}",
             )
+        if _superseded(gen):
+            # FR-023: a newer scan started while vision ran — discard
+            return _superseded_response()
 
-        scan_id = session.next_scan_id()
-        ctx = _CycleContext(
-            "photo", list(evidence.evidence_kinds), evidence.compact_dump()
-        )
         summary = EvidenceSummary(
             kinds=list(evidence.evidence_kinds),
             fields=evidence.model_dump(exclude={"notes"}),
         )
+        ctx = _CycleContext(
+            "photo", list(evidence.evidence_kinds), evidence.compact_dump()
+        )
 
         if evidence.is_empty:
-            try:
-                session.record_outcome(
-                    scan_id, "no_match", "photo", evidence_kinds=[],
-                    evidence=ctx.evidence_fields,
-                )
-            except JournalWriteError as exc:
-                return _error(500, "journal_error", str(exc))
-            cycles[scan_id] = ctx
+            with state_lock:
+                if gen != generation["current"]:
+                    return _superseded_response()
+                scan_id = session.next_scan_id()
+                try:
+                    session.record_outcome(
+                        scan_id, "no_match", "photo", evidence_kinds=[],
+                        evidence=ctx.evidence_fields,
+                    )
+                except JournalWriteError as exc:
+                    return _error(500, "journal_error", str(exc))
+                cycles[scan_id] = ctx
             return ScanResponse(
                 scan_id=scan_id,
                 source="photo",
@@ -182,6 +232,8 @@ def create_app(
                 discogs_client, settings, evidence, _duplicate_checker()
             )
         except DiscogsError as exc:
+            if _superseded(gen):
+                return _superseded_response()
             return _error(
                 502, "discogs_unavailable", f"Discogs search failed: {exc}"
             )
@@ -189,20 +241,24 @@ def create_app(
         # journal truth: the rungs actually attempted (incl. the FR-020
         # free-text fallback), not just what was extracted
         ctx.evidence_kinds = tried
-        _register(scan_id, ctx, candidates)
-        message = None
-        if not candidates:
-            try:
-                session.record_outcome(
-                    scan_id,
-                    "no_match",
-                    "photo",
-                    evidence_kinds=ctx.evidence_kinds,
-                    evidence=ctx.evidence_fields,
-                )
-            except JournalWriteError as exc:
-                return _error(500, "journal_error", str(exc))
-            message = NO_RESULTS_MESSAGE
+        with state_lock:
+            if gen != generation["current"]:
+                return _superseded_response()
+            scan_id = session.next_scan_id()
+            _register(scan_id, ctx, candidates)
+            message = None
+            if not candidates:
+                try:
+                    session.record_outcome(
+                        scan_id,
+                        "no_match",
+                        "photo",
+                        evidence_kinds=ctx.evidence_kinds,
+                        evidence=ctx.evidence_fields,
+                    )
+                except JournalWriteError as exc:
+                    return _error(500, "journal_error", str(exc))
+                message = NO_RESULTS_MESSAGE
         return ScanResponse(
             scan_id=scan_id,
             source="photo",
@@ -218,19 +274,28 @@ def create_app(
         if not query:
             return _error(400, "empty_query", "Type something to search for.")
         try:
+            gen = _begin_cycle()
+        except JournalWriteError as exc:
+            return _error(500, "journal_error", str(exc))
+        try:
             candidates, more_matches = find_candidates_text(
                 discogs_client, settings, query, _duplicate_checker()
             )
         except DiscogsError as exc:
+            if _superseded(gen):
+                return _superseded_response()
             return _error(
                 502, "discogs_unavailable", f"Discogs search failed: {exc}"
             )
-        scan_id = session.next_scan_id()
-        _register(
-            scan_id,
-            _CycleContext("manual_search", ["text"], {"q": query}),
-            candidates,
-        )
+        with state_lock:
+            if gen != generation["current"]:
+                return _superseded_response()
+            scan_id = session.next_scan_id()
+            _register(
+                scan_id,
+                _CycleContext("manual_search", ["text"], {"q": query}),
+                candidates,
+            )
         return ScanResponse(
             scan_id=scan_id,
             source="manual_search",
@@ -276,16 +341,17 @@ def create_app(
             )
         except DiscogsError as exc:
             try:
-                session.record_outcome(
-                    req.scan_id,
-                    "failed",
-                    ctx.source,
-                    evidence_kinds=ctx.evidence_kinds,
-                    release_id=req.release_id,
-                    release_title=title,
-                    detail=f"add failed: {exc}",
-                    evidence=ctx.evidence_fields,
-                )
+                with state_lock:
+                    session.record_outcome(
+                        req.scan_id,
+                        "failed",
+                        ctx.source,
+                        evidence_kinds=ctx.evidence_kinds,
+                        release_id=req.release_id,
+                        release_title=title,
+                        detail=f"add failed: {exc}",
+                        evidence=ctx.evidence_fields,
+                    )
             except JournalWriteError as journal_exc:
                 return _error(500, "journal_error", str(journal_exc))
             return AddResponse(
@@ -296,17 +362,19 @@ def create_app(
 
         instance_id = result.get("instance_id")
         try:
-            session.record_outcome(
-                req.scan_id,
-                "added",
-                ctx.source,
-                evidence_kinds=ctx.evidence_kinds,
-                release_id=req.release_id,
-                release_title=title,
-                instance_id=instance_id,
-                duplicate_add=is_duplicate,
-                evidence=ctx.evidence_fields,
-            )
+            with state_lock:
+                session.record_outcome(
+                    req.scan_id,
+                    "added",
+                    ctx.source,
+                    evidence_kinds=ctx.evidence_kinds,
+                    release_id=req.release_id,
+                    release_title=title,
+                    instance_id=instance_id,
+                    duplicate_add=is_duplicate,
+                    evidence=ctx.evidence_fields,
+                )
+                session.record_add(req.release_id)
         except JournalWriteError as exc:
             # the live add DID happen — be honest about both facts
             return _error(
@@ -315,7 +383,6 @@ def create_app(
                 f"The release was added on Discogs but the session journal "
                 f"could not be written: {exc}",
             )
-        session.record_add(req.release_id)
         store.mark_stale()
         return AddResponse(
             status="added",
@@ -329,31 +396,36 @@ def create_app(
 
     @app.post("/api/skip")
     def skip(req: SkipRequest):
-        if session.is_closed(req.scan_id):
-            return {"status": "skipped"}
-        ctx = cycles.get(req.scan_id) or _CycleContext("photo", [])
-        outcome = "skipped" if (ctx.has_candidates or req.release_id) else "no_match"
-        try:
-            session.record_outcome(
-                req.scan_id,
-                outcome,
-                ctx.source,
-                evidence_kinds=ctx.evidence_kinds,
-                release_id=req.release_id,
-                release_title=ctx.titles.get(req.release_id)
-                if req.release_id
-                else None,
-                evidence=ctx.evidence_fields,
+        with state_lock:
+            if session.is_closed(req.scan_id):
+                return {"status": "skipped"}
+            ctx = cycles.get(req.scan_id) or _CycleContext("photo", [])
+            outcome = (
+                "skipped" if (ctx.has_candidates or req.release_id) else "no_match"
             )
-        except JournalWriteError as exc:
-            return _error(500, "journal_error", str(exc))
+            try:
+                session.record_outcome(
+                    req.scan_id,
+                    outcome,
+                    ctx.source,
+                    evidence_kinds=ctx.evidence_kinds,
+                    release_id=req.release_id,
+                    release_title=ctx.titles.get(req.release_id)
+                    if req.release_id
+                    else None,
+                    evidence=ctx.evidence_fields,
+                )
+            except JournalWriteError as exc:
+                return _error(500, "journal_error", str(exc))
         return {"status": "skipped"}
 
     @app.get("/api/session")
     def session_log() -> SessionResponse:
+        with state_lock:
+            entries = list(reversed(session.log))
         return SessionResponse(
             session_id=session.session_id,
-            entries=list(reversed(session.log)),
+            entries=entries,
         )
 
     return app
