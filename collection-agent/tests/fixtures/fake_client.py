@@ -47,6 +47,11 @@ class FakeDiscogsClient:
         # add_failures: release_id -> Exception to raise from add_to_collection
         self.add_failures: dict[int, Exception] = {}
         self.adds: list[tuple[str, int, int]] = []  # (username, folder_id, release_id)
+        # -- 023 eval dataset --------------------------------------------------
+        # image_bytes: images[].uri -> bytes to serve; unscripted URIs return
+        # None (a failed/expired download); image_downloads records the order.
+        self.image_bytes: dict[str, bytes] = {}
+        self.image_downloads: list[str] = []
         self._next_instance_id = 90001
         self._next_folder_id = 100
         # live instance state for US4 re-validation: instance_id -> (release_id, folder_id)
@@ -100,6 +105,10 @@ class FakeDiscogsClient:
             raise DiscogsServerError(f"Discogs 5xx after retries: GET /releases/{release_id} -> 503")
         self.release_fetches.append(release_id)
         return self._details[release_id]
+
+    def download_image(self, uri: str) -> bytes | None:
+        self.image_downloads.append(uri)
+        return self.image_bytes.get(uri)
 
     def search_releases(self, params: dict[str, Any]) -> dict[str, Any]:
         self.searches.append(dict(params))

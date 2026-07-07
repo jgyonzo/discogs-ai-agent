@@ -44,6 +44,10 @@ def settings(tmp_path) -> Settings:
         DISCOGS_USER_TOKEN="test-token-not-real",
         SNAPSHOT_PATH=tmp_path / "snapshot.json",
         COLLECTION_AGENT_SCAN_JOURNAL_DIR=tmp_path / "scan-sessions",
+        # eval (023) paths are tmp-isolated too — no test touches data/
+        COLLECTION_AGENT_EVAL_DATASET_DIR=tmp_path / "eval-dataset",
+        COLLECTION_AGENT_EVAL_RESULTS_DIR=tmp_path / "eval-runs",
+        COLLECTION_AGENT_SCAN_RETENTION_DIR=tmp_path / "scan-photos",
     )
 
 

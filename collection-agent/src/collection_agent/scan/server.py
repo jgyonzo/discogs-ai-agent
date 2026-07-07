@@ -89,6 +89,13 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="collection-agent scan", docs_url=None, redoc_url=None)
     cycles: dict[str, _CycleContext] = {}
+    # 023 FR-007: photo retention exists ONLY behind the opt-in flag — with
+    # it off, no retention code runs and behavior is byte-identical to 022
+    retainer = None
+    if settings.scan_retain_photos:
+        from collection_agent.scan.retention import PhotoRetainer
+
+        retainer = PhotoRetainer(settings.scan_retention_dir, session.session_id)
     # FR-023: handlers are sync `def`s (threadpool) so a slow vision call
     # never blocks other requests; this lock guards session/cycle state
     state_lock = threading.Lock()
@@ -176,6 +183,14 @@ def create_app(
                 "retake at lower resolution.",
             )
 
+        # 023 FR-008: retain the original bytes BEFORE any identification
+        # outcome exists; failure is loud in the log but never in the flow
+        retained = (
+            retainer.save_pending(image_bytes, photo.content_type)
+            if retainer is not None
+            else None
+        )
+
         try:
             gen = _begin_cycle()
         except JournalWriteError as exc:
@@ -210,6 +225,8 @@ def create_app(
                 if gen != generation["current"]:
                     return _superseded_response()
                 scan_id = session.next_scan_id()
+                if retainer is not None:
+                    retainer.assign(retained, scan_id)
                 try:
                     session.record_outcome(
                         scan_id, "no_match", "photo", evidence_kinds=[],
@@ -245,6 +262,8 @@ def create_app(
             if gen != generation["current"]:
                 return _superseded_response()
             scan_id = session.next_scan_id()
+            if retainer is not None:
+                retainer.assign(retained, scan_id)
             _register(scan_id, ctx, candidates)
             message = None
             if not candidates:

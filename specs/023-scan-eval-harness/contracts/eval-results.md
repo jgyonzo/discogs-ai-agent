@@ -27,9 +27,13 @@ the shape is contracted.
  "truth_release_id": 724223, "outcome": "hit", "rank": 1,
  "rung": "barcode", "rungs_tried": ["barcode"],
  "evidence_kinds": ["barcode", "artist_title"],
- "candidate_ids": [724223, 297060], "error_kind": null, "detail": null,
+ "candidate_ids": [724223, 297060],
  "vision_calls": 1, "elapsed_s": 2.4}
 ```
+
+Serialization note: records are written with `exclude_none` — absent/None
+fields (`rank` on a miss, `error_kind` outside errors, …) are omitted from
+the line rather than serialized as `null`.
 
 Field semantics (full typing in data-model.md):
 

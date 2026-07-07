@@ -743,3 +743,61 @@ class TestReplayRound2:
         # exactly one open cycle (B's), zero journal entries so far
         assert session.log == []
         assert len(session.seen_release_ids) == 1  # only B's candidate set
+
+
+class TestPhotoRetention:
+    """023 US3 (T023): opt-in retention through the real endpoint —
+    save-then-rename on the happy path, honest pending-* on vision failure,
+    non-fatal retention failure, and byte-identical behavior when off."""
+
+    @staticmethod
+    def retain(settings):
+        return settings.model_copy(update={"scan_retain_photos": True})
+
+    def session_dir(self, settings):
+        return settings.scan_retention_dir / "20260707-183000Z"
+
+    def test_flag_on_saves_and_renames_to_scan_id(self, settings, store):
+        client, _, _ = make_client(
+            self.retain(settings), store, search_responses=ONE_HIT
+        )
+        resp = post_photo(client, content=b"original-photo-bytes")
+        scan_id = resp.json()["scan_id"]
+        retained = self.session_dir(settings) / f"{scan_id}.jpg"
+        assert retained.read_bytes() == b"original-photo-bytes"
+        assert not list(self.session_dir(settings).glob("pending-*"))
+
+    def test_no_match_cycle_also_renames(self, settings, store):
+        client, _, _ = make_client(
+            self.retain(settings), store, vision_script=["{}"]
+        )
+        resp = post_photo(client)
+        scan_id = resp.json()["scan_id"]
+        assert (self.session_dir(settings) / f"{scan_id}.jpg").exists()
+
+    def test_vision_failure_leaves_pending_file(self, settings, store):
+        client, _, _ = make_client(
+            self.retain(settings), store,
+            vision_script=[RuntimeError("provider down")],
+        )
+        resp = post_photo(client, content=b"photo-that-broke-vision")
+        assert resp.status_code == 502
+        pending = self.session_dir(settings) / "pending-1.jpg"
+        assert pending.read_bytes() == b"photo-that-broke-vision"
+
+    def test_retention_failure_never_breaks_the_scan(self, settings, store):
+        # a FILE where the retention dir should be makes every save fail
+        settings.scan_retention_dir.parent.mkdir(parents=True, exist_ok=True)
+        settings.scan_retention_dir.write_text("not a directory")
+        client, _, _ = make_client(
+            self.retain(settings), store, search_responses=ONE_HIT
+        )
+        resp = post_photo(client)
+        assert resp.status_code == 200
+        assert resp.json()["candidates"]  # scan fully functional
+
+    def test_flag_off_never_touches_the_retention_dir(self, settings, store):
+        client, _, _ = make_client(settings, store, search_responses=ONE_HIT)
+        resp = post_photo(client)
+        assert resp.status_code == 200
+        assert not settings.scan_retention_dir.exists()

@@ -33,19 +33,19 @@ by the repo-root `.gitignore` `data/` rule (guard-tested, research R4).
 
 | Field | Type | Notes |
 |---|---|---|
-| `kind` | `Literal["primary", "secondary"]` | verbatim from `images[].type` |
+| `kind` | `str` | verbatim from `images[].type` — expected `primary`/`secondary`, tolerated as any string (verbatim discipline: never coerced or invented) |
 | `source_uri` | `str` | verbatim `images[].uri` (possibly signed; lives only in gitignored data) |
 | `file` | `str \| None` | filename relative to dataset dir; `None` when download failed |
-| `status` | `Literal["downloaded", "failed"]` | |
+| `status` | `str` | `downloaded` \| `failed` |
 | `detail` | `str \| None` | failure reason |
 
 ### `ManifestRelease` — one line per processed release
 
 | Field | Type | Notes |
 |---|---|---|
-| `type` | `Literal["release"]` | line discriminator |
+| `type` | `str` (`"release"`) | line discriminator |
 | `release_id` | `int` | **ground truth** for every image in `images` |
-| `status` | `Literal["downloaded", "no_images", "failed"]` | `downloaded` = ≥1 image on disk; `failed` = release fetch or all downloads failed |
+| `status` | `str` | `downloaded` (≥1 image on disk) \| `no_images` \| `failed` (release fetch or all downloads failed) |
 | `images` | `list[ManifestImage]` | empty for `no_images` |
 | `fetched_at` | `str` | UTC timestamp |
 | `detail` | `str \| None` | e.g. 404 on release fetch |

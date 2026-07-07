@@ -38,6 +38,11 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES` | no | `10485760` | Photo upload cap, 10 MiB (022) |
 | `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | no | `collection-agent/data/scan-sessions` | Per-session scan journal location (022) |
 | `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | no | `45` | Hard cap per vision call; a re-scan supersedes the pending one (022 addendum 2) |
+| `COLLECTION_AGENT_EVAL_DATASET_DIR` | no | `collection-agent/data/eval/discogs-images` | Labeled eval-image dataset location (023) |
+| `COLLECTION_AGENT_EVAL_IMAGES_PER_RELEASE` | no | `2` | Image download cap per release, secondary-preferred (023) |
+| `COLLECTION_AGENT_EVAL_RESULTS_DIR` | no | `collection-agent/data/eval/runs` | Eval run results location (023) |
+| `COLLECTION_AGENT_SCAN_RETAIN_PHOTOS` | no | `false` | Opt-in: keep uploaded scan photos for the eval dataset (023) |
+| `COLLECTION_AGENT_SCAN_RETENTION_DIR` | no | `collection-agent/data/eval/scan-photos` | Where retained scan photos land (023) |
 | `LANGSMITH_TRACING` | no | off | Enable LangSmith tracing (021) — absent ⇒ strict no-op |
 | `LANGSMITH_API_KEY` | no | — | LangSmith key; if unset while tracing is on, chat continues untraced (one notice, never an error) |
 | `LANGSMITH_ENDPOINT` | no | SDK default | LangSmith endpoint override |
@@ -64,6 +69,8 @@ python -m collection_agent sync      # first sync: minutes-scale, resumable (Ctr
 python -m collection_agent status    # snapshot age / completeness / counts / value
 python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
 python -m collection_agent scan      # phone record-scan server (022); --host/--port
+python -m collection_agent eval-dataset  # build the labeled eval image dataset (023)
+python -m collection_agent eval-run      # measure scan identification accuracy (023)
 ```
 
 Analytics, filtered listings, media links, and YouTube playlist links are
@@ -96,14 +103,41 @@ single-occupant network — anyone on the LAN who finds the port can
 trigger adds); do not expose it beyond the LAN. Secrets never reach the
 browser.
 
+### Identification eval (023)
+
+`eval-dataset` walks the synced snapshot and downloads each release's
+Discogs images (secondary — back covers, center labels — preferred) into a
+**gitignored, local-only** dataset labeled by release id; interrupt and
+re-run freely, it resumes. The images are uploader-copyrighted: never
+commit, publish, or share them (the dataset carries a `NOTICE.txt`;
+a guard test enforces the gitignore).
+
+`eval-run --source discogs [--limit N]` replays every labeled image
+through the *production* scan pipeline (same vision model/prompt/timeout,
+same search ladder — LangSmith-traced when configured) and reports
+identification rate, top-1 rate, and per-rung attribution to
+`data/eval/runs/<run_id>/` (`results.jsonl` + `summary.json`). Each image
+costs one billable vision call (the summary prints the count); the run is
+strictly read-only against Discogs. Note the honesty caveat: Discogs
+images are clean scans, so this measures an upper bound of real
+phone-photo accuracy.
+
+To accumulate the *real* distribution, start the scan server with
+`COLLECTION_AGENT_SCAN_RETAIN_PHOTOS=true`: uploaded photos are kept under
+`data/eval/scan-photos/<session>/`, and a confirmed add labels the photo
+via the session journal automatically — then `eval-run --source retained`
+scores them (photos from unconfirmed cycles are counted as unlabeled, not
+billed). Retention is off by default and never affects the scan flow.
+
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
 (missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
 
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
-record scan: `specs/022-phone-record-scan/quickstart.md`) ·
+record scan: `specs/022-phone-record-scan/quickstart.md`;
+eval: `specs/023-scan-eval-harness/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
-Tests: `pytest` (344 tests, no live API calls).
+Tests: `pytest` (no live API calls).
 
 ---
 
