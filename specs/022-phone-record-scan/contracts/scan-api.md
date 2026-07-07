@@ -89,6 +89,13 @@ Semantics:
 - Search ladder per FR-004: barcode → catno(+label) → artist+title;
   a rung runs only if the previous produced nothing. `evidence_summary.kinds`
   reflects what was extracted; the UI may show "matched by barcode".
+- Addendum 1 (FR-019/020): a `catno` whose separator-stripped value is
+  10+ digits is normalized to barcode evidence before the ladder runs;
+  when every structured rung is absent or empty, one final free-text
+  rung searches `q=` composed from the available evidence (artist,
+  title or lead track, label). `ScanEvidence` carries a `tracks` field
+  (lead track doubles as the 12″-single title); it appears in
+  `evidence_summary.fields` like any other field.
 - Candidates de-duplicated by `release_id`, capped at
   `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` (default 8); `more_matches`
   true when Discogs pagination reports more items than shown (FR-006).

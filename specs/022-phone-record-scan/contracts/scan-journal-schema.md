@@ -25,12 +25,13 @@ per server run:
 | `scan_id` | string | yes | `"{session_id}-{seq of the producing cycle}"` |
 | `outcome` | string | yes | `added` \| `skipped` \| `no_match` \| `failed` |
 | `source` | string | yes | `photo` \| `manual_search` |
-| `evidence_kinds` | array[string] | yes | subset of `barcode`, `catno`, `artist_title`, `text`; `[]` when nothing was extracted |
+| `evidence_kinds` | array[string] | yes | subset of `barcode`, `catno`, `artist_title`, `text`; `[]` when nothing was extracted. For photo cycles these are the rungs actually attempted — `text` appears when the composed free-text fallback fired (addendum 1, FR-020) |
 | `release_id` | int | when a release was involved | Discogs release id |
 | `release_title` | string | when a release was involved | candidate `title`, verbatim |
 | `instance_id` | int | `outcome=added` only | from the live add response |
 | `duplicate_add` | bool | no (default `false`) | `true` when this add was a confirmed extra copy |
 | `detail` | string | no | failure reason / skip context, human-readable |
+| `evidence` | object | photo/manual cycles (addendum 1, FR-021) | extracted evidence field values, compact (no None/empty entries; never the image). Manual-search cycles carry `{"q": <query>}` |
 
 Unknown keys MUST be ignored by readers (forward compatibility).
 

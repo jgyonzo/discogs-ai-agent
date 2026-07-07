@@ -340,3 +340,57 @@ confirmation, logging) to the photo flow.
   owner's account is an owner-only activity, excluded from the automated
   implement phase (020/021 pattern); the implement phase delivers
   everything up to that point.
+
+## Replay addendum 1 (2026-07-07) — first live session: 0/4 identified
+
+**Findings.** The owner's first live session (session
+`20260707-130810Z`, two Crosstown Rebels 12″ singles, four photo
+cycles — sleeve-with-center and label-only framings) identified
+nothing. The journal plus the LangSmith traces of the four vision
+calls showed two compounding causes, neither of them "the photo was
+illegible":
+
+1. *Evidence misclassification by the vision step* (F1). Barcode
+   digits were transcribed into `catno` twice (`81824 11306`,
+   `8 00505 200413` — digit runs that can never match a catalog
+   number); the label name was read as the artist once; and no cycle
+   produced a `title`, because 12″ singles print a track list, not a
+   title — the model parked the lead tracks ("ace of spades",
+   "the key") in `notes`, which nothing searches. The release title
+   on Discogs for such singles IS the lead track.
+2. *Ladder rigidity in the face of partial evidence* (F2). The
+   artist+title rung requires both; artist-only, label-only, and
+   track-title evidence was discarded entirely. Cycle 1 extracted a
+   perfectly good label and never queried Discogs at all; cycle 2 had
+   artist + label + lead track — enough for a trivial free-text hit —
+   and returned "no match".
+
+A third, tooling finding (F3): the journal records evidence *kinds*
+only, so diagnosing this required LangSmith; the extracted field
+values (never the photo) belong in the journal line.
+
+**Requirement deltas.**
+
+- **FR-003 (refined)**: the extraction prompt MUST teach the
+  photo-domain distinctions the failures exposed: barcode digits vs
+  catalog number, record-company name vs artist, and the 12″-single
+  convention (no printed title ⇒ the lead A-side track is the title);
+  extracted track titles get a dedicated `tracks` field (searchable
+  evidence, unlike `notes`).
+- **FR-019 (new)**: evidence normalization MUST reclassify a "catalog
+  number" whose separator-stripped value is a digit run of 10+ as
+  barcode evidence (never searched as a catno).
+- **FR-020 (new)**: when every structured rung is absent or returns
+  zero results, the system MUST fall back to one free-text search
+  composed from the evidence it does hold (artist, title or lead
+  track, label) before reporting no match. The fallback is a rung of
+  the same ladder: same candidate shape, cap, and honesty rules; the
+  cycle's recorded evidence kinds include `text` when it fired.
+- **FR-021 (new)**: every journaled photo-cycle outcome MUST carry the
+  extracted evidence field values (compact, excluding the image);
+  manual-search outcomes carry the query. Debugging an identification
+  failure must not require the tracing backend (F3).
+
+**Out of scope for this addendum**: model choice (the vision model is
+already a settings knob; the owner repointed it independently),
+client-side image downscaling, and any change to write gating.

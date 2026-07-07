@@ -11,7 +11,7 @@ untouched (repo convention: amendments live in the amending feature's
 
 | Endpoint | When | Fields consumed |
 |---|---|---|
-| `GET /database/search?type=release&…` | scan cycles and manual searches (022): parameter rungs in precision order — `barcode=`; `catno=` (+`label=`); `artist=` + `release_title=`; free-text `q=` for manual search. `per_page` = `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` (default 8), page 1 only | `pagination.items`; per result: `id`, `title`, `year`, `country`, `format[]`, `label[]`, `catno`, `thumb`, `cover_image`, `uri` |
+| `GET /database/search?type=release&…` | scan cycles and manual searches (022): parameter rungs in precision order — `barcode=`; `catno=` (+`label=`); `artist=` + `release_title=`; free-text `q=` for manual search AND, per replay addendum 1 (FR-020), as the final photo-cycle fallback composed from partial evidence when every structured rung is absent or empty. `per_page` = `COLLECTION_AGENT_SCAN_CANDIDATES_MAX` (default 8), page 1 only | `pagination.items`; per result: `id`, `title`, `year`, `country`, `format[]`, `label[]`, `catno`, `thumb`, `cover_image`, `uri` |
 
 Handling rules (unchanged in spirit from §5): all consumed fields are
 displayed **verbatim** — `thumb`/`cover_image`/`uri` are never

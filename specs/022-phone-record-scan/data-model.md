@@ -19,16 +19,22 @@ fact (FR-003).
 | `label` | `str \| None` | label name |
 | `catno` | `str \| None` | catalog number as printed |
 | `barcode` | `str \| None` | digits only (normalized: strip spaces/hyphens) |
+| `tracks` | `list[str]` = `[]` | track titles as printed (addendum 1: searchable, unlike `notes`; lead track doubles as a 12″ single's title) |
 | `format_hints` | `list[str]` = `[]` | e.g. `"2xLP"`, `"45 RPM"` |
 | `notes` | `str \| None` | anything else legible the model flags (not searched) |
 
 Validation: all-None is legal (`is_empty` property → no-match path,
-FR-012). Barcode normalized by a model validator; a barcode of
-non-digit garbage is dropped to None rather than searched.
+FR-012; `tracks` count as evidence). Barcode normalized by a model
+validator; a barcode of non-digit garbage is dropped to None rather
+than searched. Addendum 1 (FR-019): a `catno` whose separator-stripped
+value is a run of 10+ digits is reclassified as `barcode` (kept only
+if no barcode was extracted) and cleared from `catno` — digit runs of
+that length are barcodes, never catalog numbers.
 
 `evidence_kinds` (derived): subset of
-`{barcode, catno, artist_title, text}` actually present — logged in the
-journal and shown in the UI as "matched by …".
+`{barcode, catno, artist_title, text}` actually present (`text` when
+only free-text-composable evidence exists) — the journal logs the
+rungs actually attempted, and the UI may show "matched by …".
 
 ## Candidate
 
@@ -91,6 +97,7 @@ One completed cycle; append-only (FR-013). Full schema in
 | `instance_id` | `int \| None` | from the add response, `added` only |
 | `duplicate_add` | `bool` = `false` | true when this was a confirmed second copy |
 | `detail` | `str \| None` | failure reason / skip context |
+| `evidence` | `dict \| None` | addendum 1 (FR-021): compact extracted evidence values (photo) or `{"q": …}` (manual); never the image |
 
 ## ScanSession (in-memory, `scan/session.py`)
 

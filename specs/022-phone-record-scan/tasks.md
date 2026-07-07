@@ -376,6 +376,30 @@ phase.** Checklist mirrors quickstart.md.
 
 ---
 
+## Phase 9: Replay round 1 fixes (spec addendum 1, 2026-07-07)
+
+Live session `20260707-130810Z` (0/4 identified) — findings F1–F3.
+
+- [ ] T042 Harden `collection-agent/src/collection_agent/prompts/scan_vision.md`
+      per FR-003 refinement: barcode-digits-vs-catno, label≠artist,
+      12″ lead-track-is-title convention, new `tracks` field.
+- [ ] T043 `ScanEvidence` gains `tracks` + FR-019 normalization
+      (10+-digit catno → barcode) in
+      `collection-agent/src/collection_agent/scan/models.py`; `is_empty`
+      counts tracks; unit tests incl. the live cycle-2/3/4 payloads.
+- [ ] T044 FR-020 composed free-text fallback rung in
+      `collection-agent/src/collection_agent/scan/search.py`
+      (`compose_query`; fires only when structured rungs are absent or
+      all-zero; `tried` gains `text`); unit tests incl. the live
+      cycle-1 (label-only) and cycle-2 replays.
+- [ ] T045 FR-021 journaled evidence values: `ScanCycleOutcome.evidence`,
+      session plumbing, server passes compact evidence (photo) / query
+      (manual); journal + integration tests.
+- [ ] T046 Full suite gate green; contracts/data-model/spec addendum 1
+      consistent.
+
+---
+
 ## Dependencies & Execution Order
 
 - **Phase 1 → Phase 2 → user stories**: T001–T004 first; T005–T013
