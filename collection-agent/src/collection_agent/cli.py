@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
     sync_p = sub.add_parser("sync", help="run/resume the collection sync")
     sync_p.add_argument("--full", action="store_true", help="re-enrich all releases")
     sub.add_parser("status", help="print snapshot state")
+    scan_p = sub.add_parser(
+        "scan", help="serve the phone record-scan page on the LAN (022)"
+    )
+    scan_p.add_argument("--host", default=None, help="bind address (default: settings)")
+    scan_p.add_argument("--port", type=int, default=None, help="port (default: settings)")
     args = parser.parse_args(argv)
 
     try:
@@ -60,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_sync(settings, full=args.full)
         if command == "status":
             return _cmd_status(settings)
+        if command == "scan":
+            return _cmd_scan(settings, host=args.host, port=args.port)
         return _cmd_chat(settings)
     except KeyboardInterrupt:
         console.print("\n[dim]bye[/dim]")
@@ -329,6 +336,107 @@ def _maybe_confirm_pending_plan(agent, settings: Settings, store: SnapshotStore)
         outcome = "[green]ok[/green]" if m.result == "ok" else f"[red]failed[/red]: {m.error}"
         rt.add_row(m.display, outcome)
     console.print(rt)
+
+
+# --- scan (022) --------------------------------------------------------------
+
+
+def _lan_urls(port: int) -> list[str]:
+    """Best-effort LAN URLs for the startup banner (stdlib only)."""
+    import socket
+
+    hosts: list[str] = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("10.255.255.255", 1))  # no traffic sent — routing lookup only
+            hosts.append(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+    hosts.append("localhost")
+    return [f"http://{h}:{port}/" for h in dict.fromkeys(hosts)]
+
+
+def _cmd_scan(settings: Settings, host: str | None, port: int | None) -> int:
+    """Serve the phone scan page (contracts/scan-api.md). The write gate is
+    the owner's tap on the page — the vision/search pipeline can only
+    propose candidates (research R9)."""
+    if settings.openai_api_key is None:
+        console.print(
+            "[red]configuration error:[/red] OPENAI_API_KEY is not set "
+            "(needed for photo evidence extraction)."
+        )
+        return EXIT_CONFIG
+
+    from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
+    from collection_agent.scan.journal import ScanJournal
+    from collection_agent.scan.server import create_app
+    from collection_agent.scan.session import ScanSession
+
+    bind_host = host if host is not None else settings.scan_host
+    bind_port = port if port is not None else settings.scan_port
+
+    client = DiscogsClient(
+        settings, notify=lambda m: console.print(f"[yellow]{m}[/yellow]")
+    )
+    try:
+        identity = client.get_identity()
+    except DiscogsAuthError as exc:
+        console.print(f"[red]{exc}[/red]")
+        client.close()
+        return EXIT_CONFIG
+    username = identity.get("username") or settings.discogs_username
+    if not username:
+        console.print("[red]could not resolve the Discogs username[/red]")
+        client.close()
+        return EXIT_CONFIG
+
+    # never trust the snapshot for writes: validate the target folder live
+    folders = {f["id"]: f["name"] for f in client.get_folders(username)}
+    folder_id = settings.scan_target_folder_id
+    if folder_id not in folders:
+        console.print(
+            f"[red]configuration error:[/red] collection folder id "
+            f"{folder_id} does not exist on Discogs (folders: "
+            f"{', '.join(f'{i}={n}' for i, n in sorted(folders.items()))}). "
+            "Set COLLECTION_AGENT_SCAN_FOLDER_ID to one of them."
+        )
+        client.close()
+        return EXIT_CONFIG
+
+    store = SnapshotStore(settings.snapshot_path)
+    session = ScanSession(
+        ScanJournal(settings.scan_journal_dir, ScanSession.new_session_id())
+    )
+    app = create_app(
+        settings=settings,
+        llm_client=_build_llm_client(settings),
+        discogs_client=client,
+        store=store,
+        session=session,
+        username=username,
+    )
+
+    console.print(
+        f"[bold]Record scan[/bold] — adds go to folder "
+        f"'{folders[folder_id]}' ({folder_id}) of [bold]{username}[/bold]."
+    )
+    console.print("Open on your phone (same Wi-Fi):")
+    for url in _lan_urls(bind_port):
+        console.print(f"  [bold green]{url}[/bold green]")
+    console.print(
+        f"[dim]session journal: {session.journal.path} · Ctrl-C to stop[/dim]"
+    )
+
+    import uvicorn
+
+    try:
+        uvicorn.run(app, host=bind_host, port=bind_port, log_level="warning")
+    finally:
+        client.close()
+    return EXIT_OK
 
 
 def _ask(prompt: str) -> bool:

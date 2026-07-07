@@ -133,13 +133,13 @@ add → back to camera.
 produces exactly one `add_to_collection` call for that release id and
 the page state returns to camera-ready (spec US1 acceptance 1–5).
 
-- [ ] T014 [P] [US1] Author the vision evidence-extraction prompt at
+- [x] T014 [P] [US1] Author the vision evidence-extraction prompt at
       `collection-agent/src/collection_agent/prompts/scan_vision.md`:
       transcribe only what is legible (artist, title, label, catno,
       barcode digits, format hints), never guess, omit unreadable
       fields, output JSON only (keys matching `ScanEvidence`). No
       catalog-schema prose (Constitution VII(b) not engaged).
-- [ ] T015 [US1] Implement `extract_evidence(llm, settings,
+- [x] T015 [US1] Implement `extract_evidence(llm, settings,
       image_bytes, mime) -> ScanEvidence` in
       `collection-agent/src/collection_agent/scan/vision.py`: one
       `chat.completions.create` with base64 `data:` URL image part +
@@ -149,12 +149,12 @@ the page state returns to camera-ready (spec US1 acceptance 1–5).
       raise a typed `VisionExtractionError` (→ 502 at the API); a
       valid reply with no fields is a legal empty `ScanEvidence`
       (research R2).
-- [ ] T016 [P] [US1] Unit tests in
+- [x] T016 [P] [US1] Unit tests in
       `collection-agent/tests/unit/test_scan_vision.py` with the
       `StubLLM` shape: happy extraction, invalid JSON → retry →
       error, empty evidence, image encoded as data URL, model name
       taken from settings (no literal).
-- [ ] T017 [US1] Implement the candidate pipeline in
+- [x] T017 [US1] Implement the candidate pipeline in
       `collection-agent/src/collection_agent/scan/search.py`:
       precision ladder per FR-004 (barcode → catno+label →
       artist+title; next rung only when prior absent/zero), free-text
@@ -164,13 +164,13 @@ the page state returns to camera-ready (spec US1 acceptance 1–5).
       `Candidate` (absent keys stay None/[] — FR-005/006), duplicate
       overlay left as an injectable hook defaulting to
       `unknown("duplicate check pending")` until US2.
-- [ ] T018 [P] [US1] Unit tests in
+- [x] T018 [P] [US1] Unit tests in
       `collection-agent/tests/unit/test_scan_search.py`: ladder order
       + fallback-on-zero, no lower rung when higher rung hits, dedup,
       cap + `more_matches`, and the 019-style verbatim audit — every
       candidate field byte-equal to the fake payload, absent fields
       absent, zero constructed URLs.
-- [ ] T019 [US1] Implement the FastAPI app factory + routes in
+- [x] T019 [US1] Implement the FastAPI app factory + routes in
       `collection-agent/src/collection_agent/scan/server.py` per
       contracts/scan-api.md: `create_app(settings, llm_client,
       discogs_client, store, session, journal)`; `GET /` (static
@@ -184,7 +184,7 @@ the page state returns to camera-ready (spec US1 acceptance 1–5).
       update; duplicate gate lands in US2), `POST /api/skip`
       (idempotent per scan_id; `skipped`/`no_match` journaling),
       typed error bodies `{"error":{code,message}}` throughout.
-- [ ] T020 [US1] Author the self-contained phone page at
+- [x] T020 [US1] Author the self-contained phone page at
       `collection-agent/src/collection_agent/scan/static/index.html`:
       vanilla HTML/CSS/JS, no external resources except the API and
       verbatim `thumb_url` images; `<input type="file"
@@ -192,7 +192,7 @@ the page state returns to camera-ready (spec US1 acceptance 1–5).
       camera-ready → identifying → choosing → confirm → added →
       camera-ready (FR-014: one step back to camera); candidate cards
       render exactly the API fields; honest no-match + error states.
-- [ ] T021 [US1] Add the `scan` subcommand to
+- [x] T021 [US1] Add the `scan` subcommand to
       `collection-agent/src/collection_agent/cli.py`: subparser with
       `--host/--port` overriding settings; `_cmd_scan(settings)` —
       guard `openai_api_key is None → EXIT_CONFIG` (mirror
@@ -201,7 +201,7 @@ the page state returns to camera-ready (spec US1 acceptance 1–5).
       `scan_target_folder_id` live against `client.get_folders()` at
       startup (fail fast, research R9), print LAN URL banner
       (stdlib best-effort local IP), run uvicorn.
-- [ ] T022 [US1] Integration tests (part 1) in
+- [x] T022 [US1] Integration tests (part 1) in
       `collection-agent/tests/integration/test_scan_server.py` via
       `TestClient` + stub vision + `FakeDiscogsClient`: happy path
       photo→candidates→add (exactly one recorded add, correct
