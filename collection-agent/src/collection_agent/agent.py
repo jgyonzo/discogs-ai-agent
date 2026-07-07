@@ -29,6 +29,18 @@ from collection_agent.registry import AttributeRegistry, render_attribute_block
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "system.md"
 MAX_TOOL_ROUNDS = 8
 
+# 020 replay finding 7: rule 4 (mirror the user's language) kept losing to
+# the Spanish-heavy attribute aliases when it lived only in the standing
+# prompt. The 018 lesson — instructions bind at the decision point — so this
+# rides as the LAST message of every LLM request (after tool results, right
+# before the answer is written) and is never persisted to the session.
+LANGUAGE_REMINDER = (
+    "Reminder: answer in the language of the user's most recent message — "
+    "an English message gets an English answer, a Spanish message a Spanish "
+    "answer. The Spanish attribute aliases in your instructions are NOT the "
+    "user's language."
+)
+
 
 @dataclass
 class AgentSession:
@@ -111,7 +123,11 @@ class Agent:
         for _ in range(MAX_TOOL_ROUNDS):
             response = self.llm.chat.completions.create(
                 model=self.model,
-                messages=self.session.messages,
+                # transient decision-point reminder — sent, never stored
+                messages=[
+                    *self.session.messages,
+                    {"role": "system", "content": LANGUAGE_REMINDER},
+                ],
                 tools=tool_schemas or None,
             )
             msg = response.choices[0].message

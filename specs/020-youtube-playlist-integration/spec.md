@@ -64,6 +64,20 @@ titles display-capped at 70 chars (configurable) with an ellipsis.
 Contract delta 11. The bare-URL fix from finding 6's same replay
 confirmed working.
 
+**Replay addendum 4 (2026-07-06, fourth replay)**:
+*Finding 7 — language flip recurred despite the finding-3 rule
+tightening*: an English question again got a Spanish answer while
+every payload-level fix held (lean columns, bare URLs, truncation).
+Confirmed diagnosis: a standing-prompt rule cannot outweigh the ~30
+Spanish attribute aliases the registry renders into the same prompt —
+finding 3's fix was prompt steering applied to a prompt-steering
+failure. Fix (018 decision-point precedent): the language-mirroring
+instruction now rides as a transient system message appended as the
+LAST message of every LLM request — after tool results, immediately
+before the answer is written — and is never persisted to the session
+transcript. Residual risk accepted: `gpt-4o-mini` remains stochastic;
+the escalation path if drift persists is `COLLECTION_AGENT_MODEL=gpt-4o`.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get a playable playlist link from records in the conversation (Priority: P1)
