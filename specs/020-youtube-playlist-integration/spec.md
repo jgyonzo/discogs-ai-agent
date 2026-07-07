@@ -76,7 +76,10 @@ instruction now rides as a transient system message appended as the
 LAST message of every LLM request — after tool results, immediately
 before the answer is written — and is never persisted to the session
 transcript. Residual risk accepted: `gpt-4o-mini` remains stochastic;
-the escalation path if drift persists is `COLLECTION_AGENT_MODEL=gpt-4o`.
+the escalation path if drift persists is a stronger model via
+`COLLECTION_AGENT_MODEL` (owner note: a newer mini-tier model such as
+`gpt-5.4-mini` undercuts `gpt-4o` on price — prefer it; the model id is
+pure VII(a) configuration, no code change).
 
 ## User Scenarios & Testing *(mandatory)*
 
