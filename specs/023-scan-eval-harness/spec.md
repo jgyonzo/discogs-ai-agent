@@ -229,7 +229,10 @@ session/cycle; disable the flag and verify behavior is byte-identical to today
   evaluated, identification rate (true release anywhere in candidates), top-1 rate,
   per-rung hit attribution, no-evidence count, error count, unlabeled count (for
   the retention source), source dataset, and the number of billable vision calls
-  made. Category counts MUST sum to images evaluated.
+  made. Category counts (hits, misses, no-evidence, errors, unlabeled) MUST sum
+  to the total number of images seen; errors are excluded from the
+  identification-rate denominator but always reported beside it (the exact
+  invariants are normative in `contracts/eval-results.md` §3).
 - **FR-015**: A single image's vision/search failure MUST be recorded as an errored
   result and MUST NOT abort the run.
 - **FR-016**: The harness MUST be strictly read-only against Discogs: it MUST have
