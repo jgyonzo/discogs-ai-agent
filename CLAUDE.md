@@ -2,31 +2,45 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**Feature in flight: 021-langsmith-tracing** (branch
-`021-langsmith-tracing`, planned 2026-07-07, not yet implemented) —
-LangSmith tracing for the collection-agent via the `langsmith` SDK's
-plain-OpenAI integration, explicitly NOT a LangChain migration (017
-research R2's plain-SDK loop stays the architecture of record). One
-trace tree per user turn (`run_turn` chain root; client-level `llm`
-runs carrying the as-sent payload incl. the transient
-`LANGUAGE_REMINDER`, plus provider token usage; per-`_dispatch` tool
-spans incl. all four error-dict shapes). `wrap_openai` only at
-`cli.py::_build_agent` (017's injectable seam — stubs never wrapped);
-config via new `Settings` fields reusing the repo `.env`'s existing
+**No feature is currently in flight.** Most recently merged:
+**021-langsmith-tracing** (PR #11, merged to main 2026-07-07) —
+LangSmith observability for the collection-agent via the `langsmith`
+SDK's plain-OpenAI integration, explicitly NOT a LangChain migration
+(017 research R2's plain-SDK loop stays the architecture of record).
+One trace tree per user turn in the dedicated LangSmith project
+`discogs-collection-agent`: `run_turn` chain root (`@traceable` in
+`agent.py`); client-level `llm` runs carrying the **as-sent** payload
+— incl. the transient `LANGUAGE_REMINDER` (wire truth, never the
+persisted session) — plus provider token usage; one tool span per
+`_dispatch` (now a traced shell over `_dispatch_impl`) recording the
+exact returned payload incl. all four error-dict shapes.
+`wrap_openai` happens ONLY at `cli.py::_build_llm_client` (017's
+injectable seam — test stubs are never wrapped). Config: four
+`Settings` fields reusing the repo `.env`'s existing
 `LANGSMITH_TRACING`/`LANGSMITH_API_KEY`/`LANGSMITH_ENDPOINT` names +
 dedicated `COLLECTION_AGENT_LANGSMITH_PROJECT` (default
-`discogs-collection-agent`; never inherits `agent/`'s
-`LANGSMITH_PROJECT`), bridged settings→`os.environ` at one site
-(VII(a)); strict no-op when unconfigured (unwrapped client, autouse
-`LANGSMITH_*` env-scrub in conftest, existing 213 tests unmodified &
-offline). Single new dependency `langsmith>=0.3`. Artifacts:
-`specs/021-langsmith-tracing/` — plan.md (read this first),
-spec.md, research.md R1–R6, data-model.md, quickstart.md,
-contracts/tracing.md (a NEW contract; 017's agent-tools contract and
-its 018/019/020 deltas are untouched). Tasks not yet generated
-(`/speckit-tasks` is next).
+`discogs-collection-agent`; deliberately never inherits `agent/`'s
+`LANGSMITH_PROJECT` — separate projects, same org), bridged
+settings→`os.environ` at that one site (VII(a); the SDK incl. the
+`@traceable` gate reads only `os.environ` — same mismatch+fix as the
+OpenAI-key pass-through). Strict no-op when unconfigured: plain
+unwrapped client, zero LangSmith traffic; flag-without-key ⇒ one dim
+notice + untraced chat, never `EXIT_CONFIG`; autouse `LANGSMITH_*`
+env-scrub in conftest keeps the suite offline regardless of the
+shell; secrets-hygiene static audit now sanctions 3
+`get_secret_value` sites (the env bridge is the third). Single new
+dependency `langsmith>=0.3` (resolved 0.9.8). 223 tests
+(`cd collection-agent && pytest`), no live API calls; live
+SC-001..006 owner-validated same day (note in quickstart.md).
+Artifacts: `specs/021-langsmith-tracing/` (spec, plan, research
+R1–R6, data-model, quickstart + live-validation note, tasks
+T001–T018 all complete, `contracts/tracing.md` — a NEW contract;
+017's agent-tools contract and its 018/019/020 amendment deltas are
+untouched). Workflow note: single-PR flow — feature + post-merge
+CLAUDE.md state land in ONE PR (owner decision 2026-07-07, replaces
+the previous two-PR convention).
 
-Most recently merged:
+Prior feature:
 **020-youtube-playlist-integration** (PR #9, merged to main
 2026-07-06) — closes the deferred "v2 YouTube playlists" scope with a
 **read-only** capability, re-scoped mid-flight (2026-07-06, owner
@@ -161,7 +175,8 @@ Phase-1 artifacts: `specs/017-discogs-collection-agent/` (`spec.md`,
 `docs/discogs_api_reference.md`. v2 (YouTube playlists/search) is
 explicitly out of scope. Component runbook:
 `collection-agent/README.md`; ~106 tests at merge — 146 after 019,
-213 after 020 (`cd collection-agent && pytest`), no live API calls.
+213 after 020, 223 after 021 (`cd collection-agent && pytest`), no
+live API calls.
 
 Prior feature: **016-frontend-plot-layout** — frontend polish: widened
 result/chart column in `frontend/src/App.tsx`, horizontal legend line
