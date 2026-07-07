@@ -63,6 +63,26 @@ class Settings(BaseSettings):
     )
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
 
+    # --- LangSmith tracing (021) ---
+    # All optional: absent env ⇒ tracing is a strict no-op (contract
+    # specs/021-langsmith-tracing/contracts/tracing.md §1). The flag/key/
+    # endpoint reuse the repo-standard LANGSMITH_* names already in the
+    # repo-root .env; the project name is deliberately a DEDICATED var —
+    # LANGSMITH_PROJECT in .env belongs to the agent/ component, and
+    # inheriting it would interleave both components' traces in one
+    # LangSmith project (research R2).
+    langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")
+    langsmith_api_key: SecretStr | None = Field(
+        default=None, alias="LANGSMITH_API_KEY"
+    )
+    langsmith_endpoint: str | None = Field(
+        default=None, alias="LANGSMITH_ENDPOINT"
+    )
+    langsmith_project: str = Field(
+        default="discogs-collection-agent",
+        alias="COLLECTION_AGENT_LANGSMITH_PROJECT",
+    )
+
     # --- Snapshot ---
     snapshot_path: Path = Field(
         default=_COMPONENT_ROOT / "data" / "snapshot.json", alias="SNAPSHOT_PATH"
