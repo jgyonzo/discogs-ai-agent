@@ -95,8 +95,11 @@ matching pressings are shown with cover, year, country, format, catno,
 and an "already in your collection — N copies" marker. On the
 catalog-number search, pressings whose catno exactly matches what was
 read are listed first (024 — Discogs' substring search otherwise buries
-short catnos like `SUB 15` under `SUB 150/151/…`). **Nothing is
-written until you tap a candidate and confirm** (duplicates ask twice;
+short catnos like `SUB 15` under `SUB 150/151/…`), and a "barcode" the
+vision model read with fewer than 8 digits is discarded before searching
+(025 — real UPC/EAN codes are 8–13 digits; a 4-digit misread once
+hijacked the barcode search and hid a correct catalog-number match).
+**Nothing is written until you tap a candidate and confirm** (duplicates ask twice;
 enforced server-side). Adds go to the configured folder; the snapshot
 is marked stale so the chat agent re-syncs before trusting counts.
 Every outcome lands in an append-only session journal
@@ -140,13 +143,28 @@ via the session journal automatically — then `eval-run --source retained`
 scores them (photos from unconfirmed cycles are counted as unlabeled, not
 billed). Retention is off by default and never affects the scan flow.
 
+`eval-run --replay <run_id>` (025) re-runs **only the search ladder** over
+the evidence values recorded in a prior run's `results.jsonl` — no images
+read, zero vision calls, no OpenAI key needed. Because the evidence inputs
+are byte-identical between replays, per-image outcome differences are
+attributable to search/normalization changes, not vision nondeterminism
+(a measured ±10 images per 94 between camera runs) — this is the A/B
+instrument for ladder changes. What it holds constant: extracted evidence,
+truth labels, the record set (records without recorded evidence are
+carried through unchanged, keeping rates directly comparable). What still
+runs live: current evidence normalization (deliberately — so fixes like
+the barcode gate are measurable) and Discogs search reads under the usual
+rate governor. The output is a standard run whose summary names the
+source run (`replay_of`); replays are themselves replayable.
+
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
 (missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
 
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
 record scan: `specs/022-phone-record-scan/quickstart.md`;
-eval: `specs/023-scan-eval-harness/quickstart.md`) ·
+eval: `specs/023-scan-eval-harness/quickstart.md`;
+replay: `specs/025-eval-replay-barcode-gate/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·
 Tests: `pytest` (no live API calls).
 

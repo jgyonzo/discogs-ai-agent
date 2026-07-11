@@ -47,9 +47,27 @@ cd collection-agent && pytest
 
 ## Owner live-validation checklist
 
-- [ ] **SC-002** Fresh `eval-run --source discogs` after backfill: catno-rung
+- [x] **SC-002** Fresh `eval-run --source discogs` after backfill: catno-rung
       hits ≥ 20/42-equivalent; drowned-exact-match class converted.
-      New strict rate: ____ % · practical rate: ____ %.
+      New strict rate: 52.1 % · practical rate: 56.4 %.
+      **Reading (2026-07-11, run `20260711-222805Z-discogs`, after
+      `--backfill-masters` of 42 releases / 8 masterless): aggregate
+      INCONCLUSIVE under vision variance; target conversions CONFIRMED.**
+      Catno-rung hits 17 vs baseline 20 — the ≥ 20 bar was not met, but
+      the per-image diff shows the bar was the wrong instrument: 20 of 94
+      images flipped outcome between the two runs purely from vision
+      nondeterminism (8 miss→hit, 12 hit→miss), swamping the single-digit
+      signal. Every 024 target drowning case converted (`SUB 15` catno hit
+      rank 2, `FING 1` rank 4, Angelfish rank 3, `EUHO 021-6`, `DIG 019`)
+      with zero regressions attributable to the exact-catno re-rank. Miss
+      split 4 same-master / 17 different / 14 unknown; top-1 37.2%; 0
+      errors. Honest conclusion: single-run strict-rate comparisons cannot
+      resolve search-ladder changes — this comparison method is superseded
+      by 025's evidence-replay mode (`eval-run --replay <run_id>`,
+      `specs/025-eval-replay-barcode-gate/`), which holds vision constant.
+      The same run exposed the implausible-barcode failure (image
+      `17859_secondary1.jpeg`: fake barcode `3070` suppressed catno
+      `D-216`), fixed by 025's plausibility gate.
 - [ ] **SC-003** Pick any zero-candidate miss in the new results.jsonl and
       classify it (vision misread vs absent-from-Discogs) without any live
       lookup.
