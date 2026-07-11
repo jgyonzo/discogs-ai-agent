@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 
-from collection_agent.eval.harness import run_eval
+from collection_agent.discogs.client import DiscogsServerError
+from collection_agent.eval.harness import run_eval, run_replay
 from collection_agent.eval.scoring import EvalSummary
 from collection_agent.scan.vision import VisionExtractionError  # noqa: F401 (doc)
 
 from tests.fixtures import discogs_payloads as payloads
 from tests.fixtures.fake_client import FakeDiscogsClient
+from tests.unit.test_eval_replay import RUN_ID, source_record, write_run
 from tests.unit.test_eval_sources import (
     SESSION,
     add_photo,
@@ -274,3 +276,265 @@ class TestPracticalRateEndToEnd:
         assert read_results(run_dir)[0]["miss_master_relation"] == "unknown"
         assert summary.misses_master_unknown == 1
         assert summary.practical_rate == summary.identification_rate == 0.0
+
+
+class TestReplayRun:
+    """025 US1 (T007): end-to-end `run_replay` over a fixture source run —
+    zero vision calls, production ladder unmodified, provenance +
+    invariants 11–14 (contracts/amendment-023-eval-results-2.md)."""
+
+    RUN = "20260711-222805Z-retained"
+
+    def seed_source_run(self, settings) -> None:
+        """A retained-source run exercising every partition branch:
+        replayable hit / flippable miss / replayable discogs_error, plus
+        no_evidence / vision_error / unlabeled carry-throughs."""
+        write_run(settings, [
+            source_record(image="hit.jpg", source="retained",
+                          truth_release_id=101, outcome="hit", rank=1,
+                          candidate_ids=[101], rungs_tried=["barcode"],
+                          evidence={"barcode": "720642442524"}),
+            source_record(image="flip.jpg", source="retained",
+                          truth_release_id=102, outcome="miss",
+                          candidate_ids=[999],
+                          evidence={"catno": "SUB 15"}),
+            source_record(image="err.jpg", source="retained",
+                          truth_release_id=103, outcome="error",
+                          error_kind="discogs_error", candidate_ids=None,
+                          rungs_tried=None,
+                          evidence={"artist": "A", "title": "T"}),
+            source_record(image="ne.jpg", source="retained",
+                          truth_release_id=104, outcome="no_evidence",
+                          evidence=None, candidate_ids=None,
+                          rungs_tried=None, evidence_kinds=None),
+            source_record(image="ve.jpg", source="retained",
+                          truth_release_id=105, outcome="error",
+                          error_kind="vision_error", evidence=None,
+                          candidate_ids=None, rungs_tried=None,
+                          evidence_kinds=None),
+            source_record(image="ul.jpg", source="retained",
+                          truth_release_id=None, outcome="unlabeled",
+                          evidence=None, vision_calls=0, candidate_ids=None,
+                          rungs_tried=None, evidence_kinds=None),
+        ], run_id=self.RUN)
+
+    def scripted_client(self) -> FakeDiscogsClient:
+        discogs = FakeDiscogsClient(instances=[], details={})
+        discogs.search_responses.update({
+            "barcode": payloads.search_page([payloads.search_result(101)]),
+            "catno": payloads.search_page([payloads.search_result(102)]),
+            "artist_title": payloads.search_page(
+                [payloads.search_result(103), payloads.search_result(202)]
+            ),
+        })
+        return discogs
+
+    def test_replay_end_to_end(self, settings):
+        self.seed_source_run(settings)
+        before = (settings.eval_results_dir / self.RUN
+                  / "results.jsonl").read_bytes()
+
+        run_dir, summary = run_replay(
+            self.scripted_client(), settings, replay_of=self.RUN
+        )
+
+        # (a) standard run dir, -replay id
+        assert run_dir.name.endswith("-replay")
+        assert (run_dir / "summary.json").exists()
+        # (b) provenance + invariant 11/12
+        assert summary.replay_of == self.RUN
+        assert summary.source == "retained"
+        assert summary.vision_calls == 0
+        assert summary.dataset_snapshot_completeness is None
+        records = read_results(run_dir)
+        assert all(r.get("vision_calls", 0) == 0 for r in records)
+        assert all("replayed" in r for r in records)
+        # (c) denominator parity — one record per source record, same names
+        assert summary.images_total == 6 and summary.limited is False
+        assert {r["image"] for r in records} == {
+            "hit.jpg", "flip.jpg", "err.jpg", "ne.jpg", "ve.jpg", "ul.jpg",
+        }
+        by_image = {r["image"]: r for r in records}
+        # (d/e) replayed records scored fresh — incl. the original
+        # discogs_error and the miss that flips under the rescripted search
+        assert by_image["hit.jpg"]["outcome"] == "hit"
+        assert by_image["flip.jpg"]["outcome"] == "hit"  # miss → hit
+        assert by_image["err.jpg"]["outcome"] == "hit"   # error → hit
+        assert all(by_image[i]["replayed"] is True
+                   for i in ("hit.jpg", "flip.jpg", "err.jpg"))
+        # carry-throughs preserve category (invariant 14)
+        assert by_image["ne.jpg"] == {
+            "image": "ne.jpg", "source": "retained", "truth_release_id": 104,
+            "outcome": "no_evidence", "rungs_tried": [],
+            "evidence_kinds": [], "candidate_ids": [],
+            "replayed": False, "vision_calls": 0, "elapsed_s": 0.0,
+        }
+        assert by_image["ve.jpg"]["outcome"] == "error"
+        assert by_image["ve.jpg"]["error_kind"] == "vision_error"
+        assert by_image["ve.jpg"]["replayed"] is False
+        assert by_image["ul.jpg"]["outcome"] == "unlabeled"
+        assert summary.hits == 3 and summary.errors == 1
+        assert summary.unlabeled == 1 and summary.no_evidence == 1
+        # (i) the source run is read-only input
+        after = (settings.eval_results_dir / self.RUN
+                 / "results.jsonl").read_bytes()
+        assert before == after
+
+    def test_two_replays_are_identical(self, settings, monkeypatch):
+        # SC-001: evidence inputs byte-identical ⇒ outcomes identical
+        self.seed_source_run(settings)
+        ids = iter(["20260711-999901Z-replay", "20260711-999902Z-replay"])
+        monkeypatch.setattr(
+            "collection_agent.eval.harness._run_id", lambda source: next(ids)
+        )
+        outcomes = []
+        for _ in range(2):
+            run_dir, _ = run_replay(
+                self.scripted_client(), settings, replay_of=self.RUN
+            )
+            outcomes.append(
+                [(r["image"], r["outcome"], r.get("rung"))
+                 for r in read_results(run_dir)]
+            )
+        assert outcomes[0] == outcomes[1]
+
+    def test_replay_of_a_replay_is_legal(self, settings):
+        # amendment delta 2: replay records carry evidence, so a replay is
+        # itself replayable and yields the same outcomes
+        self.seed_source_run(settings)
+        first_dir, first = run_replay(
+            self.scripted_client(), settings, replay_of=self.RUN
+        )
+        second_dir, second = run_replay(
+            self.scripted_client(), settings, replay_of=first_dir.name
+        )
+        assert second.replay_of == first_dir.name
+        assert second.hits == first.hits == 3
+        # non-replayable carry-throughs stay carried (ve.jpg has no
+        # evidence in the replay output either)
+        by_image = {r["image"]: r for r in read_results(second_dir)}
+        assert by_image["ve.jpg"]["replayed"] is False
+
+    def test_fresh_search_failure_is_this_replays_error(self, settings):
+        self.seed_source_run(settings)
+
+        class FailingClient(FakeDiscogsClient):
+            def search_releases(self, params):
+                raise DiscogsServerError("Discogs 5xx after retries")
+
+        run_dir, summary = run_replay(
+            FailingClient(instances=[], details={}), settings,
+            replay_of=self.RUN,
+        )
+        by_image = {r["image"]: r for r in read_results(run_dir)}
+        assert by_image["hit.jpg"]["outcome"] == "error"
+        assert by_image["hit.jpg"]["error_kind"] == "discogs_error"
+        assert by_image["hit.jpg"]["replayed"] is True
+        assert summary.errors_by_kind["discogs_error"] == 3
+        assert summary.errors == 4  # + the carried vision_error
+
+    def test_limit_truncates_and_flags(self, settings):
+        self.seed_source_run(settings)
+        run_dir, summary = run_replay(
+            self.scripted_client(), settings, replay_of=self.RUN, limit=2,
+        )
+        assert summary.limited is True and summary.images_total == 2
+        assert len(read_results(run_dir)) == 2
+
+    def test_gate_applies_through_rematerialization(self, settings):
+        # US1×US2 interlock: recorded implausible barcode is cleared by the
+        # CURRENT normalization; the catno rung fires instead (SC-002 shape)
+        write_run(settings, [
+            source_record(image="cybotron.jpg", truth_release_id=17859,
+                          outcome="miss", candidate_ids=[999],
+                          rungs_tried=["barcode"],
+                          evidence={"artist": "Cybotron", "catno": "D-216",
+                                    "barcode": "3070"}),
+            source_record(image="gate-only.jpg", truth_release_id=1,
+                          outcome="miss", candidate_ids=[],
+                          rungs_tried=["barcode"],
+                          evidence={"barcode": "3070"}),
+        ], run_id="20260711-222805Z-discogs")
+        discogs = FakeDiscogsClient(instances=[], details={})
+        discogs.search_responses["catno"] = payloads.search_page(
+            [payloads.search_result(17859)]
+        )
+        run_dir, summary = run_replay(
+            discogs, settings, replay_of="20260711-222805Z-discogs"
+        )
+        by_image = {r["image"]: r for r in read_results(run_dir)}
+        cyb = by_image["cybotron.jpg"]
+        assert cyb["outcome"] == "hit" and cyb["rung"] == "catno"
+        assert cyb["evidence"] == {"artist": "Cybotron", "catno": "D-216"}
+        assert all("barcode" not in p for p in discogs.searches)
+        # evidence emptied by the gate ⇒ honest no_evidence, still replayed
+        gate_only = by_image["gate-only.jpg"]
+        assert gate_only["outcome"] == "no_evidence"
+        assert gate_only["replayed"] is True
+
+    def test_miss_master_relation_recomputed_from_manifest(self, settings):
+        write_manifest(settings.eval_dataset_dir, [
+            header(), release_line(101, ["101_secondary1.jpg"],
+                                   master_id=5309),
+        ])
+        write_run(settings, [
+            source_record(image="101_secondary1.jpg", truth_release_id=101,
+                          outcome="miss", candidate_ids=[],
+                          evidence={"catno": "SUB 15"}),
+        ], run_id="20260711-222805Z-discogs")
+        discogs = FakeDiscogsClient(instances=[], details={})
+        discogs.search_responses["catno"] = payloads.search_page(
+            [payloads.search_result(999, master_id=5309)]
+        )
+        run_dir, summary = run_replay(
+            discogs, settings, replay_of="20260711-222805Z-discogs"
+        )
+        rec = read_results(run_dir)[0]
+        assert rec["outcome"] == "miss"
+        assert rec["miss_master_relation"] == "same_master"
+        assert summary.misses_same_master == 1
+
+
+class TestReplayCli:
+    """025 T011: arg exclusion, key-free replay, config errors."""
+
+    def _patch(self, settings, monkeypatch, client=None):
+        from collection_agent import cli
+
+        monkeypatch.setattr(cli, "load_settings", lambda: settings)
+        monkeypatch.setattr(
+            "collection_agent.discogs.client.DiscogsClient",
+            lambda *a, **k: client or FakeDiscogsClient(
+                instances=[], details={}
+            ),
+        )
+        return cli
+
+    def test_replay_and_source_together_exit_config(self, settings, monkeypatch):
+        cli = self._patch(settings, monkeypatch)
+        assert cli.main(
+            ["eval-run", "--replay", "x", "--source", "discogs"]
+        ) == cli.EXIT_CONFIG
+
+    def test_replay_needs_no_openai_key(self, settings, monkeypatch):
+        # settings fixture carries no OPENAI_API_KEY: camera mode refuses,
+        # replay runs (FR-001 — vision-free by construction)
+        write_run(settings, [source_record()])
+        client = FakeDiscogsClient(instances=[], details={})
+        cli = self._patch(settings, monkeypatch, client=client)
+        assert settings.openai_api_key is None
+        assert cli.main(["eval-run"]) == cli.EXIT_CONFIG  # camera path
+        assert cli.main(["eval-run", "--replay", RUN_ID]) == cli.EXIT_OK
+
+    def test_unknown_run_id_exits_config(self, settings, monkeypatch):
+        cli = self._patch(settings, monkeypatch)
+        assert cli.main(
+            ["eval-run", "--replay", "20990101-000000Z-discogs"]
+        ) == cli.EXIT_CONFIG
+        # fail-fast means no replay run dir was created
+        created = [p for p in settings.eval_results_dir.iterdir()
+                   if p.name.endswith("-replay")] \
+            if settings.eval_results_dir.exists() else []
+        assert created == []
+
+

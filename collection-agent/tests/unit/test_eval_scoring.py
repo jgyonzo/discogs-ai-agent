@@ -210,3 +210,43 @@ class TestPracticalRateInvariants:
             old.pop(key)
         from collection_agent.eval.scoring import EvalSummary
         assert EvalSummary.model_validate(old).practical_rate is None
+
+
+class TestReplayFields:
+    """025 T003 (amendment-023-eval-results-2 §3–4): the additive replay
+    fields never appear on camera runs (invariant 12) and old-format files
+    keep validating."""
+
+    def test_camera_run_serialization_is_unchanged(self):
+        # exclude_none omits replayed/replay_of — a camera record/summary
+        # is byte-identical to pre-025 output
+        r = result(outcome="hit", rank=1, rung="barcode")
+        assert "replayed" not in r.model_dump_json(exclude_none=True)
+        s = summarize([r], "run", "discogs", limited=False)
+        assert "replay_of" not in s.model_dump_json(exclude_none=True)
+        assert s.replay_of is None
+
+    def test_summarize_passes_replay_of_through(self):
+        s = summarize(
+            [result(outcome="hit", rank=1, rung="catno", replayed=True,
+                    vision_calls=0)],
+            "20260711-999999Z-replay", "discogs", limited=False,
+            replay_of="20260711-222805Z-discogs",
+        )
+        assert s.replay_of == "20260711-222805Z-discogs"
+        assert s.vision_calls == 0  # invariant 11 (summary half)
+
+    def test_024_format_files_still_validate(self):
+        # a 024-shape record (no replayed key) and summary (no replay_of)
+        old_record = {
+            "image": "x.jpg", "source": "discogs", "truth_release_id": 1,
+            "outcome": "miss", "rungs_tried": ["catno"],
+            "evidence": {"catno": "SUB 15"}, "vision_calls": 1,
+            "elapsed_s": 1.0,
+        }
+        assert EvalResult.model_validate(old_record).replayed is None
+        s = summarize([result(outcome="miss")], "run", "discogs", limited=False)
+        old_summary = s.model_dump()
+        old_summary.pop("replay_of")
+        from collection_agent.eval.scoring import EvalSummary
+        assert EvalSummary.model_validate(old_summary).replay_of is None

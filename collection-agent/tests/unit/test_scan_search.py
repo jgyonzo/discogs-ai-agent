@@ -52,9 +52,26 @@ class TestLadder:
         assert tried == ["barcode", "catno", "artist_title"]
 
     def test_lower_rung_never_runs_when_evidence_absent(self, settings):
+        # 025: fixture barcode must be plausible (8+ digits) to occupy a rung
         client = FakeDiscogsClient()
-        find_candidates(client, settings, ScanEvidence(barcode="12345"))
+        find_candidates(client, settings, ScanEvidence(barcode="72064244"))
         assert [list(p.keys())[0] for p in client.searches] == ["barcode"]
+
+    def test_implausible_barcode_never_reaches_the_wire(self, settings):
+        """025 T014 (FR-009/012): Cybotron-shaped evidence — the gated
+        barcode sends no barcode= search; the catno rung fires first and
+        rungs_tried reflects post-gate reality (no ghost rung)."""
+        client = FakeDiscogsClient()
+        client.search_responses["catno"] = payloads.search_page(
+            [payloads.search_result(17859)]
+        )
+        evidence = ScanEvidence(
+            artist="Cybotron", label="Fantasy", catno="D-216", barcode="3070"
+        )
+        candidates, _more, tried = find_candidates(client, settings, evidence)
+        assert [c.release_id for c in candidates] == [17859]
+        assert tried == ["catno"]
+        assert all("barcode" not in p for p in client.searches)
 
     def test_all_rungs_empty_returns_no_candidates(self, settings):
         candidates, more, tried = find_candidates(

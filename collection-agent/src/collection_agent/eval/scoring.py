@@ -56,6 +56,10 @@ class EvalResult(BaseModel):
     # present iff a vision call produced non-empty evidence, so a
     # zero-candidate miss is diagnosable from the results file alone
     evidence: dict | None = None
+    # 025 (amendment-023-eval-results-2 §3): present on EVERY record of a
+    # replay run (True = ladder re-ran over recorded evidence, False =
+    # carried through); absent on camera runs — invariant 12
+    replayed: bool | None = None
     vision_calls: int = 0
     elapsed_s: float = 0.0
 
@@ -85,6 +89,9 @@ class EvalSummary(BaseModel):
     vision_calls: int
     limited: bool
     dataset_snapshot_completeness: str | None = None
+    # 025 (amendment-023-eval-results-2 §4): source run id, present iff the
+    # run is a replay. Default keeps 023/024-format summaries readable.
+    replay_of: str | None = None
 
 
 def classify_miss_master(
@@ -132,6 +139,7 @@ def summarize(
     source: SourceName,
     limited: bool,
     dataset_snapshot_completeness: str | None = None,
+    replay_of: str | None = None,
 ) -> EvalSummary:
     counts = {o: 0 for o in ("hit", "miss", "no_evidence", "error", "unlabeled")}
     hits_by_rung: dict[str, int] = {}
@@ -179,4 +187,5 @@ def summarize(
         vision_calls=vision_calls,
         limited=limited,
         dataset_snapshot_completeness=dataset_snapshot_completeness,
+        replay_of=replay_of,
     )

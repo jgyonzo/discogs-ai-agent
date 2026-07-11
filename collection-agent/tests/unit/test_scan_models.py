@@ -46,8 +46,9 @@ class TestScanEvidenceEmptiness:
 
 class TestEvidenceKinds:
     def test_ladder_order_barcode_first(self):
+        # 025: fixture barcode must be plausible (8+ digits) to occupy a rung
         ev = ScanEvidence(
-            barcode="123456", catno="SL-1", artist="A", title="T"
+            barcode="72064244", catno="SL-1", artist="A", title="T"
         )
         assert ev.evidence_kinds == ["barcode", "catno", "artist_title"]
 
@@ -162,6 +163,57 @@ class TestTracksEvidence:
         assert dumped == {
             "artist": "A", "barcode": "720642442524", "tracks": ["The Key"],
         }
+
+
+class TestBarcodePlausibilityGate:
+    """025 FR-009/011/012 (amendment-022-scan-api-2): a sub-8-digit digit
+    run is not a barcode — cleared, never moved to catno. Motivating live
+    case: run 20260711-222805Z, image 17859_secondary1.jpeg (Cybotron) —
+    vision emitted barcode "3070", which hijacked the barcode rung and
+    suppressed the correctly-extracted catno "D-216"."""
+
+    def test_live_cybotron_case_cleared_catno_survives(self):
+        ev = ScanEvidence(artist="Cybotron", catno="D-216", barcode="3070")
+        assert ev.barcode is None
+        assert ev.catno == "D-216"  # never overwritten, never dropped
+        assert ev.evidence_kinds[0] == "catno"  # ladder starts at catno now
+
+    def test_seven_digits_cleared(self):
+        assert ScanEvidence(barcode="1234567").barcode is None
+
+    def test_exactly_eight_digits_kept(self):
+        # UPC-E / EAN-8 are real — the boundary is plausible
+        assert ScanEvidence(barcode="40123455").barcode == "40123455"
+
+    def test_thirteen_digits_kept(self):
+        assert ScanEvidence(barcode="5011166123457").barcode == "5011166123457"
+
+    def test_separators_stripped_before_the_count(self):
+        # digits-only normalization runs first: "3 0-70" is 4 digits
+        assert ScanEvidence(barcode="3 0-70").barcode is None
+
+    def test_cleared_value_never_moves_to_catno(self):
+        ev = ScanEvidence(barcode="3070")  # no catno extracted
+        assert ev.barcode is None and ev.catno is None
+
+    def test_gate_only_evidence_is_empty(self):
+        ev = ScanEvidence(barcode="3070")
+        assert ev.is_empty and ev.evidence_kinds == []
+
+    def test_gated_barcode_absent_from_compact_dump(self):
+        # FR-012: no ghost barcode in journal/eval evidence payloads
+        ev = ScanEvidence(artist="Cybotron", catno="D-216", barcode="3070")
+        assert ev.compact_dump() == {"artist": "Cybotron", "catno": "D-216"}
+
+    def test_composes_with_fr019_reclassification(self):
+        # an 11-digit catno still reclassifies to barcode and, being ≥ 10
+        # digits by construction, is never gated
+        ev = ScanEvidence(catno="81824 11306")
+        assert ev.barcode == "8182411306" and ev.catno is None
+
+    def test_plausible_barcodes_byte_identical_to_pre_025(self):
+        ev = ScanEvidence(barcode="5 011166-12345 7", catno="SL-1")
+        assert ev.barcode == "5011166123457" and ev.catno == "SL-1"
 
 
 class TestCandidateMasterId:

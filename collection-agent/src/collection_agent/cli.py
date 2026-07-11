@@ -68,11 +68,19 @@ def main(argv: list[str] | None = None) -> int:
         help="run the scan-identification eval (023; makes billable vision calls)",
     )
     evrun_p.add_argument(
-        "--source", choices=["discogs", "retained"], default="discogs",
+        # default None so an EXPLICIT --source can be told apart from the
+        # resolved default — naming it alongside --replay is a config error
+        # (025 FR-006), never a silent precedence rule
+        "--source", choices=["discogs", "retained"], default=None,
         help="which labeled dataset to evaluate (default: discogs)",
     )
     evrun_p.add_argument(
         "--limit", type=int, default=None, help="evaluate at most N images"
+    )
+    evrun_p.add_argument(
+        "--replay", metavar="RUN_ID", default=None,
+        help="re-run only the search ladder over a prior run's recorded "
+        "evidence (025; zero vision calls, no OpenAI key needed)",
     )
     args = parser.parse_args(argv)
 
@@ -101,7 +109,10 @@ def main(argv: list[str] | None = None) -> int:
                 backfill_masters=args.backfill_masters,
             )
         if command == "eval-run":
-            return _cmd_eval_run(settings, source=args.source, limit=args.limit)
+            return _cmd_eval_run(
+                settings, source=args.source, limit=args.limit,
+                replay=args.replay,
+            )
         return _cmd_chat(settings)
     except KeyboardInterrupt:
         console.print("\n[dim]bye[/dim]")
@@ -458,10 +469,25 @@ def _cmd_eval_dataset(
     return EXIT_OK
 
 
-def _cmd_eval_run(settings: Settings, source: str, limit: int | None) -> int:
-    """Run the identification eval (contracts/eval-results.md). Read-only
-    against Discogs; per-image errors are data, not process failure."""
-    if settings.openai_api_key is None:
+def _cmd_eval_run(
+    settings: Settings,
+    source: str | None,
+    limit: int | None,
+    replay: str | None = None,
+) -> int:
+    """Run the identification eval (contracts/eval-results.md) or a replay
+    (025, amendment-023-eval-results-2). Read-only against Discogs;
+    per-image errors are data, not process failure. Replay makes zero
+    vision calls, so the OpenAI key gate applies to camera mode only."""
+    if replay is not None and source is not None:
+        console.print(
+            "[red]configuration error:[/red] --replay and --source are "
+            "mutually exclusive — a replay's input is the prior run."
+        )
+        return EXIT_CONFIG
+    source = source or "discogs"
+
+    if replay is None and settings.openai_api_key is None:
         console.print(
             "[red]configuration error:[/red] OPENAI_API_KEY is not set "
             "(needed for photo evidence extraction)."
@@ -469,21 +495,30 @@ def _cmd_eval_run(settings: Settings, source: str, limit: int | None) -> int:
         return EXIT_CONFIG
 
     from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
-    from collection_agent.eval.harness import run_eval
+    from collection_agent.eval.harness import run_eval, run_replay
     from collection_agent.eval.sources import SourceError
 
     client = DiscogsClient(
         settings, notify=lambda m: console.print(f"[yellow]{m}[/yellow]")
     )
     try:
-        run_dir, summary = run_eval(
-            llm_client=_build_llm_client(settings),
-            discogs_client=client,
-            settings=settings,
-            source=source,
-            limit=limit,
-            notify=lambda m: console.print(f"[dim]{m}[/dim]"),
-        )
+        if replay is not None:
+            run_dir, summary = run_replay(
+                discogs_client=client,
+                settings=settings,
+                replay_of=replay,
+                limit=limit,
+                notify=lambda m: console.print(f"[dim]{m}[/dim]"),
+            )
+        else:
+            run_dir, summary = run_eval(
+                llm_client=_build_llm_client(settings),
+                discogs_client=client,
+                settings=settings,
+                source=source,
+                limit=limit,
+                notify=lambda m: console.print(f"[dim]{m}[/dim]"),
+            )
     except SourceError as exc:
         console.print(f"[red]{exc}[/red]")
         return EXIT_CONFIG
@@ -505,6 +540,9 @@ def _print_eval_summary(summary) -> None:
     t = Table(title=f"Eval {summary.run_id}")
     t.add_column("metric")
     t.add_column("value")
+    if summary.replay_of:
+        # 025: provenance first — a replay measures the ladder, not vision
+        t.add_row("replay of", summary.replay_of)
     t.add_row("images", str(summary.images_total))
     t.add_row("evaluated", str(summary.evaluated))
     t.add_row("identification rate", pct(summary.identification_rate))
