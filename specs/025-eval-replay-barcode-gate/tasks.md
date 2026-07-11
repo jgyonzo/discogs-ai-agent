@@ -18,7 +18,7 @@ All `collection-agent` paths below are relative to `collection-agent/`
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm clean baseline: `cd collection-agent && uv run pytest`
+- [x] T001 Confirm clean baseline: `cd collection-agent && uv run pytest`
       → 450 passed, no network; note the count for the PR description.
 
 *(No other setup: zero new dependencies, zero new Settings fields, no
@@ -31,13 +31,13 @@ scaffolding — the eval package and test files already exist.)*
 **Purpose**: the additive record/summary fields both replay tasks and the
 summary printing depend on.
 
-- [ ] T002 Add `EvalResult.replayed: bool | None = None` and
+- [x] T002 Add `EvalResult.replayed: bool | None = None` and
       `EvalSummary.replay_of: str | None = None` in
       `src/collection_agent/eval/scoring.py` (docstrings citing
       `amendment-023-eval-results-2.md` deltas 3–4; no logic change to
       `score_search_outcome`/`summarize` beyond passing `replay_of`
       through `summarize(...)` as an optional arg defaulting to None).
-- [ ] T003 Unit tests in `tests/unit/test_eval_scoring.py`: (a) a
+- [x] T003 Unit tests in `tests/unit/test_eval_scoring.py`: (a) a
       camera-run `EvalResult`/`EvalSummary` serializes byte-identically
       to pre-025 (`exclude_none` omits the new fields — invariant 12's
       "never appears in a camera run"); (b) `summarize(...,
@@ -64,25 +64,25 @@ outcomes.
 
 ### Tests for User Story 1 (write first, watch them fail)
 
-- [ ] T004 [P] [US1] Unit tests (new file)
+- [x] T004 [P] [US1] Unit tests (new file)
       `tests/unit/test_eval_replay.py` — source-run reader: parses a
       well-formed results.jsonl; skips blank lines; tolerates a torn
       trailing line (partial JSON) while keeping all complete records;
       ignores unknown fields; `SourceError` on missing run dir, missing
       results.jsonl, empty file, and zero evidence-carrying records
       (pre-024 run) — message names the run id (FR-006).
-- [ ] T005 [P] [US1] Unit tests in `tests/unit/test_eval_replay.py` —
+- [x] T005 [P] [US1] Unit tests in `tests/unit/test_eval_replay.py` —
       replayability partition (R3 table): evidence-carrying hit / miss /
       post-vision discogs_error records become replay items; `unlabeled`,
       `no_evidence`, evidence-less `error` (kind preserved), and the
       defensive evidence-less hit/miss become carry-throughs with the
       correct category + detail; every source record yields exactly one
       item (FR-003).
-- [ ] T006 [P] [US1] Unit tests in `tests/unit/test_eval_replay.py` —
+- [x] T006 [P] [US1] Unit tests in `tests/unit/test_eval_replay.py` —
       truth-master re-resolution (R5): manifest present → discogs-source
       items get `truth_master_id` via newest-line-wins; manifest absent →
       None; retained-source records always None; no network anywhere.
-- [ ] T007 [P] [US1] Integration test in
+- [x] T007 [P] [US1] Integration test in
       `tests/integration/test_eval_harness.py` — end-to-end `run_replay`
       over a tmp-dir fixture source run + scripted `FakeDiscogsClient`:
       (a) run dir named `*-replay`, results.jsonl + summary.json written;
@@ -101,7 +101,7 @@ outcomes.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] New module `src/collection_agent/eval/replay.py`:
+- [x] T008 [US1] New module `src/collection_agent/eval/replay.py`:
       `ReplayItem` model (data-model §2, evidence/carry_outcome mutual
       exclusion), `load_source_run(settings, run_id) -> list[ReplayItem]`
       implementing the reader (torn-line tolerance), the R3 partition,
@@ -110,7 +110,7 @@ outcomes.
       `sources.SourceError` for all fail-fast cases BEFORE any run dir is
       created. Module docstring cites the amendment; no journal/session
       imports (AST guard covers this automatically).
-- [ ] T009 [US1] `run_replay(discogs_client, settings, replay_of, limit,
+- [x] T009 [US1] `run_replay(discogs_client, settings, replay_of, limit,
       notify)` in `src/collection_agent/eval/harness.py`: replay items →
       per-item evaluation (`replay_item` fn: carry-through short-circuit,
       else `ScanEvidence(**evidence)` re-materialization →
@@ -120,7 +120,7 @@ outcomes.
       `dataset_snapshot_completeness=None`); run id `_run_id("replay")`.
       Factor the shared run-dir/write/summary plumbing out of `run_eval`
       rather than duplicating it.
-- [ ] T010 [US1] CLI in `src/collection_agent/cli.py`: `--replay RUN_ID`
+- [x] T010 [US1] CLI in `src/collection_agent/cli.py`: `--replay RUN_ID`
       on the `eval-run` subparser (help: "re-run the search ladder over a
       prior run's recorded evidence (025; zero vision calls)");
       `--source` default becomes `None`, resolved to `"discogs"` iff
@@ -128,12 +128,12 @@ outcomes.
       replay path skips the `OPENAI_API_KEY` gate and never calls
       `_build_llm_client`; `_print_eval_summary` gains a
       `replay of <run_id>` row when `replay_of` is set.
-- [ ] T011 [US1] CLI-level integration tests (same style as existing CLI
+- [x] T011 [US1] CLI-level integration tests (same style as existing CLI
       tests) in `tests/integration/test_eval_harness.py`: `--replay` +
       `--source` → exit 2; `--replay` with unset `OPENAI_API_KEY` runs
       (monkeypatched `run_replay`); unknown run id → exit 2 with the
       SourceError message.
-- [ ] T012 [US1] Verify guards untouched-but-covering: run
+- [x] T012 [US1] Verify guards untouched-but-covering: run
       `uv run pytest tests/unit/test_eval_readonly_guard.py
       tests/unit/test_eval_gitignore_guard.py` — the new `eval/replay.py`
       must pass the AST sweep with zero guard-file edits.
@@ -156,7 +156,7 @@ with gated evidence and assert the catno rung fires first.
 
 ### Tests for User Story 2 (write first, watch them fail)
 
-- [ ] T013 [P] [US2] Unit tests in `tests/unit/test_scan_models.py` —
+- [x] T013 [P] [US2] Unit tests in `tests/unit/test_scan_models.py` —
       the gate (FR-009/011/012): 7-digit and 4-digit barcodes (incl. the
       live `"3070"`) cleared → not in `evidence_kinds`, absent from
       `compact_dump()`; exactly 8 digits kept; 13 digits kept; separators
@@ -166,7 +166,7 @@ with gated evidence and assert the catno rung fires first.
       barcode-only implausible evidence → `is_empty` True; FR-019
       composition: an 11-digit `catno` still reclassifies to `barcode`
       and survives the gate.
-- [ ] T014 [P] [US2] Ladder test in `tests/unit/test_scan_search.py` —
+- [x] T014 [P] [US2] Ladder test in `tests/unit/test_scan_search.py` —
       Cybotron-shaped evidence (`barcode="3070"` pre-gate, catno
       `"D-216"`, artist/label): after construction the ladder's first
       rung tried is `catno` (scripted `FakeDiscogsClient` asserts no
@@ -175,19 +175,29 @@ with gated evidence and assert the catno rung fires first.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] `src/collection_agent/scan/models.py`: add
+- [x] T015 [US2] `src/collection_agent/scan/models.py`: add
       `BARCODE_PLAUSIBLE_MIN_DIGITS = 8` beside `BARCODE_MIN_DIGITS` and
       a `_gate_implausible_barcode` model validator defined AFTER
       `_reclassify_barcode_in_catno` (pydantic v2 definition order —
       data-model §5): clear `barcode` when `0 < len(barcode) <
       BARCODE_PLAUSIBLE_MIN_DIGITS`; comment cites the live case (3070 /
       D-216) and the drop-don't-reclassify rationale (R7).
-- [ ] T016 [US2] Regression sweep: `uv run pytest tests/unit/
+- [x] T016 [US2] Regression sweep: `uv run pytest tests/unit/
       test_scan_models.py tests/unit/test_scan_search.py tests/unit/
       test_scan_vision.py tests/integration/test_scan_server.py` — all
       pre-existing scan tests pass unmodified (SC-005: no test asserted a
       sub-8-digit barcode surviving; if one did, STOP — that's a spec
       conflict to surface, not a test to edit).
+      **Implementation note (STOP condition evaluated, 2026-07-11)**: two
+      pre-existing tests used sub-8-digit barcodes as *incidental fixture
+      data* — `test_scan_models.py` ladder-order test (`"123456"`) and
+      `test_scan_search.py` lower-rung-suppression test (`"12345"`).
+      Neither asserted barcode plausibility semantics (FR-019's own tests
+      all use 10+ digits; short-digit tests target catno keeping); their
+      intent (evidence-kind ordering / rung suppression) is preserved by
+      updating the fixture digits to plausible 8-digit values, with a
+      comment citing 025. Not a spec conflict — it is exactly the
+      behavior change FR-009 specifies.
 
 **Checkpoint**: gate live everywhere `ScanEvidence` is constructed;
 US1+US2 together make SC-002 (Cybotron flip) measurable by the owner.
@@ -203,7 +213,7 @@ US1+US2 together make SC-002 (Cybotron flip) measurable by the owner.
 
 ### Implementation for User Story 3
 
-- [ ] T017 [P] [US3] Edit `specs/024-scan-accuracy-followups/quickstart.md`
+- [x] T017 [P] [US3] Edit `specs/024-scan-accuracy-followups/quickstart.md`
       SC-002 checklist item: annotate with the 2026-07-11 run
       (`20260711-222805Z-discogs`, after `--backfill-masters` of 42
       releases / 8 masterless): strict 52.1% / top-1 37.2% / practical
@@ -224,18 +234,18 @@ US1+US2 together make SC-002 (Cybotron flip) measurable by the owner.
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T018 [P] Update `collection-agent/README.md` eval section: replay
+- [x] T018 [P] Update `collection-agent/README.md` eval section: replay
       mode (command, zero-vision/no-OpenAI-key property, what it holds
       constant vs re-runs live — one honest paragraph mirroring
       quickstart's), and the barcode plausibility gate one-liner in the
       scan section.
-- [ ] T019 Full offline gate: `cd collection-agent && uv run pytest` —
+- [x] T019 Full offline gate: `cd collection-agent && uv run pytest` —
       all tests green (expect ~450 + new); confirm zero live API/network
       use in the suite (existing conftest guards).
-- [ ] T020 Quickstart self-check (offline parts): run the T019 command
+- [x] T020 Quickstart self-check (offline parts): run the T019 command
       exactly as quickstart states it; verify the jq diff recipe against
       two fixture results files in the scratchpad (not committed).
-- [ ] T021 CLAUDE.md merged-state block: rewrite the 025 in-flight
+- [x] T021 CLAUDE.md merged-state block: rewrite the 025 in-flight
       pointer into the post-merge summary block (single-PR flow, owner
       decision 2026-07-07 — lands in THIS feature branch/PR), demoting
       024 to "Prior feature" and recording: what shipped, run/live
