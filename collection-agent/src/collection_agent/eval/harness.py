@@ -70,6 +70,9 @@ def evaluate_item(llm_client, discogs_client, settings: Settings, item: EvalItem
         )
 
     evidence_kinds = list(evidence.evidence_kinds)
+    # 024 FR-007: the journal's compact evidence shape, carried on every
+    # record where a vision call produced values (empty extraction ⇒ None)
+    evidence_dump = evidence.compact_dump() or None
     if evidence.is_empty:
         return EvalResult(
             **base, outcome="no_evidence", vision_calls=1,
@@ -83,20 +86,27 @@ def evaluate_item(llm_client, discogs_client, settings: Settings, item: EvalItem
     except DiscogsError as exc:
         return EvalResult(
             **base, outcome="error", error_kind="discogs_error",
-            detail=str(exc), evidence_kinds=evidence_kinds, vision_calls=1,
+            detail=str(exc), evidence_kinds=evidence_kinds,
+            evidence=evidence_dump, vision_calls=1,
             elapsed_s=time.monotonic() - start,
         )
 
     candidate_ids = [c.release_id for c in candidates]
-    scored = score_search_outcome(item.truth_release_id, candidate_ids, tried)
+    scored = score_search_outcome(
+        item.truth_release_id, candidate_ids, tried,
+        truth_master_id=item.truth_master_id,
+        candidate_master_ids=[c.master_id for c in candidates],
+    )
     return EvalResult(
         **base,
         outcome=scored["outcome"],
         rank=scored["rank"],
         rung=scored["rung"],
+        miss_master_relation=scored["miss_master_relation"],
         rungs_tried=tried,
         evidence_kinds=evidence_kinds,
         candidate_ids=candidate_ids,
+        evidence=evidence_dump,
         vision_calls=1,
         elapsed_s=time.monotonic() - start,
     )

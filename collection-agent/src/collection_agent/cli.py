@@ -58,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
         "--images-per-release", type=int, default=None,
         help="download cap per release (default: settings)",
     )
+    evds_p.add_argument(
+        "--backfill-masters", action="store_true",
+        help="add master ids to an already-built dataset (024; metadata "
+        "fetches only, no image downloads)",
+    )
     evrun_p = sub.add_parser(
         "eval-run",
         help="run the scan-identification eval (023; makes billable vision calls)",
@@ -93,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_eval_dataset(
                 settings, limit=args.limit,
                 images_per_release=args.images_per_release,
+                backfill_masters=args.backfill_masters,
             )
         if command == "eval-run":
             return _cmd_eval_run(settings, source=args.source, limit=args.limit)
@@ -371,12 +377,20 @@ def _maybe_confirm_pending_plan(agent, settings: Settings, store: SnapshotStore)
 
 
 def _cmd_eval_dataset(
-    settings: Settings, limit: int | None, images_per_release: int | None
+    settings: Settings,
+    limit: int | None,
+    images_per_release: int | None,
+    backfill_masters: bool = False,
 ) -> int:
-    """Build the labeled Discogs-image dataset (contracts/eval-dataset.md §1).
-    Local-only, gitignored output; resumable — interrupt and re-run freely."""
+    """Build the labeled Discogs-image dataset (contracts/eval-dataset.md §1)
+    or, with --backfill-masters, upgrade an existing one with truth master
+    ids (024). Local-only, gitignored output; resumable either way."""
     from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
-    from collection_agent.eval.dataset import DatasetError, build_dataset
+    from collection_agent.eval.dataset import (
+        DatasetError,
+        backfill_masters as run_backfill,
+        build_dataset,
+    )
 
     store = SnapshotStore(settings.snapshot_path)
     client = DiscogsClient(
@@ -389,16 +403,26 @@ def _cmd_eval_dataset(
             TaskProgressColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("downloading release images", total=None)
+            description = (
+                "backfilling master ids" if backfill_masters
+                else "downloading release images"
+            )
+            task = progress.add_task(description, total=None)
 
             def on_progress(done: int, total: int) -> None:
                 progress.update(task, completed=done, total=total)
 
-            stats = build_dataset(
-                client, store, settings,
-                limit=limit, images_per_release=images_per_release,
-                on_progress=on_progress,
-            )
+            if backfill_masters:
+                stats = run_backfill(
+                    client, store, settings, limit=limit,
+                    on_progress=on_progress,
+                )
+            else:
+                stats = build_dataset(
+                    client, store, settings,
+                    limit=limit, images_per_release=images_per_release,
+                    on_progress=on_progress,
+                )
     except DatasetError as exc:
         console.print(f"[red]{exc}[/red]")
         return EXIT_CONFIG
@@ -407,6 +431,16 @@ def _cmd_eval_dataset(
         return EXIT_CONFIG
     finally:
         client.close()
+
+    if backfill_masters:
+        t = Table(show_header=False, box=None)
+        t.add_row("dataset", str(settings.eval_dataset_dir))
+        t.add_row("masters backfilled", str(stats["backfilled"]))
+        t.add_row("already had a master", str(stats["already_have_master"]))
+        t.add_row("no master on Discogs", str(stats["no_master"]))
+        t.add_row("fetch failed (kept as-is)", str(stats["backfill_failed"]))
+        console.print(t)
+        return EXIT_OK
 
     t = Table(show_header=False, box=None)
     t.add_row("dataset", str(settings.eval_dataset_dir))
@@ -475,6 +509,15 @@ def _print_eval_summary(summary) -> None:
     t.add_row("evaluated", str(summary.evaluated))
     t.add_row("identification rate", pct(summary.identification_rate))
     t.add_row("top-1 rate", pct(summary.top1_rate))
+    # 024: practical bracket beside the strict headline, never instead of it
+    t.add_row(
+        "practical rate (incl. same-master)", pct(summary.practical_rate)
+    )
+    t.add_row(
+        "miss split (same-master / different / unknown)",
+        f"{summary.misses_same_master} / {summary.misses_different} / "
+        f"{summary.misses_master_unknown}",
+    )
     t.add_row(
         "hits by rung",
         ", ".join(f"{k}={v}" for k, v in summary.hits_by_rung.items()) or "—",

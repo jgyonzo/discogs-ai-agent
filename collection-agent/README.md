@@ -38,6 +38,7 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `COLLECTION_AGENT_SCAN_MAX_IMAGE_BYTES` | no | `10485760` | Photo upload cap, 10 MiB (022) |
 | `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | no | `collection-agent/data/scan-sessions` | Per-session scan journal location (022) |
 | `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | no | `45` | Hard cap per vision call; a re-scan supersedes the pending one (022 addendum 2) |
+| `COLLECTION_AGENT_SCAN_CATNO_SEARCH_DEPTH` | no | `50` | Catno-rung fetch depth for the exact-catno re-rank (024) |
 | `COLLECTION_AGENT_EVAL_DATASET_DIR` | no | `collection-agent/data/eval/discogs-images` | Labeled eval-image dataset location (023) |
 | `COLLECTION_AGENT_EVAL_IMAGES_PER_RELEASE` | no | `2` | Image download cap per release, secondary-preferred (023) |
 | `COLLECTION_AGENT_EVAL_RESULTS_DIR` | no | `collection-agent/data/eval/runs` | Eval run results location (023) |
@@ -91,7 +92,10 @@ printed evidence, Discogs is searched in precision order (barcode →
 catalog number → artist+title → a free-text query composed from
 whatever partial evidence was read; manual text search on top), and the
 matching pressings are shown with cover, year, country, format, catno,
-and an "already in your collection — N copies" marker. **Nothing is
+and an "already in your collection — N copies" marker. On the
+catalog-number search, pressings whose catno exactly matches what was
+read are listed first (024 — Discogs' substring search otherwise buries
+short catnos like `SUB 15` under `SUB 150/151/…`). **Nothing is
 written until you tap a candidate and confirm** (duplicates ask twice;
 enforced server-side). Adds go to the configured folder; the snapshot
 is marked stale so the chat agent re-syncs before trusting counts.
@@ -118,9 +122,16 @@ same search ladder — LangSmith-traced when configured) and reports
 identification rate, top-1 rate, and per-rung attribution to
 `data/eval/runs/<run_id>/` (`results.jsonl` + `summary.json`). Each image
 costs one billable vision call (the summary prints the count); the run is
-strictly read-only against Discogs. Note the honesty caveat: Discogs
-images are clean scans, so this measures an upper bound of real
-phone-photo accuracy.
+strictly read-only against Discogs. Since 024, each result record also
+carries the extracted evidence values (so misses are diagnosable from the
+file alone), and the summary reports a **practical rate** beside the
+strict one: misses where a candidate was another pressing of the same
+master ("right album, wrong pressing") counted as near-misses. Truth
+master ids come from the dataset manifest — run
+`eval-dataset --backfill-masters` once to upgrade a pre-024 dataset
+(metadata fetches only). Note the honesty caveat: Discogs images are
+clean scans, so this measures an upper bound of real phone-photo
+accuracy — the strict and practical rates bracket it.
 
 To accumulate the *real* distribution, start the scan server with
 `COLLECTION_AGENT_SCAN_RETAIN_PHOTOS=true`: uploaded photos are kept under

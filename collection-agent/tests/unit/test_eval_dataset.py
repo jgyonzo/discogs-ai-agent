@@ -233,3 +233,137 @@ class TestCli:
         )
         assert cli.main(["eval-dataset"]) == cli.EXIT_OK
         assert manifest_path(settings.eval_dataset_dir).exists()
+
+
+class TestMasterIds:
+    """024 T017: build-time master recording + --backfill-masters
+    (amendment-023-eval-dataset §1–3)."""
+
+    def test_build_records_master_id(self, settings):
+        store = seeded_store(settings, [101, 102, 103])
+        details = {
+            101: {"id": 101, "master_id": 5309,
+                  "images": [img("secondary", "https://i/a.jpg")]},
+            102: {"id": 102, "master_id": 0, "images": []},   # 0 ⇒ no master
+            103: {"id": 103, "images": []},                    # absent
+        }
+        build_dataset(make_fake(details, ["https://i/a.jpg"]), store, settings)
+        from collection_agent.eval.dataset import newest_release_lines
+
+        newest = newest_release_lines(load_manifest(settings.eval_dataset_dir))
+        assert newest[101].master_id == 5309
+        assert newest[102].master_id is None
+        assert newest[103].master_id is None
+
+    def test_newest_release_lines_picks_last(self, settings):
+        store = seeded_store(settings, [101])
+        # run 1: download fails -> failed line; run 2: succeeds
+        fake1 = make_fake(
+            {101: {"id": 101, "images": [img("secondary", "https://i/a.jpg")]}}, []
+        )
+        build_dataset(fake1, store, settings)
+        fake2 = make_fake(
+            {101: {"id": 101, "master_id": 7, "images": [img("secondary", "https://i/a.jpg")]}},
+            ["https://i/a.jpg"],
+        )
+        build_dataset(fake2, store, settings)
+        from collection_agent.eval.dataset import newest_release_lines
+
+        newest = newest_release_lines(load_manifest(settings.eval_dataset_dir))
+        assert newest[101].status == "downloaded" and newest[101].master_id == 7
+
+    def _built_023_style(self, settings, release_ids):
+        """Build a dataset whose manifest lines lack master ids."""
+        store = seeded_store(settings, release_ids)
+        details = {
+            rid: {"id": rid, "images": [img("secondary", f"https://i/{rid}.jpg")]}
+            for rid in release_ids
+        }
+        fake = make_fake(details, [f"https://i/{rid}.jpg" for rid in release_ids])
+        build_dataset(fake, store, settings)
+        return store
+
+    def test_backfill_appends_superseding_line(self, settings):
+        from collection_agent.eval.dataset import (
+            backfill_masters,
+            newest_release_lines,
+        )
+
+        store = self._built_023_style(settings, [101])
+        fake = FakeDiscogsClient(
+            instances=[], details={101: {"id": 101, "master_id": 5309}}
+        )
+        stats = backfill_masters(fake, store, settings)
+        assert stats["backfilled"] == 1
+        newest = newest_release_lines(load_manifest(settings.eval_dataset_dir))
+        line = newest[101]
+        assert line.master_id == 5309
+        assert line.status == "downloaded"
+        # image ground truth carried over verbatim
+        assert line.images[0].file == "101_secondary1.jpg"
+        # metadata only: no image downloads happened
+        assert fake.image_downloads == []
+
+    def test_backfill_skips_releases_that_already_have_masters(self, settings):
+        from collection_agent.eval.dataset import backfill_masters
+
+        store = seeded_store(settings, [101])
+        build_dataset(
+            make_fake(
+                {101: {"id": 101, "master_id": 5, "images": []}}, []
+            ),
+            store, settings,
+        )
+        fake = FakeDiscogsClient(instances=[], details={})
+        stats = backfill_masters(fake, store, settings)
+        assert stats["already_have_master"] == 1
+        assert fake.release_fetches == []  # nothing re-fetched
+
+    def test_backfill_404_keeps_old_line_and_counts(self, settings):
+        from collection_agent.eval.dataset import (
+            backfill_masters,
+            newest_release_lines,
+        )
+
+        store = self._built_023_style(settings, [101])
+        fake = FakeDiscogsClient(
+            instances=[], details={}, release_failures={101: "404"}
+        )
+        stats = backfill_masters(fake, store, settings)
+        assert stats["backfill_failed"] == 1 and stats["backfilled"] == 0
+        newest = newest_release_lines(load_manifest(settings.eval_dataset_dir))
+        assert newest[101].status == "downloaded"  # old line authoritative
+        assert newest[101].master_id is None
+
+    def test_backfill_masterless_release_counted_not_appended(self, settings):
+        from collection_agent.eval.dataset import backfill_masters
+
+        store = self._built_023_style(settings, [101])
+        fake = FakeDiscogsClient(
+            instances=[], details={101: {"id": 101}}  # fetched, no master
+        )
+        stats = backfill_masters(fake, store, settings)
+        assert stats["no_master"] == 1 and stats["backfilled"] == 0
+
+    def test_backfill_without_manifest_is_actionable(self, settings):
+        from collection_agent.eval.dataset import backfill_masters
+
+        store = SnapshotStore(settings.snapshot_path)
+        with pytest.raises(DatasetError, match="build one first"):
+            backfill_masters(
+                FakeDiscogsClient(instances=[], details={}), store, settings
+            )
+
+    def test_done_release_ids_uses_newest_line(self, settings):
+        from collection_agent.eval.dataset import backfill_masters
+
+        store = self._built_023_style(settings, [101])
+        backfill_masters(
+            FakeDiscogsClient(
+                instances=[], details={101: {"id": 101, "master_id": 9}}
+            ),
+            store, settings,
+        )
+        # release stays done after backfill (no re-download on next build)
+        done = done_release_ids(load_manifest(settings.eval_dataset_dir))
+        assert done == {101}

@@ -162,3 +162,33 @@ class TestTracksEvidence:
         assert dumped == {
             "artist": "A", "barcode": "720642442524", "tracks": ["The Key"],
         }
+
+
+class TestCandidateMasterId:
+    """024 T004: master_id is verbatim-optional (amendment-022-scan-api §1)."""
+
+    @staticmethod
+    def _candidate(result):
+        from collection_agent.scan.search import _candidate_from_result
+        from collection_agent.scan.search import pending_duplicate_checker
+
+        return _candidate_from_result(result, pending_duplicate_checker)
+
+    def test_master_id_carried_verbatim(self):
+        from tests.fixtures.discogs_payloads import search_result
+
+        c = self._candidate(search_result(101, master_id=5309))
+        assert c.master_id == 5309
+
+    def test_absent_master_id_stays_none(self):
+        from tests.fixtures.discogs_payloads import search_result
+
+        c = self._candidate(search_result(101))
+        assert c.master_id is None
+
+    def test_zero_master_id_normalizes_to_none(self):
+        from tests.fixtures.discogs_payloads import search_result
+
+        item = search_result(101)
+        item["master_id"] = 0  # Discogs' "no master" sentinel
+        assert self._candidate(item).master_id is None

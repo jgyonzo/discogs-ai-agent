@@ -121,6 +121,9 @@ class Candidate(BaseModel):
     catno: str | None = None
     thumb_url: str | None = None
     discogs_uri: str | None = None
+    # 024: verbatim from the search result's master_id; Discogs sends 0 for
+    # master-less releases — normalized to None, never constructed
+    master_id: int | None = None
     duplicate: DuplicateStatus
 
 

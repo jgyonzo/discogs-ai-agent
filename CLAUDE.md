@@ -3,6 +3,63 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**024-scan-accuracy-followups** (PR #14, merged to main 2026-07-07 —
+owner-only live validation open: quickstart SC-002 fresh eval vs the
+56.4% baseline after `--backfill-masters`, one physical short-catno
+scan) — three evidence-driven follow-ups from 023's FIRST MEASURED EVAL
+(94 images: 56.4% strict / 76% per-release; 14-miss live catno
+spot-check 2026-07-07, ~30 read-only lookups). `collection-agent` only,
+zero new deps, ~40 new tests (410→450).
+(1) **Exact-catno re-rank** (the one pipeline change; measured cause:
+Discogs catno search substring-matches, so truth `SUB 15` drowned under
+`SUB 150/152`, `FD 006` under `SFDB 006`): catno rung ONLY now fetches
+one deeper page (`per_page = max(NEW COLLECTION_AGENT_SCAN_CATNO_
+SEARCH_DEPTH default 50, candidates cap)` — still 1 request) and
+`scan/search.py` stable-partitions RAW results exact-normalized-catno
+first (`normalize_catno` strips ` -./_` + casefolds, 022-FR-019-style;
+comma-joined multi-catno any-match; no catno ⇒ never exact) before the
+unchanged dedup/cap/verbatim Candidate build; no exact match anywhere ⇒
+byte-identical to pre-024; non-catno rungs and manual search untouched.
+Fix reaches the phone page and the eval (shared pipeline).
+(2) **Evidence in eval results** (022 FR-021's lesson resurfaced: 4/14
+spot-checked misses were zero-candidate-cause-unknowable):
+`EvalResult.evidence` = `ScanEvidence.compact_dump()` — the journal's
+exact shape — on every record where vision produced values (incl.
+post-vision discogs_error; absent on unlabeled/no_evidence/pre-vision
+errors); misses now diagnosable from results.jsonl alone.
+(3) **Same-master near-miss metric** (≥4/14 spot-checked misses were
+other pressings of the truth's master — "right album, wrong row"):
+manifest `release` lines gain `master_id` (from the already-fetched
+payload, 0/absent ⇒ None), NEW `eval-dataset --backfill-masters`
+upgrades pre-024 datasets (metadata-only fetches; failures skipped
+honestly; masterless releases re-checked next run) via the NEW
+normative **newest-line-per-release-wins** manifest reader rule (also
+formalizes 023's failed→retried duplicate lines; resume semantics
+preserved); `Candidate.master_id` verbatim from search results;
+`scoring.classify_miss_master` → `miss_master_relation` per miss:
+`same_master` / `different` / `unknown` (truth master unknown OR no
+candidate masters to compare, incl. zero candidates — "nothing to
+compare" ≠ "compared and differed", never guessed; retained source
+always unknown, no live lookups); summary gains the three miss buckets
++ `practical_rate` = (hits + same-master near-misses)/strict
+denominator, strict rate unchanged and still primary; invariants 8–10
+normative (buckets sum to misses; practical ≥ strict, equal iff no
+near-misses; evidence present wherever extraction happened). All
+additive: 023-format manifests/results/summaries stay readable (new
+summary fields default). Artifacts: `specs/024-scan-accuracy-followups/`
+(spec, plan, research R1–R7, data-model, quickstart + owner checklist,
+tasks T001–T022 all complete, contracts: FOUR amendments —
+`amendment-017-discogs-consumption-3.md` (+search `master_id` field,
++catno per_page depth, +backfill get_release use),
+`amendment-022-scan-api.md` (Candidate +master_id, catno
+exact-match-first ordering), `amendment-023-eval-dataset.md` (manifest
+master_id, newest-line-wins, backfill mode),
+`amendment-023-eval-results.md` (evidence + miss_master_relation +
+practical fields + invariants 8–10)). Out of scope kept: vision prompt
+changes, depth on other rungs, master-level scoring as primary,
+retained-source master lookups.
+
+Prior feature:
 **023-scan-eval-harness** (PR #13, merged to main 2026-07-07 — owner-only
 live validation still open: quickstart checklist SC-001 full dataset
 build, SC-002 first measured identification rate, SC-004 retained-photo
