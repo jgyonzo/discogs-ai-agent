@@ -2,7 +2,16 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**In flight: 025-eval-replay-barcode-gate** (branch
+`025-eval-replay-barcode-gate`) — evidence-replay eval mode
+(`eval-run --replay <run_id>`: search-ladder-only re-run over a prior
+run's recorded evidence, zero vision calls — the A/B instrument for
+ladder changes, since ±10/94 images flip on vision nondeterminism
+alone) + barcode plausibility gate (sub-8-digit "barcodes" cleared in
+`ScanEvidence`, mirroring 022 FR-019) + 024 quickstart honesty note.
+Plan: `specs/025-eval-replay-barcode-gate/plan.md`.
+
+Most recently merged:
 **024-scan-accuracy-followups** (PR #14, merged to main 2026-07-07 —
 owner-only live validation open: quickstart SC-002 fresh eval vs the
 56.4% baseline after `--backfill-masters`, one physical short-catno

@@ -1,0 +1,80 @@
+# Quickstart: Evidence-Replay Eval Mode + Barcode Plausibility Gate (025)
+
+All commands from `collection-agent/` unless noted. Nothing here makes a
+vision/LLM call; replays make governed read-only Discogs search requests
+(~2–4 min for the 94-image dataset). `OPENAI_API_KEY` is NOT needed for
+replays.
+
+## Offline verification (no API calls)
+
+```bash
+cd collection-agent && uv run pytest
+```
+
+Expected: full suite green (450 pre-025 tests + 025's new tests), no
+network.
+
+## Replay a prior run
+
+```bash
+# the 2026-07-11 post-024 measured run
+uv run python -m collection_agent eval-run --replay 20260711-222805Z-discogs
+```
+
+Prints the standard eval summary table plus replay provenance (`replay of
+20260711-222805Z-discogs`, `billable vision calls 0`) and the new run
+dir: `data/eval/runs/<YYYYMMDD-HHMMSSZ-replay>/`.
+
+Errors you can expect: unknown run id, empty results file, or a pre-024
+run without recorded evidence → clear message, exit 2, no run dir
+created. `--replay` + `--source` together → exit 2.
+
+## Diff two runs per image (the A/B instrument)
+
+```bash
+A=data/eval/runs/20260711-222805Z-discogs/results.jsonl
+B=data/eval/runs/<replay_run_id>/results.jsonl
+join -j1 <(jq -r '[.image,.outcome,.rung // "-"]|@tsv' $A | sort) \
+         <(jq -r '[.image,.outcome,.rung // "-"]|@tsv' $B | sort) \
+  | awk '$2" "$3 != $4" "$5'
+```
+
+Every line is an image whose outcome/rung changed between the runs. In a
+replay-vs-source diff, evidence is identical by construction — changes
+are attributable to ladder/normalization changes (or rare remote catalog
+drift), never vision.
+
+## Owner live-validation checklist (SC-001..SC-006)
+
+- [ ] **SC-001 — determinism**: run the replay command twice
+  back-to-back; the per-image diff of the two replay runs (jq recipe
+  above) is empty.
+- [ ] **SC-002 — barcode gate measured**: in the replay-vs-source diff of
+  `20260711-222805Z-discogs`, `17859_secondary1.jpeg` (Cybotron) flips
+  miss→hit via the `catno` rung; every other flipped image either has a
+  sub-8-digit `evidence.barcode` in the source record or is explainable
+  as catalog drift (check: `jq 'select(.evidence.barcode != null and
+  (.evidence.barcode|length) < 8) | .image' $A` lists the gate-affected
+  population).
+- [ ] **SC-003 — zero vision cost + latency**: the replay `summary.json`
+  has `"vision_calls": 0`; wall time under 5 minutes.
+- [ ] **SC-004 — denominator parity**: replay summary's `images_total`,
+  `evaluated`, `no_evidence`, `unlabeled` (and `errors` unless a live
+  search failed during the replay) match the source run's summary, so the
+  strict/top-1/practical rates are directly comparable.
+- [ ] **SC-005 — no scan regression**: one physical scan session
+  (phone page) on a record with a real (8+ digit) barcode behaves exactly
+  as before — barcode rung fires, dup overlay/add flow unchanged.
+- [ ] **SC-006 — 024 quickstart note**: `specs/024-scan-accuracy-followups/
+  quickstart.md` SC-002 now records the 2026-07-11 inconclusive-aggregate
+  reading (catno hits 17 vs 20; all target conversions confirmed) and
+  points at this feature's replay mode.
+
+## What replay does / does not hold constant
+
+Holds constant: the extracted evidence per image (the recorded values),
+the truth labels, the record set. Re-runs live: evidence normalization
+(current code — deliberately, so normalization changes like the 025 gate
+are measurable) and Discogs `/database/search` (the remote catalog can
+drift between runs; back-to-back replays minimize it). A replay is an
+eval run: its own results are replayable in turn.
