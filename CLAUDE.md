@@ -3,7 +3,7 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
-**027-dockerize-collection-agent** (implemented + validated 2026-07-12 —
+**027-dockerize-collection-agent** (PR #17, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
 SC-001..SC-006 all recorded, incl. SC-001's phone scan-and-add through the
 CONTAINERIZED server (session `20260712-200831Z`, two adds journaled:
