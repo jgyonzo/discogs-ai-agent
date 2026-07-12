@@ -86,9 +86,12 @@ drift), never vision.
   10/10 `no_evidence`, 0/0 `errors`, 0/0 `unlabeled` — exact parity;
   invariants 8–14 all hold on the replay summary
   (`replay_of: 20260711-222805Z-discogs`).
-- [ ] **SC-005 — no scan regression**: one physical scan session
+- [x] **SC-005 — no scan regression**: one physical scan session
   (phone page) on a record with a real (8+ digit) barcode behaves exactly
   as before — barcode rung fires, dup overlay/add flow unchanged.
+  **Validated 2026-07-12 (owner physical scan)**: real-barcode record
+  identified via the barcode rung; scan flow unchanged — the gate is
+  invisible to plausible barcodes, as contracted.
 - [ ] **SC-006 — 024 quickstart note**: `specs/024-scan-accuracy-followups/
   quickstart.md` SC-002 now records the 2026-07-11 inconclusive-aggregate
   reading (catno hits 17 vs 20; all target conversions confirmed) and
