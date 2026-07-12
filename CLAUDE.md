@@ -2,7 +2,21 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 026-scan-release-selection** (branch
+`026-scan-release-selection`) — scan-page results reshaped into selected
+release + master + alternatives, server-built Discogs page links
+(new-tab), and an on-demand master-versions fetch. Plan:
+`specs/026-scan-release-selection/plan.md` (research R1–R9, data-model,
+quickstart + owner checklist SC-001..SC-006, contracts:
+`amendment-017-discogs-consumption-4.md` — +`GET /masters/{id}/versions`
+read, zero new writes; `amendment-022-scan-api-3.md` — Candidate
++`release_page_url`/`master_page_url`, candidates[0]=selected semantic,
++`GET /api/master-versions`). `collection-agent` only, zero new deps,
+ONE new Settings field (`COLLECTION_AGENT_SCAN_VERSIONS_MAX`, default
+25); pipeline/vision/eval untouched (eval comparability preserved by
+construction).
+
+Most recently merged:
 **025-eval-replay-barcode-gate** (PR #15, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
 SC-001..SC-006 all recorded, incl. two byte-identical back-to-back
