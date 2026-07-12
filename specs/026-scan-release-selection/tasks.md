@@ -37,34 +37,34 @@ harness already exist; the feature adds zero dependencies.
 **Purpose**: settings, link builders, and wire-model extensions every story
 renders or serves. No story work starts before these.
 
-- [ ] T001 Add `scan_versions_max` Settings field (alias
+- [x] T001 Add `scan_versions_max` Settings field (alias
       `COLLECTION_AGENT_SCAN_VERSIONS_MAX`, default 25, data-model §5) in
       `collection-agent/src/collection_agent/settings.py`, with a
       default+alias unit test alongside the other scan-settings assertions
       in `collection-agent/tests/unit/test_scan_models.py`
-- [ ] T002 [P] Refactor `release_page_url` in
+- [x] T002 [P] Refactor `release_page_url` in
       `collection-agent/src/collection_agent/tools/common.py` to an
       id-based core (`release_page_url_for_id(settings, release_id)`) with
       the existing record-based signature delegating unchanged, and add
       `master_page_url(settings, master_id)`; extend
       `collection-agent/tests/unit/test_release_url.py` (existing 019
       assertions must pass with unchanged expected URLs)
-- [ ] T003 Extend `collection-agent/tests/unit/test_release_url.py` with a
+- [x] T003 Extend `collection-agent/tests/unit/test_release_url.py` with a
       grep-style single-site guard: the `/release/{id}` and `/master/{id}`
       URL shapes each exist in exactly ONE `src/` code site
       (`tools/common.py`) — 020 precedent, contract Delta 1
-- [ ] T004 [P] Add additive `release_page_url: str | None = None` and
+- [x] T004 [P] Add additive `release_page_url: str | None = None` and
       `master_page_url: str | None = None` fields to `Candidate`, and the
       NEW `VersionsResponse` wire model (data-model §3), in
       `collection-agent/src/collection_agent/scan/models.py`; unit tests in
       `collection-agent/tests/unit/test_scan_models.py` (old Candidate
       constructions remain valid via defaults; VersionsResponse shape)
-- [ ] T005 Thread `settings` into `_candidate_from_result` in
+- [x] T005 Thread `settings` into `_candidate_from_result` in
       `collection-agent/src/collection_agent/scan/search.py` and populate
       both link fields via the T002 builders (`master_page_url` iff
       `master_id` — data-model §1 invariant); update its call sites in
       `_run_search`
-- [ ] T006 Pin eval comparability (research R9) in
+- [x] T006 Pin eval comparability (research R9) in
       `collection-agent/tests/unit/test_scan_search.py`: for a fixed fake
       search payload, `find_candidates` returns byte-identical ordering and
       field values apart from the two new link fields; link fields correct
@@ -91,7 +91,7 @@ adds the alternative with duplicate confirmation intact.
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Restructure the results rendering in
+- [x] T007 [US1] Restructure the results rendering in
       `collection-agent/src/collection_agent/scan/static/index.html`: one
       shared card renderer; `candidates[0]` rendered as a visually
       prominent "Selected match" card with a master row (work identity =
@@ -100,13 +100,13 @@ adds the alternative with duplicate confirmation intact.
       possibilities" heading; zero-candidate and manual-search flows keep
       existing behavior (same renderer ⇒ FR-014); add buttons and
       "None of these" unchanged
-- [ ] T008 [US1] Integration tests in
+- [x] T008 [US1] Integration tests in
       `collection-agent/tests/integration/test_scan_server.py`: `/api/scan`
       and `/api/search` responses carry the new candidate link fields;
       single-candidate response has empty alternatives implied
       (`len(candidates)==1`); adding `candidates[1]` adds that release_id
       (not `candidates[0]`) with duplicate confirmation unchanged
-- [ ] T009 [P] [US1] New page guard test
+- [x] T009 [P] [US1] New page guard test
       `collection-agent/tests/unit/test_scan_page_links.py`: `index.html`
       contains NO hardcoded Discogs host and never string-builds
       `/release/` or `/master/` paths — the page renders only server-built
@@ -131,7 +131,7 @@ triggers an add.
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Add outbound anchors in
+- [x] T010 [US2] Add outbound anchors in
       `collection-agent/src/collection_agent/scan/static/index.html`: each
       card gets a "View release on Discogs ↗" `<a>` from
       `release_page_url`; the selected card's master row gets a
@@ -139,11 +139,11 @@ triggers an add.
       `target="_blank" rel="noopener noreferrer"`, rendered only when the
       field is non-null (no fabricated links), structurally separate from
       add `<button>`s, no card-level click handler (FR-009)
-- [ ] T011 [P] [US2] Extend
+- [x] T011 [P] [US2] Extend
       `collection-agent/tests/unit/test_scan_page_links.py`: every anchor
       built from a `*_page_url` field carries `target="_blank"` and
       `rel="noopener noreferrer"`; add buttons carry no `href`/navigation
-- [ ] T012 [US2] Integration tests in
+- [x] T012 [US2] Integration tests in
       `collection-agent/tests/integration/test_scan_server.py`: link-field
       correctness — `release_page_url == {base}/release/{release_id}` for
       every served candidate, `master_page_url == {base}/master/{master_id}`
@@ -170,17 +170,17 @@ selected release has a master.
 
 ### Implementation for User Story 3
 
-- [ ] T013 [P] [US3] Add `get_master_versions(master_id, per_page)` to
+- [x] T013 [P] [US3] Add `get_master_versions(master_id, per_page)` to
       `collection-agent/src/collection_agent/discogs/client.py`
       (`GET /masters/{id}/versions`, `page=1`, governed `_get_json` path —
       contract amendment-017-4); unit tests in
       `collection-agent/tests/unit/test_discogs_client_scan.py` (path,
       params, error mapping)
-- [ ] T014 [P] [US3] Grow `FakeDiscogsClient` in
+- [x] T014 [P] [US3] Grow `FakeDiscogsClient` in
       `collection-agent/tests/fixtures/fake_client.py` with scriptable
       master-versions responses (payload queue + raise-on-demand +
       call/param recording, matching its search/add scripting style)
-- [ ] T015 [US3] Add `candidates_from_versions(payload, master_id,
+- [x] T015 [US3] Add `candidates_from_versions(payload, master_id,
       settings, duplicate_checker, exclude_ids)` to
       `collection-agent/src/collection_agent/scan/search.py` implementing
       the verbatim mapping + dedup rule of data-model §2; unit tests in
@@ -188,10 +188,10 @@ selected release has a master.
       verbatim audit incl. `str(released)`, whole-`format` wrapping,
       `discogs_uri=None`, requested `master_id`, duplicate overlay,
       dedupe drops already-registered ids incl. the selected release)
-- [ ] T016 [US3] In `collection-agent/src/collection_agent/scan/server.py`:
+- [x] T016 [US3] In `collection-agent/src/collection_agent/scan/server.py`:
       track candidate master ids on `_CycleContext` (data-model §4),
       refreshed by `_register`
-- [ ] T017 [US3] Add `GET /api/master-versions` (sync-def handler) in
+- [x] T017 [US3] Add `GET /api/master-versions` (sync-def handler) in
       `collection-agent/src/collection_agent/scan/server.py` per contract
       Delta 3: gates in order (unknown/closed cycle → 409 `superseded`;
       master not in cycle's set → 403 `unknown_master`), generation
@@ -201,7 +201,7 @@ selected release has a master.
       titles, return `VersionsResponse` with verbatim `total_versions` and
       honest empty `message`; `DiscogsError` → 502 `discogs_unavailable`
       with zero state effects
-- [ ] T018 [US3] Integration tests in
+- [x] T018 [US3] Integration tests in
       `collection-agent/tests/integration/test_scan_server.py`: happy path
       (mapped fields, dedupe, `total_versions`); 403 unknown master; 409 on
       closed cycle; 409 when a newer scan supersedes an in-flight fetch
@@ -212,7 +212,7 @@ selected release has a master.
       auto-close the cycle (selected release still addable after);
       scan-only session issues zero versions calls (fake-client call
       recording — SC-006)
-- [ ] T019 [US3] Wire the page in
+- [x] T019 [US3] Wire the page in
       `collection-agent/src/collection_agent/scan/static/index.html`:
       "Show other pressings" button on the selected card (only when
       `master_page_url` non-null), disabled while fetching; append an
@@ -228,10 +228,10 @@ selected release has a master.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T020 [P] Update `collection-agent/README.md`: scan-page section
+- [x] T020 [P] Update `collection-agent/README.md`: scan-page section
       (selected/master/alternatives, new-tab links, on-demand pressings)
       and the new `COLLECTION_AGENT_SCAN_VERSIONS_MAX` env var
-- [ ] T021 Full-suite verification: `cd collection-agent && pytest` green,
+- [x] T021 Full-suite verification: `cd collection-agent && pytest` green,
       `git diff --stat` confirms zero changes under
       `collection-agent/src/collection_agent/eval/` and to
       `scan/vision.py` (research R9); record the new test count

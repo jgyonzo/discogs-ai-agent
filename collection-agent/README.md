@@ -39,6 +39,7 @@ Read from the repo-root `.env` (gitignored — never commit secrets):
 | `COLLECTION_AGENT_SCAN_JOURNAL_DIR` | no | `collection-agent/data/scan-sessions` | Per-session scan journal location (022) |
 | `COLLECTION_AGENT_SCAN_VISION_TIMEOUT_S` | no | `45` | Hard cap per vision call; a re-scan supersedes the pending one (022 addendum 2) |
 | `COLLECTION_AGENT_SCAN_CATNO_SEARCH_DEPTH` | no | `50` | Catno-rung fetch depth for the exact-catno re-rank (024) |
+| `COLLECTION_AGENT_SCAN_VERSIONS_MAX` | no | `25` | Cap of the on-demand "other pressings of this master" list (026) |
 | `COLLECTION_AGENT_EVAL_DATASET_DIR` | no | `collection-agent/data/eval/discogs-images` | Labeled eval-image dataset location (023) |
 | `COLLECTION_AGENT_EVAL_IMAGES_PER_RELEASE` | no | `2` | Image download cap per release, secondary-preferred (023) |
 | `COLLECTION_AGENT_EVAL_RESULTS_DIR` | no | `collection-agent/data/eval/runs` | Eval run results location (023) |
@@ -99,7 +100,18 @@ short catnos like `SUB 15` under `SUB 150/151/…`), and a "barcode" the
 vision model read with fewer than 8 digits is discarded before searching
 (025 — real UPC/EAN codes are 8–13 digits; a 4-digit misread once
 hijacked the barcode search and hid a correct catalog-number match).
-**Nothing is written until you tap a candidate and confirm** (duplicates ask twice;
+Results are presented as one **Selected match** (the pipeline's
+top-ranked candidate, with a master-release row when it belongs to one)
+followed by the other candidates under **Other possibilities** (026).
+Every release — and the selected release's master — carries a
+"View on Discogs ↗" link that opens the real Discogs page in a new tab
+(links are server-built from genuine ids; the page never constructs a
+URL). When the right album is showing but the wrong pressing, tap
+**Show other pressings**: the master's versions are fetched from Discogs
+(one request, only on tap — never automatically) and appear as
+additional selectable candidates with the same duplicate markers and
+confirmation flow; if more versions exist than are shown, the page says
+so. **Nothing is written until you tap a candidate and confirm** (duplicates ask twice;
 enforced server-side). Adds go to the configured folder; the snapshot
 is marked stale so the chat agent re-syncs before trusting counts.
 Every outcome lands in an append-only session journal
