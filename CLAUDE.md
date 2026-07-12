@@ -3,9 +3,12 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
-**025-eval-replay-barcode-gate** (PR #15, merged to main 2026-07-11 —
-owner-only live validation open: quickstart checklist SC-001..SC-006,
-incl. the live Cybotron replay flip and one physical plausible-barcode
+**025-eval-replay-barcode-gate** (PR #15, merged to main 2026-07-12 —
+live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
+SC-001..SC-006 all recorded, incl. two byte-identical back-to-back
+replays (100% determinism, zero drift), the Cybotron flip as the ONLY
+diff line of the gate replay (strict 52.1%→53.2%, catno hits 17→18,
+run `20260712-001333Z-replay`), and one physical plausible-barcode
 scan) — the two follow-ups from 024's post-merge measured comparison
 (2026-07-11 run `20260711-222805Z-discogs` vs the 2026-07-07 baseline:
 strict 52.1% vs 56.4%, top-1 37.2%, practical 56.4%, 0 errors — but the
