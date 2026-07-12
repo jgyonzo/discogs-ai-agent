@@ -104,7 +104,7 @@ conversational speed. See
 ├── specs/                # Spec Kit feature specs — one NNN-name dir per feature (SDD source of truth)
 ├── docs/                 # Original design notes (pre-Spec Kit)
 ├── data/                 # Gitignored runtime data (raw, staging, clean, published…)
-├── docker-compose.yml    # postgres + agent-api + frontend
+├── docker-compose.yml    # postgres + agent-api + frontend (+ opt-in collection-agent, `--profile collection`)
 ├── .specify/             # Spec Kit configuration; constitution lives here
 └── CLAUDE.md             # Active-feature pointer for AI assistants
 ```
@@ -182,6 +182,13 @@ frontend. Open `http://localhost:5173` in a browser:
 - Multi-turn conversations carry context; "New conversation" resets.
 - The frontend never touches DuckDB or local data files; it talks
   only to the agent's HTTP API.
+
+The collection-agent is **not** part of this default stack: it lives
+behind the opt-in `collection` compose profile (needs
+`DISCOGS_USER_TOKEN` in `.env`), so `docker compose up` starts exactly
+the three services above. See
+[`collection-agent/README.md`](collection-agent/README.md)
+§"Run with Docker" to run it containerized.
 
 Frontend runbook (component layout, env vars, how to run tests, how
 to point at a different agent) lives in

@@ -3,6 +3,60 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**027-dockerize-collection-agent** (PR #17, merged to main 2026-07-12 —
+live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
+SC-001..SC-006 all recorded, incl. SC-001's phone scan-and-add through the
+CONTAINERIZED server (session `20260712-200831Z`, two adds journaled:
+releases 36973368/36703081 — found only after applying R8's phone-URL
+caveat live: the banner printed the Docker bridge IP 172.19.0.2, the phone
+needed the host LAN IP) and the full SC-003 boundary loop: container-sync
+SIGINT at 5% enrichment → exit 3 → host-venv resume → 398/398 complete →
+containerized status reads complete byte-identically; also image audit
+clean, demo-stack service set verified live, empty-token scan exits 2 once
+with no restart loop, EOF chat exits 0; tasks T001–T016 ALL complete
+incl. owner-only T006/T016) —
+the collection-agent packaged as ONE image (all six CLI modes via
+`ENTRYPOINT python -m collection_agent`; `CMD ["scan"]` because the CLI's
+own default is `chat`, which would hang headless) plus an OPT-IN compose
+service: `profiles: ["collection"]`, :8022 published for LAN phones,
+`env_file: .env`, exactly one bind mount
+`./collection-agent/data:/app/collection-agent/data`. First step toward the
+long-term AWS/third-party goal — containerization groundwork ONLY (scoped
+out: AWS deploy, multi-tenancy, OAuth, TLS/auth, web chat,
+collection_matcher workflows; 022's trusted-LAN no-auth stance unchanged).
+`collection-agent` only, zero new deps, ZERO Settings fields, ZERO edits
+under `collection-agent/src/`, 9 new tests (536→545).
+(1) **Editable install is load-bearing** (research R2): `settings.py:17`
+anchors every data-path default to the source location
+(`Path(__file__).resolve().parents[2]`), so `pip install -e` at
+`/app/collection-agent` makes snapshot/journals/eval dirs resolve INSIDE
+the mount — container and host venv read/write the same files
+interchangeably, both directions, no env overrides (a non-editable install
+silently breaks every default path; guard-pinned via the `pip install -e`
+grep). (2) **Demo stack provably untouched**: unprofiled compose service
+set == {postgres, agent-api, frontend} pinned by a stdlib-only structural
+parse in `tests/unit/test_docker_packaging.py` (no PyYAML; 023
+read-repo-root-file precedent), plus profile/isolation/no-restart/
+Dockerfile-hygiene/.dockerignore guards — guard sensitivity demonstrated
+red before commit. (3) **Failure posture**: deliberately NO `restart:`
+policy (scan startup validates the Discogs folder LIVE and exits 2; a
+restart policy would retry-loop the live API — FR-010), NO healthcheck, NO
+depends_on either direction. (4) **Hygiene**: image = pyproject/src/README
+only; `.dockerignore` excludes `data/` (32 MB personal/licensed content),
+`.env`, `.venv/` — build context is KB-scale; secrets arrive ONLY as
+process env via compose `env_file` (agent-api pattern; pydantic-settings
+missing-env_file tolerance means no `.env` file exists in-container).
+One-off modes: `docker compose run --rm collection-agent
+<sync|status|chat|eval-*>` (run auto-activates the profile; TTY for chat;
+exit codes 0/1/2/3 verbatim). Artifacts:
+`specs/027-dockerize-collection-agent/` (spec, plan, research R1–R10,
+data-model, quickstart + owner checklist, tasks T001–T016, contracts:
+`docker-packaging.md` — a NEW contract; nothing amended). Known follow-up
+candidates recorded there: uv.lock-frozen image builds + registry/CI
+(research R10, for the AWS feature), Linux-host file-ownership handling
+(R9).
+
+Prior feature:
 **026-scan-release-selection** (PR #16, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12:
 quickstart SC-001..SC-006 all recorded, incl. SC-005's single-session
