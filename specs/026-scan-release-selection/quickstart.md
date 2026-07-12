@@ -59,23 +59,28 @@ cd collection-agent && pytest        # all offline; no live API calls
 
 ## Owner live-validation checklist (SC-001..SC-006)
 
-- [ ] **SC-001** — Scan a record that yields multiple candidates: the
+- [x] **SC-001** — Scan a record that yields multiple candidates: the
       selected release and (when present) its master row are visible in
       the initial results with no extra taps.
-- [ ] **SC-002** — In one live session, tap EVERY offered release/master
+- [x] **SC-002** — In one live session, tap EVERY offered release/master
       link and verify each opens the exact Discogs page for the id the
       API returned (spot-check `release_page_url`/`master_page_url`
       against `release_id`/`master_id` in the response).
-- [ ] **SC-003** — On the phone: open a Discogs link, background the scan
+- [x] **SC-003** — On the phone: open a Discogs link, background the scan
       page, return — results intact, an add still works.
-- [ ] **SC-004** — Add an alternative (one from the original list AND one
+- [x] **SC-004** — Add an alternative (one from the original list AND one
       from on-demand pressings): confirmation steps identical to adding
       the selected release; duplicate confirmation still triggers on a
       known-duplicate.
-- [ ] **SC-005** — For a record whose exact pressing is missing but whose
+- [x] **SC-005** — For a record whose exact pressing is missing but whose
       master is represented (024's near-miss class): reach and add the
       correct pressing via "Show other pressings" in a single scan
       session.
-- [ ] **SC-006** — Session where the on-demand action is never tapped:
+- [x] **SC-006** — Session where the on-demand action is never tapped:
       confirm (server log / LangSmith / request count) zero
       `/masters/*/versions` requests were issued.
+
+**Live-validation note (2026-07-12)**: SC-001..SC-006 all owner-validated
+live on the phone the same day the feature landed — including the two
+owner-replay fixes recorded in the spec's replay addendum 1 and 022's
+replay addendum 3, which were found and fixed during this validation.

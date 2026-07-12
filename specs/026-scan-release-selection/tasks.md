@@ -237,7 +237,7 @@ selected release has a master.
       `scan/vision.py` (research R9); record the new test count
 - [x] T022 Write the merged-state CLAUDE.md block for 026 on this branch
       (single-PR flow — feature + post-merge CLAUDE.md state in ONE PR)
-- [ ] T023 Owner-only live validation: run
+- [x] T023 Owner-only live validation: run
       `specs/026-scan-release-selection/quickstart.md` checklist
       SC-001..SC-006 on the phone against live Discogs (stays open past
       merge if deferred, 022/023 precedent)

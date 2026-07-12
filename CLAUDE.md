@@ -4,7 +4,11 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 
 **No feature is currently in flight.** Most recently merged:
 **026-scan-release-selection** (PR #16, merged to main 2026-07-12 —
-owner-only live validation OPEN: quickstart SC-001..SC-006, T023) —
+live validation CLOSED pre-merge, owner-validated 2026-07-12:
+quickstart SC-001..SC-006 all recorded, incl. SC-005's single-session
+wrong-pressing recovery via the on-demand fetch and SC-006's
+zero-versions-requests audit; the two replay fixes below were found
+DURING this validation) —
 the scan page's results reshaped from a flat candidate list into a
 **Selected match** + master + alternatives view with real Discogs
 links and an owner-invoked "other pressings" fetch (closes 024's
@@ -61,7 +65,7 @@ pinned (R9 test: fixed payload ⇒ byte-identical ordering/fields
 minus the two link fields); zero edits under `eval/`, vision prompt
 frozen. Artifacts: `specs/026-scan-release-selection/` (spec, plan,
 research R1–R9, data-model, quickstart + owner checklist, tasks
-T001–T023 — all complete except owner-only T023, contracts:
+T001–T023 ALL complete incl. owner-only T023, contracts:
 `amendment-017-discogs-consumption-4.md` — +`GET
 /masters/{id}/versions` read, ZERO new writes, +1 req per explicit
 tap only; `amendment-022-scan-api-3.md` — link fields + selected
