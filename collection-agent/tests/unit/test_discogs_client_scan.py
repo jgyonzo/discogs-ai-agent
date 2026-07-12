@@ -95,3 +95,52 @@ class TestAddToCollection:
         client = _client(settings, lambda r: httpx.Response(500, json={}))
         with pytest.raises(DiscogsServerError):
             client.add_to_collection("test_user", 1, 101)
+
+
+class TestGetMasterVersions:
+    """026 T013 (amendment-017-discogs-consumption-4): one governed GET of
+    /masters/{id}/versions — page 1, caller-supplied per_page, no filters."""
+
+    def test_path_params_and_auth_header(self, settings):
+        seen: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["url"] = request.url
+            seen["auth"] = request.headers.get("Authorization")
+            return httpx.Response(
+                200,
+                json=payloads.versions_page([payloads.version_item(201)]),
+            )
+
+        client = _client(settings, handler)
+        data = client.get_master_versions(5309, per_page=25)
+        assert seen["url"].path == "/masters/5309/versions"
+        assert seen["url"].params["page"] == "1"
+        assert seen["url"].params["per_page"] == "25"
+        # exactly the two pagination params — no filters, no sorts
+        assert set(seen["url"].params.keys()) == {"page", "per_page"}
+        assert seen["auth"] == "Discogs token=test-token-not-real"
+        assert data["versions"][0]["id"] == 201
+
+    def test_429_backs_off_then_succeeds(self, settings):
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(429, json={})
+            return httpx.Response(200, json=payloads.versions_page([]))
+
+        client = _client(settings, handler)
+        assert client.get_master_versions(5309, per_page=25)["versions"] == []
+        assert calls["n"] == 2
+
+    def test_401_raises_auth_error(self, settings):
+        client = _client(settings, lambda r: httpx.Response(401, json={}))
+        with pytest.raises(DiscogsAuthError):
+            client.get_master_versions(5309, per_page=25)
+
+    def test_5xx_exhausts_retries(self, settings):
+        client = _client(settings, lambda r: httpx.Response(503, json={}))
+        with pytest.raises(DiscogsServerError):
+            client.get_master_versions(5309, per_page=25)

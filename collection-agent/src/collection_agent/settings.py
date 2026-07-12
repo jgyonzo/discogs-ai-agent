@@ -123,6 +123,13 @@ class Settings(BaseSettings):
     scan_catno_search_depth: int = Field(
         default=50, alias="COLLECTION_AGENT_SCAN_CATNO_SEARCH_DEPTH"
     )
+    # on-demand master-versions fetch (026): per_page of the SINGLE versions
+    # request = display cap of the "other pressings" list. Deliberately
+    # distinct from scan_candidates_max — that knob tunes identification
+    # precision, this one tunes an owner-invoked browse list.
+    scan_versions_max: int = Field(
+        default=25, alias="COLLECTION_AGENT_SCAN_VERSIONS_MAX"
+    )
 
     # --- Scan identification eval (023) ---
     # All three eval directories default under <component>/data/ so the

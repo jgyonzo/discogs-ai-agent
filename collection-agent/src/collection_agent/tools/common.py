@@ -71,6 +71,21 @@ def _age_hours(store: SnapshotStore) -> float | None:
     return round(age.total_seconds() / 3600, 1) if age else None
 
 
+def release_page_url_for_id(settings: Settings, release_id: int) -> str:
+    """The ONLY code site that knows the release-page URL shape (019/020
+    single-site discipline; 026 scan candidates reuse it). Built from a
+    genuine `release_id`, never any other id space."""
+    return f"{settings.discogs_web_base_url.rstrip('/')}/release/{release_id}"
+
+
+def master_page_url(settings: Settings, master_id: int) -> str:
+    """The ONLY code site that knows the master-page URL shape (026,
+    amendment-022-scan-api-3 delta 1). Built from a genuine `master_id`
+    received verbatim from Discogs — never constructed for masterless
+    releases (callers gate on the id's presence)."""
+    return f"{settings.discogs_web_base_url.rstrip('/')}/master/{master_id}"
+
+
 def release_page_url(settings: Settings, record: CollectionRecord) -> str:
     """The record's Discogs release-page URL (019, agent-tools deltas 6–8).
 
@@ -80,7 +95,7 @@ def release_page_url(settings: Settings, record: CollectionRecord) -> str:
     invented-URL incident. Every listing entry carries this field so the
     LLM never constructs a URL itself (ground rule 1).
     """
-    return f"{settings.discogs_web_base_url.rstrip('/')}/release/{record.release_id}"
+    return release_page_url_for_id(settings, record.release_id)
 
 
 def with_warnings(ctx: ServeContext, payload: dict[str, Any]) -> dict[str, Any]:

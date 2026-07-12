@@ -156,6 +156,19 @@ class DiscogsClient:
             "/database/search", params={**params, "type": "release"}
         )
 
+    def get_master_versions(
+        self, master_id: int, per_page: int
+    ) -> dict[str, Any]:
+        """One page of a master's versions (026 on-demand "other pressings";
+        amendment-017-discogs-consumption-4 §1). Called ONLY by the scan
+        server's /api/master-versions on an explicit owner tap — never
+        during identification, sync, eval, or replay. Exactly one governed
+        request: page 1, caller-supplied per_page, no filters/sorts."""
+        return self._get_json(
+            f"/masters/{master_id}/versions",
+            params={"page": 1, "per_page": per_page},
+        )
+
     def download_image(self, uri: str) -> bytes | None:
         """Release-image binary (023 eval dataset; amendment-017-discogs-
         consumption-2 §2). `uri` is the absolute `images[].uri` URL — httpx

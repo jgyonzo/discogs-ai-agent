@@ -3,6 +3,78 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**026-scan-release-selection** (PR #16, merged to main 2026-07-12 —
+live validation CLOSED pre-merge, owner-validated 2026-07-12:
+quickstart SC-001..SC-006 all recorded, incl. SC-005's single-session
+wrong-pressing recovery via the on-demand fetch and SC-006's
+zero-versions-requests audit; the two replay fixes below were found
+DURING this validation) —
+the scan page's results reshaped from a flat candidate list into a
+**Selected match** + master + alternatives view with real Discogs
+links and an owner-invoked "other pressings" fetch (closes 024's
+measured "right album, wrong pressing" miss class at pick time).
+`collection-agent` only, zero new deps, ONE new Settings field
+(`COLLECTION_AGENT_SCAN_VERSIONS_MAX`, default 25 = per_page AND
+display cap of the single versions request), ~44 new tests (492→536).
+Two same-day owner-replay fixes rode the PR: 022 replay addendum 3 /
+FR-024 (cancelling a card's add-confirm step backs out that card only —
+it used to journal `skipped` and reset the whole scan; "None of these"
+stays the only skip gesture) and 026 replay addendum 1 / FR-012
+sharpened + FR-015 (empty on-demand result says WHICH empty:
+all-versions-already-shown vs none-found, surfaced in the button +
+status line — a no-change tap never renders as success; both messages
+test-pinned).
+(1) **Selected/alternatives presentation** — `candidates[0]` IS the
+selected release (documented contract semantic, NOT a ranking change;
+ladder + 024 exact-catno re-rank already order best-first); master
+identity = the candidate's own title + a master page link, NO
+`get_master` call ever (R2 — default view adds zero requests, SC-006
+test-pinned); one shared card renderer ⇒ photo scan, manual search,
+and on-demand pressings render identically (FR-011/014 structurally
+true). (2) **Server-built page links (019 discipline)** — Candidate
+gains additive `release_page_url` (always) / `master_page_url` (iff
+`master_id`), built ONLY in `tools/common.py` (`release_page_url`
+refactored to id-based core + new `master_page_url`; `/release/{` and
+`/master/{` shapes grep-guarded to exactly one src site each); the
+static page renders only these fields — no hardcoded host, no
+client-side URL minting, anchors `target=_blank rel="noopener
+noreferrer"` structurally separate from add buttons (all
+grep-guarded in `test_scan_page_links.py`). (3) **On-demand master
+versions** — NEW `DiscogsClient.get_master_versions` (ONE governed
+`GET /masters/{id}/versions`, page 1, per_page=cap, called ONLY by
+the endpoint, never in identification/sync/eval/replay) behind NEW
+`GET /api/master-versions?scan_id&master_id`: gates in order
+(unknown/closed cycle → 409 `superseded`; master_id not carried by a
+REGISTERED candidate of that cycle → 403 `unknown_master` — mirror of
+the add gate); deliberately does NOT bump the supersede generation
+(it extends the current cycle; gen re-checked after the fetch, a
+mid-flight close discards with zero state effects);
+`candidates_from_versions` maps verbatim (str(released) year, whole
+`format`/`label` strings list-wrapped never split, `discogs_uri=None`,
+requested master_id) and dedupes against the cycle's registered ids
+(the selected release always drops — it's a version of its own
+master; all-deduped ⇒ honest empty message); results register into
+the SAME session allowlist + cycle title map ⇒ `/api/add`, duplicate
+double-confirmation, and the journal work with ZERO changes (adds
+journal the cycle's original source; NO journal schema change, the
+fetch itself is never journaled — it's a read, like search);
+`VersionsResponse.total_versions` = pagination.items verbatim for
+"showing N of T" honesty (FR-013). Discogs failure → 502, cycle
+stays usable. Eval comparability preserved by construction AND
+pinned (R9 test: fixed payload ⇒ byte-identical ordering/fields
+minus the two link fields); zero edits under `eval/`, vision prompt
+frozen. Artifacts: `specs/026-scan-release-selection/` (spec, plan,
+research R1–R9, data-model, quickstart + owner checklist, tasks
+T001–T023 ALL complete incl. owner-only T023, contracts:
+`amendment-017-discogs-consumption-4.md` — +`GET
+/masters/{id}/versions` read, ZERO new writes, +1 req per explicit
+tap only; `amendment-022-scan-api-3.md` — link fields + selected
+semantic + endpoint + settings). Out of scope kept: `get_master`
+metadata fetch, versions pagination/load-more UI, auto-fetch of
+versions (owner decision 2026-07-12: on-demand only), ranking
+changes.
+
+Prior feature:
 **025-eval-replay-barcode-gate** (PR #15, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
 SC-001..SC-006 all recorded, incl. two byte-identical back-to-back

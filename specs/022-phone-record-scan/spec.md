@@ -433,3 +433,31 @@ client-side image downscaling, and any change to write gating.
 **Out of scope**: cancelling the provider-side HTTP request of a
 superseded vision call beyond the hard timeout (no clean cross-thread
 kill; the result is discarded and the timeout bounds the waste).
+
+## Replay addendum 3 (2026-07-12) — cancelling a confirm must not skip the scan
+
+**Finding** (owner replay during 026 live use; the behavior dates from
+this feature's original page). Tapping "This one — add it" swaps the
+card's actions for "Confirm add" / "Cancel". Cancel was wired to the
+same handler as "None of these": it journaled a `skipped` outcome for
+the whole cycle and reset the page. Backing out of a single candidate's
+confirm step and rejecting the entire candidate list are different
+intents; conflating them destroyed a live result set on a mis-tap.
+
+**Requirement delta.**
+
+- **FR-024 (new)**: cancelling a candidate's add-confirmation step
+  (first confirm or the duplicate second confirm) MUST return only that
+  card to its pre-confirm state. The scan cycle stays open, every other
+  candidate (and any fetched pressings, 026) stays actionable, and
+  nothing is journaled by the cancel. "None of these" remains the only
+  explicit skip gesture; abandoned cycles are still accounted for by
+  FR-022's auto-close.
+
+**Journal note**: cancelled confirms therefore no longer produce
+`skipped` lines carrying that release_id; cycle-level accounting is
+unchanged (add / explicit skip / FR-022 auto-close). No journal schema
+change.
+
+**Shipped in**: 026's PR #16 (the fix touches the shared results
+rendering that 026 restructured).

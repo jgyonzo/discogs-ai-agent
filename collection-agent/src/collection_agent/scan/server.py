@@ -31,8 +31,10 @@ from collection_agent.scan.models import (
     ScanResponse,
     SessionResponse,
     SkipRequest,
+    VersionsResponse,
 )
 from collection_agent.scan.search import (
+    candidates_from_versions,
     find_candidates,
     find_candidates_text,
     snapshot_duplicate_checker,
@@ -77,6 +79,9 @@ class _CycleContext:
         self.evidence_fields = evidence_fields or {}
         self.titles: dict[int, str] = {}
         self.has_candidates = False
+        # 026: master ids of this cycle's served candidates — the gate input
+        # for /api/master-versions (only a displayed master can be fetched)
+        self.master_ids: set[int] = set()
 
 
 def create_app(
@@ -114,6 +119,8 @@ def create_app(
         ctx.has_candidates = bool(candidates)
         for c in candidates:
             ctx.titles[c.release_id] = c.title
+            if c.master_id is not None:
+                ctx.master_ids.add(c.master_id)
         cycles[scan_id] = ctx
         session.register_candidates([c.release_id for c in candidates])
 
@@ -322,6 +329,70 @@ def create_app(
             candidates=candidates,
             more_matches=more_matches,
             message=None if candidates else NO_RESULTS_MESSAGE,
+        )
+
+    @app.get("/api/master-versions")
+    def master_versions(scan_id: str, master_id: int):
+        """026 (amendment-022-scan-api-3 delta 3): on-demand fetch of a
+        displayed master's other pressings. Extends the CURRENT cycle —
+        deliberately does NOT bump the generation (that would auto-close
+        the very cycle the owner is refining); a newer scan racing this
+        fetch still supersedes it via the generation check."""
+        with state_lock:
+            gen = generation["current"]
+            ctx = cycles.get(scan_id)
+            if ctx is None or session.is_closed(scan_id):
+                return _superseded_response()
+            if master_id not in ctx.master_ids:
+                return _error(
+                    403,
+                    "unknown_master",
+                    "That master was not shown for a candidate in this "
+                    "scan — nothing was fetched.",
+                )
+            exclude_ids = set(ctx.titles)
+
+        try:
+            payload = discogs_client.get_master_versions(
+                master_id, settings.scan_versions_max
+            )
+        except DiscogsError as exc:
+            if _superseded(gen):
+                return _superseded_response()
+            return _error(
+                502,
+                "discogs_unavailable",
+                f"Discogs versions fetch failed: {exc}",
+            )
+
+        candidates, total = candidates_from_versions(
+            payload, master_id, settings, _duplicate_checker(), exclude_ids
+        )
+        with state_lock:
+            if gen != generation["current"] or session.is_closed(scan_id):
+                # a newer scan (or an add/skip) closed this cycle mid-fetch —
+                # discard with zero allowlist/journal effects
+                return _superseded_response()
+            for c in candidates:
+                ctx.titles[c.release_id] = c.title
+            session.register_candidates([c.release_id for c in candidates])
+        # empty is honest either way, but say WHICH empty it is: versions
+        # that all deduped away are already on the owner's screen — very
+        # different from Discogs listing nothing else
+        message = None
+        if not candidates:
+            message = (
+                "Every version Discogs lists for this master is already "
+                "shown above."
+                if (payload.get("versions") or [])
+                else "No other pressings of this master found on Discogs."
+            )
+        return VersionsResponse(
+            scan_id=scan_id,
+            master_id=master_id,
+            candidates=candidates,
+            total_versions=total,
+            message=message,
         )
 
     # -- write gate --------------------------------------------------------------

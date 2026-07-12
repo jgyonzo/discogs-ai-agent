@@ -801,3 +801,362 @@ class TestPhotoRetention:
         resp = post_photo(client)
         assert resp.status_code == 200
         assert not settings.scan_retention_dir.exists()
+
+
+# -- 026: selected/links/on-demand master versions ----------------------------
+
+MASTERED_TWO = {
+    "barcode": payloads.search_page(
+        [
+            payloads.search_result(101, master_id=5309),
+            payloads.search_result(102),
+        ]
+    )
+}
+
+
+class TestCandidateLinks026:
+    """T008/T012: served candidates carry server-built page links
+    (amendment-022-scan-api-3 delta 1); position 0 is the selected release
+    (delta 2 — a documented semantic, not a new field)."""
+
+    def test_scan_response_carries_link_fields(self, settings, store):
+        client, _, _ = make_client(settings, store, search_responses=MASTERED_TWO)
+        body = post_photo(client).json()
+        first, second = body["candidates"]
+        assert first["release_page_url"] == "https://www.discogs.com/release/101"
+        assert first["master_page_url"] == "https://www.discogs.com/master/5309"
+        # masterless alternative: release link yes, master link honestly None
+        assert second["release_page_url"] == "https://www.discogs.com/release/102"
+        assert second["master_page_url"] is None
+
+    def test_manual_search_carries_link_fields(self, settings, store):
+        client, discogs, _ = make_client(settings, store)
+        discogs.search_responses["q"] = payloads.search_page(
+            [payloads.search_result(103, master_id=7)]
+        )
+        body = client.get("/api/search", params={"q": "test"}).json()
+        c = body["candidates"][0]
+        assert c["release_page_url"] == "https://www.discogs.com/release/103"
+        assert c["master_page_url"] == "https://www.discogs.com/master/7"
+
+    def test_web_base_setting_honored(self, store, tmp_path):
+        from collection_agent.settings import Settings
+
+        custom = Settings(
+            _env_file=None,
+            DISCOGS_USER_TOKEN=TOKEN,
+            SNAPSHOT_PATH=tmp_path / "snapshot.json",
+            COLLECTION_AGENT_SCAN_JOURNAL_DIR=tmp_path / "scan-sessions",
+            DISCOGS_WEB_BASE_URL="https://web.example.test",
+        )
+        client, _, _ = make_client(custom, store, search_responses=MASTERED_TWO)
+        first = post_photo(client).json()["candidates"][0]
+        assert first["release_page_url"] == "https://web.example.test/release/101"
+        assert first["master_page_url"] == "https://web.example.test/master/5309"
+
+    def test_adding_an_alternative_adds_that_release(self, settings, store):
+        client, discogs, session = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = post_photo(client).json()["scan_id"]
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 102}
+        ).json()
+        assert body["status"] == "added"
+        assert [a[2] for a in discogs.adds] == [102]  # the alternative, not 101
+        assert session.log[-1].release_id == 102
+
+
+class TestMasterVersions026:
+    """T018: GET /api/master-versions — gates, verbatim mapping + dedupe,
+    allowlist integration, honest failure, no generation bump
+    (amendment-022-scan-api-3 delta 3)."""
+
+    @staticmethod
+    def _scan(client):
+        return post_photo(client).json()["scan_id"]
+
+    def test_happy_path_maps_dedupes_and_counts(self, settings, store):
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [
+                payloads.version_item(101),  # the selected release itself
+                payloads.version_item(201, catno="F-9502"),
+                payloads.version_item(202),
+            ],
+            items=10,
+        )
+        scan_id = self._scan(client)
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["scan_id"] == scan_id and body["master_id"] == 5309
+        assert [c["release_id"] for c in body["candidates"]] == [201, 202]
+        assert body["total_versions"] == 10  # verbatim, never the deduped count
+        assert body["message"] is None
+        c = body["candidates"][0]
+        assert c["master_id"] == 5309
+        assert c["release_page_url"] == "https://www.discogs.com/release/201"
+        assert c["master_page_url"] == "https://www.discogs.com/master/5309"
+        assert c["duplicate"]["state"] == "unknown"  # no snapshot: honest
+        # exactly one governed request, capped by the settings field
+        assert discogs.versions_calls == [(5309, settings.scan_versions_max)]
+
+    def test_unknown_master_403_before_any_fetch(self, settings, store):
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 999},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "unknown_master"
+        assert discogs.versions_calls == []  # gate fires before the wire
+
+    def test_unknown_scan_id_409(self, settings, store):
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        self._scan(client)
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": "nope", "master_id": 5309},
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "superseded"
+        assert discogs.versions_calls == []
+
+    def test_closed_cycle_409(self, settings, store):
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        client.post("/api/skip", json={"scan_id": scan_id})
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        assert resp.status_code == 409
+        assert discogs.versions_calls == []
+
+    def test_cycle_closed_mid_fetch_discards_with_no_state_effects(
+        self, settings, store
+    ):
+        client, discogs, session = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [payloads.version_item(201)]
+        )
+        scan_id = self._scan(client)
+        original = discogs.get_master_versions
+
+        def close_then_serve(master_id, per_page):
+            # the cycle closes while the fetch is on the wire
+            session.record_outcome(scan_id, "skipped", "photo")
+            return original(master_id, per_page)
+
+        discogs.get_master_versions = close_then_serve
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "superseded"
+        # discarded means NOT allowlisted: adding the version is rejected
+        add = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 201}
+        )
+        assert add.status_code == 403
+        assert add.json()["error"]["code"] == "unknown_candidate"
+
+    def test_discogs_failure_502_cycle_still_usable(self, settings, store):
+        from collection_agent.discogs.client import DiscogsServerError
+
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_failures[5309] = DiscogsServerError("boom")
+        scan_id = self._scan(client)
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        assert resp.status_code == 502
+        assert resp.json()["error"]["code"] == "discogs_unavailable"
+        # FR-012: the previously served results remain fully usable
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 101}
+        ).json()
+        assert body["status"] == "added"
+
+    def test_fetch_does_not_close_the_cycle(self, settings, store):
+        client, discogs, session = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [payloads.version_item(201)]
+        )
+        scan_id = self._scan(client)
+        client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        # no generation bump, no auto-close: the original selected release
+        # is still addable and nothing was journaled by the fetch
+        assert session.log == []
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 101}
+        ).json()
+        assert body["status"] == "added"
+
+    def test_add_from_version_journals_with_cycle_source(self, settings, store):
+        client, discogs, session = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [payloads.version_item(201, title="US Pressing")]
+        )
+        scan_id = self._scan(client)
+        client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        body = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 201}
+        ).json()
+        assert body["status"] == "added"
+        line = session.log[-1]
+        assert line.outcome == "added"
+        assert line.source == "photo"  # the cycle's own source, unchanged
+        assert line.release_id == 201
+        assert line.release_title == "US Pressing"
+
+    def test_add_from_version_duplicate_confirmation_enforced(
+        self, settings, store, complete_snapshot
+    ):
+        client, discogs, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page(
+                    [payloads.search_result(999, master_id=5309)]
+                )
+            },
+            snapshot=complete_snapshot,
+        )
+        # release 1 is in the snapshot twice — served via versions here
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [payloads.version_item(1)]
+        )
+        scan_id = self._scan(client)
+        versions = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        ).json()
+        assert versions["candidates"][0]["duplicate"]["state"] == "in_collection"
+        first = client.post(
+            "/api/add", json={"scan_id": scan_id, "release_id": 1}
+        ).json()
+        assert first["status"] == "needs_duplicate_confirmation"
+        assert discogs.adds == []
+        second = client.post(
+            "/api/add",
+            json={"scan_id": scan_id, "release_id": 1, "confirm_duplicate": True},
+        ).json()
+        assert second["status"] == "added"
+
+    def test_all_deduped_says_already_shown(self, settings, store):
+        # every fetched version was already on screen — the message must
+        # say that, not a false-negative "found nothing"
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        discogs.versions_responses[5309] = payloads.versions_page(
+            [payloads.version_item(101)]  # only the selected release itself
+        )
+        scan_id = self._scan(client)
+        body = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        ).json()
+        assert body["candidates"] == []
+        assert body["total_versions"] == 1
+        assert "already shown" in body["message"]
+
+    def test_genuinely_empty_versions_page_says_none_found(
+        self, settings, store
+    ):
+        # unscripted master ⇒ the fake serves an empty versions page
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        body = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        ).json()
+        assert body["candidates"] == []
+        assert "No other pressings" in body["message"]
+
+    def test_scan_without_tap_issues_zero_versions_calls(self, settings, store):
+        # SC-006: the fetch is owner-invoked ONLY — a plain scan+add session
+        # never touches the versions endpoint
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        client.post("/api/add", json={"scan_id": scan_id, "release_id": 101})
+        assert discogs.versions_calls == []
+
+    def test_versions_use_configured_cap(self, store, tmp_path):
+        from collection_agent.settings import Settings
+
+        custom = Settings(
+            _env_file=None,
+            DISCOGS_USER_TOKEN=TOKEN,
+            SNAPSHOT_PATH=tmp_path / "snapshot.json",
+            COLLECTION_AGENT_SCAN_JOURNAL_DIR=tmp_path / "scan-sessions",
+            COLLECTION_AGENT_SCAN_VERSIONS_MAX=7,
+        )
+        client, discogs, _ = make_client(
+            custom, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        )
+        assert discogs.versions_calls == [(5309, 7)]
+
+    def test_alternatives_masters_are_fetchable_too(self, settings, store):
+        # the gate allows any master a REGISTERED candidate carries — not
+        # only the selected release's (server offers, client selects)
+        client, discogs, _ = make_client(
+            settings, store,
+            search_responses={
+                "barcode": payloads.search_page(
+                    [
+                        payloads.search_result(101, master_id=5309),
+                        payloads.search_result(102, master_id=777),
+                    ]
+                )
+            },
+        )
+        discogs.versions_responses[777] = payloads.versions_page(
+            [payloads.version_item(301)]
+        )
+        scan_id = self._scan(client)
+        resp = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 777},
+        )
+        assert resp.status_code == 200
+        assert [c["release_id"] for c in resp.json()["candidates"]] == [301]

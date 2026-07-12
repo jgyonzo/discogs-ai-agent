@@ -18,6 +18,7 @@ from collections.abc import Callable
 
 from collection_agent.scan.models import Candidate, DuplicateStatus, ScanEvidence
 from collection_agent.settings import Settings
+from collection_agent.tools.common import master_page_url, release_page_url_for_id
 
 DuplicateChecker = Callable[[int], DuplicateStatus]
 
@@ -142,14 +143,18 @@ def compose_query(evidence: ScanEvidence) -> str | None:
 
 
 def _candidate_from_result(
-    result: dict, duplicate_checker: DuplicateChecker
+    result: dict, settings: Settings, duplicate_checker: DuplicateChecker
 ) -> Candidate:
     """Verbatim mapping; the only transformation is str() on a numeric year
-    (Discogs sends search years as strings; be tolerant, never invent)."""
+    (Discogs sends search years as strings; be tolerant, never invent).
+    026: plus the two server-built page links (never from the payload —
+    tools/common owns the URL shapes; master link iff master_id)."""
     year = result.get("year")
     thumb = result.get("thumb") or result.get("cover_image") or None
+    release_id = int(result["id"])
+    master_id = int(result["master_id"]) if result.get("master_id") else None
     return Candidate(
-        release_id=int(result["id"]),
+        release_id=release_id,
         title=result["title"],
         year=str(year) if year is not None else None,
         country=result.get("country"),
@@ -159,8 +164,12 @@ def _candidate_from_result(
         thumb_url=thumb,
         discogs_uri=result.get("uri"),
         # 024: master_id verbatim; Discogs uses 0/absent for "no master"
-        master_id=int(result["master_id"]) if result.get("master_id") else None,
-        duplicate=duplicate_checker(int(result["id"])),
+        master_id=master_id,
+        release_page_url=release_page_url_for_id(settings, release_id),
+        master_page_url=(
+            master_page_url(settings, master_id) if master_id else None
+        ),
+        duplicate=duplicate_checker(release_id),
     )
 
 
@@ -192,7 +201,7 @@ def _run_search(
         if rid in seen:
             continue
         seen.add(rid)
-        candidates.append(_candidate_from_result(result, duplicate_checker))
+        candidates.append(_candidate_from_result(result, settings, duplicate_checker))
         if len(candidates) >= settings.scan_candidates_max:
             break
     total = int(payload.get("pagination", {}).get("items", len(results)))
@@ -226,6 +235,55 @@ def find_candidates(
         if candidates:
             return candidates, more, tried
     return [], False, tried
+
+
+def candidates_from_versions(
+    payload: dict,
+    master_id: int,
+    settings: Settings,
+    duplicate_checker: DuplicateChecker,
+    exclude_ids: set[int],
+) -> tuple[list[Candidate], int]:
+    """Map a GET /masters/{id}/versions payload to candidates (026,
+    data-model §2). Verbatim discipline: the only transformations are the
+    same ones search tolerates — str() on the year and list-wrapping the
+    payload's single format/label strings (never split/parsed). Items whose
+    release_id is already registered in the requesting cycle (incl. the
+    selected release itself — the list contains it) are dropped, so the
+    result is honestly OTHER pressings. Returns (candidates, total) where
+    total is pagination.items verbatim (FR-013 honesty)."""
+    versions = payload.get("versions") or []
+    total = int(payload.get("pagination", {}).get("items", len(versions)))
+    candidates: list[Candidate] = []
+    seen: set[int] = set(exclude_ids)
+    for item in versions:
+        release_id = int(item["id"])
+        if release_id in seen:
+            continue
+        seen.add(release_id)
+        released = item.get("released")
+        fmt = item.get("format")
+        label = item.get("label")
+        candidates.append(
+            Candidate(
+                release_id=release_id,
+                title=item["title"],
+                year=str(released) if released else None,
+                country=item.get("country"),
+                formats=[fmt] if fmt else [],
+                labels=[label] if label else [],
+                catno=item.get("catno"),
+                thumb_url=item.get("thumb") or None,
+                discogs_uri=None,
+                # the requested master, validated server-side against the
+                # cycle's own candidates — genuine by construction
+                master_id=master_id,
+                release_page_url=release_page_url_for_id(settings, release_id),
+                master_page_url=master_page_url(settings, master_id),
+                duplicate=duplicate_checker(release_id),
+            )
+        )
+    return candidates, total
 
 
 def find_candidates_text(

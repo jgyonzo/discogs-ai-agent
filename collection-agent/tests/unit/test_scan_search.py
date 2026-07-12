@@ -445,3 +445,138 @@ class TestExactCatnoRerank:
         assert (top.release_id, top.catno, top.master_id, top.year) == (
             2, "sub-15", 263296, "2001",
         )  # re-rank changed ORDER only; fields byte-equal to the payload
+
+
+class TestCandidateLinks026:
+    """026 T006: candidates carry server-built page links; everything else
+    is byte-identical to pre-026 (research R9 eval-comparability pin)."""
+
+    def test_links_built_from_settings_base(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["barcode"] = payloads.search_page(
+            [payloads.search_result(101, master_id=5309)]
+        )
+        candidates, _, _ = find_candidates(client, settings, FULL)
+        assert candidates[0].release_page_url == "https://www.discogs.com/release/101"
+        assert candidates[0].master_page_url == "https://www.discogs.com/master/5309"
+
+    def test_masterless_candidate_gets_no_master_link(self, settings):
+        client = FakeDiscogsClient()
+        client.search_responses["barcode"] = payloads.search_page(
+            [payloads.search_result(101)]  # no master_id in payload
+        )
+        candidates, _, _ = find_candidates(client, settings, FULL)
+        assert candidates[0].master_page_url is None
+
+    def test_everything_else_byte_identical_to_pre_026(self, settings):
+        """R9 pin: for a fixed payload, ordering and every non-link field
+        match a pre-026 expectation exactly."""
+        client = FakeDiscogsClient()
+        client.search_responses["barcode"] = payloads.search_page(
+            [
+                payloads.search_result(103, title="C", master_id=7),
+                payloads.search_result(101, title="A"),
+                payloads.search_result(102, title="B", catno=None),
+            ]
+        )
+        candidates, more, tried = find_candidates(client, settings, FULL)
+        assert not more and tried == ["barcode"]
+        stripped = [
+            c.model_dump(exclude={"release_page_url", "master_page_url"})
+            for c in candidates
+        ]
+        assert [c["release_id"] for c in stripped] == [103, 101, 102]
+        assert stripped[0]["title"] == "C" and stripped[0]["master_id"] == 7
+        assert stripped[1]["master_id"] is None
+        assert stripped[2]["catno"] is None
+        assert all(
+            c["duplicate"]["state"] == "unknown" for c in stripped
+        )
+
+
+class TestCandidatesFromVersions026:
+    """026 T015: verbatim versions→Candidate mapping + dedupe
+    (data-model §2)."""
+
+    @staticmethod
+    def _map(payload, settings, master_id=5309, exclude=None):
+        from collection_agent.scan.search import (
+            candidates_from_versions,
+            pending_duplicate_checker,
+        )
+
+        return candidates_from_versions(
+            payload, master_id, settings, pending_duplicate_checker,
+            exclude or set(),
+        )
+
+    def test_field_by_field_verbatim(self, settings):
+        page = payloads.versions_page(
+            [
+                payloads.version_item(
+                    201, title="Test Record", released=1983,
+                    country="US", fmt="LP, Album, Reissue",
+                    label="Fantasy", catno="F-9502",
+                )
+            ]
+        )
+        candidates, total = self._map(page, settings)
+        assert total == 1
+        c = candidates[0]
+        assert c.release_id == 201
+        assert c.title == "Test Record"        # verbatim, never re-composed
+        assert c.year == "1983"                 # str() on numeric released
+        assert c.country == "US"
+        assert c.formats == ["LP, Album, Reissue"]  # whole string, never split
+        assert c.labels == ["Fantasy"]
+        assert c.catno == "F-9502"
+        assert c.thumb_url == "https://i.discogs.com/thumb-201.jpg"
+        assert c.discogs_uri is None            # not in the payload
+        assert c.master_id == 5309              # the validated request master
+        assert c.release_page_url == "https://www.discogs.com/release/201"
+        assert c.master_page_url == "https://www.discogs.com/master/5309"
+        assert c.duplicate.state == "unknown"
+
+    def test_absent_fields_stay_absent(self, settings):
+        page = payloads.versions_page(
+            [payloads.version_item(202, omit={"released", "format", "label",
+                                              "catno", "country", "thumb"})]
+        )
+        candidates, _ = self._map(page, settings)
+        c = candidates[0]
+        assert c.year is None and c.country is None and c.catno is None
+        assert c.formats == [] and c.labels == [] and c.thumb_url is None
+
+    def test_dedupe_drops_already_registered_ids(self, settings):
+        # the versions list contains the selected release itself (201) and
+        # an already-listed alternative (202) — both drop; 203 survives
+        page = payloads.versions_page(
+            [
+                payloads.version_item(201),
+                payloads.version_item(202),
+                payloads.version_item(203),
+            ],
+            items=3,
+        )
+        candidates, total = self._map(page, settings, exclude={201, 202})
+        assert [c.release_id for c in candidates] == [203]
+        assert total == 3  # verbatim pagination.items, not the deduped count
+
+    def test_all_deduped_is_honestly_empty(self, settings):
+        page = payloads.versions_page([payloads.version_item(201)])
+        candidates, total = self._map(page, settings, exclude={201})
+        assert candidates == [] and total == 1
+
+    def test_duplicate_dedupe_within_page(self, settings):
+        page = payloads.versions_page(
+            [payloads.version_item(204), payloads.version_item(204)]
+        )
+        candidates, _ = self._map(page, settings)
+        assert [c.release_id for c in candidates] == [204]
+
+    def test_total_larger_than_page_carried_verbatim(self, settings):
+        page = payloads.versions_page(
+            [payloads.version_item(205)], items=140
+        )
+        _, total = self._map(page, settings)
+        assert total == 140

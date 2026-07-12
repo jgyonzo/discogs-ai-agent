@@ -175,6 +175,61 @@ def search_page(
     }
 
 
+def version_item(
+    release_id: int,
+    title: str = "Test Record",
+    released: Any = "1995",
+    country: str | None = "Germany",
+    fmt: str | None = 'LP, Album',
+    label: str | None = "Test Label",
+    catno: str | None = "TL-001",
+    thumb: str | None = None,
+    omit: set[str] | None = None,
+) -> dict[str, Any]:
+    """One /masters/{id}/versions item (026, api-reference §7.6). Versions
+    items carry SINGLE format/label strings (unlike search's lists) and a
+    `released` year instead of `year`; `omit` drops keys for absent-field
+    handling."""
+    item: dict[str, Any] = {
+        "id": release_id,
+        "title": title,
+        "released": released,
+        "country": country,
+        "format": fmt,
+        "label": label,
+        "catno": catno,
+        "thumb": thumb
+        if thumb is not None
+        else f"https://i.discogs.com/thumb-{release_id}.jpg",
+        "status": "Accepted",
+        "major_formats": ["Vinyl"],
+        "resource_url": f"https://api.discogs.com/releases/{release_id}",
+        "stats": {"user": {"in_collection": 0, "in_wantlist": 0}},
+    }
+    for key in omit or set():
+        item.pop(key, None)
+    return item
+
+
+def versions_page(
+    versions: list[dict[str, Any]],
+    items: int | None = None,
+    per_page: int = 25,
+) -> dict[str, Any]:
+    """/masters/{id}/versions envelope; `items` defaults to len(versions)
+    but can be larger to exercise honest truncation (FR-013)."""
+    return {
+        "pagination": {
+            "page": 1,
+            "pages": 1,
+            "per_page": per_page,
+            "items": items if items is not None else len(versions),
+            "urls": {},
+        },
+        "versions": versions,
+    }
+
+
 def add_instance_response(
     instance_id: int, release_id: int, folder_id: int = 1
 ) -> dict[str, Any]:

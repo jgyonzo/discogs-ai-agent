@@ -142,6 +142,12 @@ class Candidate(BaseModel):
     # 024: verbatim from the search result's master_id; Discogs sends 0 for
     # master-less releases — normalized to None, never constructed
     master_id: int | None = None
+    # 026 (amendment-022-scan-api-3 delta 1): server-built Discogs WEB page
+    # links — the only values the page may navigate with (019 discipline).
+    # Always populated at candidate construction; the None defaults exist
+    # only for model additivity. master_page_url is non-None iff master_id.
+    release_page_url: str | None = None
+    master_page_url: str | None = None
     duplicate: DuplicateStatus
 
 
@@ -178,6 +184,19 @@ class ScanResponse(BaseModel):
     evidence_summary: EvidenceSummary
     candidates: list[Candidate] = Field(default_factory=list)
     more_matches: bool = False
+    message: str | None = None
+
+
+class VersionsResponse(BaseModel):
+    """Response of GET /api/master-versions (026, amendment-022-scan-api-3
+    delta 3): the on-demand "other pressings" list for a displayed master."""
+
+    scan_id: str
+    master_id: int
+    candidates: list[Candidate] = Field(default_factory=list)
+    # verbatim pagination.items from Discogs — the honest full version
+    # count for "showing N of T" truncation messaging (FR-013)
+    total_versions: int = 0
     message: str | None = None
 
 
