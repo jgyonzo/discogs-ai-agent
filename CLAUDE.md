@@ -2,7 +2,14 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**Feature in flight: 028-collection-web-ui** (branch
+`028-collection-web-ui`) — one tabbed LAN page (Scan | Chat | Collection
+status/sync) served by the scan server; read
+`specs/028-collection-web-ui/plan.md` and its phase-1 artifacts
+(research R1–R10, data-model, quickstart, contracts: `web-ui-api.md` NEW,
+`amendment-017-agent-tools.md` deltas 12–14, `amendment-022-scan-api-4.md`).
+
+Most recently merged:
 **027-dockerize-collection-agent** (PR #17, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
 SC-001..SC-006 all recorded, incl. SC-001's phone scan-and-add through the
