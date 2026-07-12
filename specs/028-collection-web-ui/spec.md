@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "Grow the existing scan server and its self-contained static page into a single multi-tab web frontend for the collection-agent, serving Scan, Chat, and Collection (status + sync) on the trusted home LAN. Owner decisions (2026-07-12): grow the scan page — do not touch the demo-stack frontend component, do not create a new component; v1 surface = scan + chat + status + sync-trigger; browsing the full collection is out of scope (a link to the owner's collection page on the Discogs website suffices); folder-move execution via web chat IS allowed behind the existing no-auth trusted-LAN surface — explicit owner decision extending 022's recorded v1 risk."
 
+## Clarifications
+
+### Session 2026-07-12
+
+- Q: What should the web Sync button do — and should full re-sync (the terminal's `sync --full`) be reachable from the page? → A: Standard sync only. The button runs exactly what terminal `sync` (no flags) does: resume if interrupted, refresh otherwise. Full re-sync stays terminal-only in v1.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)
@@ -64,7 +70,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 ### Edge Cases
 
 - **No snapshot at all (first run)**: Chat tools cannot answer collection questions. The Chat tab must surface the absent-snapshot state (banner pointing to Sync) rather than failing opaquely; the Collection tab shows "absent" and offers Sync.
-- **Concurrent chat turns from two devices**: One shared conversation per server process (accepted v1 limitation). A turn arriving while another is processing is refused/queued clearly — never interleaved into a corrupted conversation.
+- **Concurrent chat turns from two devices**: One shared conversation per server process (accepted v1 limitation). A turn arriving while another is processing is refused with a clear busy signal (per FR-004) — never interleaved into a corrupted conversation.
 - **Pending move plan superseded**: A new user message while a plan is pending cancels the plan (mirrors the terminal behavior where anything but "y" cancels, and the session expires pending plans on the next turn). A confirm arriving for an already-expired/cancelled plan is refused with a clear message and executes nothing.
 - **Server restart with a pending plan**: The pending plan is in-memory and lost; a confirm after restart is refused. No write can occur without a live, server-held plan.
 - **Sync and scan at the same time**: Both consume the same Discogs per-token rate budget. Accepted for v1: scanning during a sync stays functional but slower; the UI notes that a sync is running. No mutual exclusion.
@@ -85,7 +91,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **FR-006**: A pending plan MUST be cancellable: an explicit decline, or any new user turn, cancels it. A confirm referencing a plan that is no longer pending (cancelled, superseded, already executed, or lost to restart) MUST be refused with a clear message and MUST execute nothing.
 - **FR-007**: After a confirmed plan executes, the outcome per move (moved / skipped with reason) MUST be reported in the conversation and the local snapshot MUST be marked stale (matching terminal semantics).
 - **FR-008**: The Collection view MUST show the local snapshot's status — state (complete/partial/stale/absent), record and folder counts, and last-sync time — equivalent in content to the terminal `status` command, via a read-only request.
-- **FR-009**: The owner MUST be able to trigger the existing journaled, resumable collection sync from the page. The sync runs in the background; at most one sync runs at a time — a trigger while one is running MUST be refused with a clear conflict message. Progress (phase, done/total) MUST be observable from the page while the sync runs, and completion or failure MUST be reported honestly. A failed/interrupted sync MUST be resumable by triggering again (existing journal semantics).
+- **FR-009**: The owner MUST be able to trigger the existing journaled, resumable collection sync from the page, with the exact semantics of the terminal `sync` command without flags (resume if interrupted, refresh otherwise); full re-sync (`--full`) is NOT reachable from the page in v1 and stays terminal-only. The sync runs in the background; at most one sync runs at a time — a trigger while one is running MUST be refused with a clear conflict message. Progress (phase, done/total) MUST be observable from the page while the sync runs, and completion or failure MUST be reported honestly. A failed/interrupted sync MUST be resumable by triggering again (existing journal semantics).
 - **FR-010**: When a sync completes, the server's in-memory view of the snapshot — used by chat answers and by the scan duplicate checker — MUST reflect the fresh snapshot without a server restart.
 - **FR-011**: When the snapshot is stale, partial, or absent, the Chat view MUST show a banner stating the snapshot condition with a direct Sync action (the web translation of the terminal chat's "Sync now?" prompt). The banner clears once the snapshot is complete.
 - **FR-012**: The Collection view MUST include a link to the owner's collection page on the Discogs website, opening in a new browser tab. The link MUST be built by the server from configuration (019 link discipline — the page never assembles Discogs URLs client-side).
@@ -121,6 +127,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **No streaming**: a chat turn is one request/response with a busy indicator; token streaming is a possible future refinement, not v1.
 - **Chat history is process-lived**: no persistence of the web conversation across server restarts (terminal parity). The scan session journal remains the only durable journal; no new journal is introduced for chat.
 - **Collection browsing stays on Discogs**: the v1 Collection view is status + sync + a link to the owner's Discogs collection page; no in-page record table.
+- **Full re-sync stays in the terminal**: the page exposes only the standard sync (clarified 2026-07-12); `--full` remains a terminal-only recovery action.
 - **Component scope**: `collection-agent` only. The demo-stack `frontend/`, `agent/`, and `etl/` components are untouched. Eval pipeline and vision prompt untouched. Target zero new dependencies.
 - **Existing machinery is reused, not rebuilt**: the journaled resumable sync, the snapshot store, the agent tool loop, the scan pipeline, and the rate-limit governor are consumed as-is; this feature adds a web surface over them.
 - **Rate-budget sharing accepted**: sync and scan/chat may compete for the Discogs per-token rate budget; v1 accepts slower responses during a sync with a visible hint rather than mutual exclusion.
