@@ -2,7 +2,25 @@
 Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
-**No feature is currently in flight.** Most recently merged:
+**In flight: 027-dockerize-collection-agent** (branch
+`027-dockerize-collection-agent`; spec + plan committed, tasks pending) —
+package the collection-agent as one image (all CLI modes, default `scan`)
+plus an OPT-IN compose service (`profiles: ["collection"]`, :8022,
+`env_file: .env`, single `collection-agent/data/` bind mount). Load-bearing
+design fact (research R2): Settings path defaults anchor to the installed
+source location (`settings.py:17`), so an EDITABLE install at
+`/app/collection-agent` makes every default resolve inside the mount — zero
+src/ changes, zero new Settings fields, zero env overrides. Demo stack
+(postgres/agent-api/frontend) byte-untouched, pinned by stdlib-only guard
+tests (default-service-set parse; no PyYAML — zero new deps); deliberately
+NO `restart:` policy (startup folder validation exits 2 loudly once, never a
+live-Discogs retry loop) and NO healthcheck/depends_on. New contract:
+`specs/027-dockerize-collection-agent/contracts/docker-packaging.md`. Plan:
+`specs/027-dockerize-collection-agent/plan.md` (research R1–R10, data-model,
+quickstart + owner checklist). Out of scope: AWS deploy, multi-tenancy,
+OAuth, TLS/auth, web chat, collection_matcher workflows.
+
+Most recently merged:
 **026-scan-release-selection** (PR #16, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12:
 quickstart SC-001..SC-006 all recorded, incl. SC-005's single-session
