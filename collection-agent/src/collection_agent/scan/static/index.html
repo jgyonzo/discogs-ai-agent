@@ -40,6 +40,13 @@
   .logline b.skipped, .logline b.no_match { color: var(--warn); }
   #more { color: var(--dim); font-size: .85rem; margin: 4px 0 10px; }
   footer { margin-top: 16px; color: var(--dim); font-size: .75rem; }
+  .sechead { color: var(--dim); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 6px; }
+  .card.selected { border-color: var(--accent); }
+  .linkout { display: inline-block; margin-top: 4px; color: var(--accent); font-size: .85rem; text-decoration: underline; }
+  .masterrow { margin-top: 6px; font-size: .85rem; color: var(--dim); }
+  .masterrow button { margin-left: 8px; font-size: .8rem; padding: 6px 10px; }
+  .pressnote { color: var(--dim); font-size: .85rem; margin: 4px 0 10px; }
+  .pressnote.error { color: var(--err); }
 </style>
 </head>
 <body>
@@ -50,6 +57,7 @@
 
 <div id="status"></div>
 <div id="candidates"></div>
+<div id="pressings"></div>
 <div id="more"></div>
 
 <div id="manual">
@@ -67,6 +75,7 @@
   var scanBtn = document.getElementById("scanBtn");
   var statusEl = document.getElementById("status");
   var candidatesEl = document.getElementById("candidates");
+  var pressingsEl = document.getElementById("pressings");
   var moreEl = document.getElementById("more");
   var manualEl = document.getElementById("manual");
   var qEl = document.getElementById("q");
@@ -95,6 +104,7 @@
   function cameraReady() {
     current = null;
     candidatesEl.innerHTML = "";
+    pressingsEl.innerHTML = "";
     moreEl.textContent = "";
     manualEl.classList.add("show"); // manual search is always one tap away
     refreshLog();
@@ -124,34 +134,73 @@
     });
   }
 
+  function sectionHead(parent, text) {
+    var head = document.createElement("div");
+    head.className = "sechead";
+    head.textContent = text;
+    parent.appendChild(head);
+  }
+
+  // 026: one shared card builder — original candidates and on-demand
+  // pressings get IDENTICAL detail, badges, links, and add flow (FR-011).
+  // Outbound links render ONLY the server-built *_page_url fields (019
+  // discipline): real anchors, new tab, structurally separate from the add
+  // button — a link never adds, an add never navigates (FR-009).
+  function buildCard(c, isSelected) {
+    var card = document.createElement("div");
+    card.className = isSelected ? "card selected" : "card";
+    var img = c.thumb_url
+      ? '<img src="' + esc(c.thumb_url) + '" alt="">'
+      : '<div class="noimg">no image</div>';
+    var meta = [c.year, c.country, (c.formats || []).join(", "),
+                (c.labels || []).join(", "), c.catno]
+      .filter(Boolean).map(esc).join(" · ");
+    var link = c.release_page_url
+      ? '<a class="linkout" target="_blank" rel="noopener noreferrer" href="' +
+        esc(c.release_page_url) + '">View release on Discogs ↗</a>'
+      : "";
+    card.innerHTML =
+      img +
+      '<div class="info"><div class="title">' + esc(c.title) + "</div>" +
+      '<div class="meta">' + meta + "</div>" +
+      dupBadge(c.duplicate) + link +
+      '<div class="actions"></div></div>';
+    var actions = card.querySelector(".actions");
+    var addBtn = document.createElement("button");
+    addBtn.className = "secondary";
+    addBtn.textContent = "This one — add it";
+    addBtn.onclick = function () { confirmAdd(c, actions, false); };
+    actions.appendChild(addBtn);
+    if (isSelected && c.master_page_url) {
+      // master row: the work's identity is the candidate's own title (R2);
+      // the master page link is the verification path, no extra fetch
+      var row = document.createElement("div");
+      row.className = "masterrow";
+      row.innerHTML =
+        'Part of a master release · <a class="linkout" target="_blank" ' +
+        'rel="noopener noreferrer" href="' + esc(c.master_page_url) +
+        '">Master page ↗</a>';
+      var pressBtn = document.createElement("button");
+      pressBtn.className = "secondary";
+      pressBtn.textContent = "Show other pressings";
+      pressBtn.onclick = function () { fetchPressings(c, pressBtn); };
+      row.appendChild(pressBtn);
+      card.querySelector(".info").appendChild(row);
+    }
+    return card;
+  }
+
   function renderCandidates(data) {
     current = { scan_id: data.scan_id, hadCandidates: data.candidates.length > 0 };
     candidatesEl.innerHTML = "";
+    pressingsEl.innerHTML = "";
     moreEl.textContent = data.more_matches
       ? "More matches exist on Discogs — refine with manual search if yours isn't here."
       : "";
-    data.candidates.forEach(function (c) {
-      var card = document.createElement("div");
-      card.className = "card";
-      var img = c.thumb_url
-        ? '<img src="' + esc(c.thumb_url) + '" alt="">'
-        : '<div class="noimg">no image</div>';
-      var meta = [c.year, c.country, (c.formats || []).join(", "),
-                  (c.labels || []).join(", "), c.catno]
-        .filter(Boolean).map(esc).join(" · ");
-      card.innerHTML =
-        img +
-        '<div class="info"><div class="title">' + esc(c.title) + "</div>" +
-        '<div class="meta">' + meta + "</div>" +
-        dupBadge(c.duplicate) +
-        '<div class="actions"></div></div>';
-      var actions = card.querySelector(".actions");
-      var addBtn = document.createElement("button");
-      addBtn.className = "secondary";
-      addBtn.textContent = "This one — add it";
-      addBtn.onclick = function () { confirmAdd(c, actions, false); };
-      actions.appendChild(addBtn);
-      candidatesEl.appendChild(card);
+    data.candidates.forEach(function (c, i) {
+      if (i === 0) sectionHead(candidatesEl, "Selected match");
+      if (i === 1) sectionHead(candidatesEl, "Other possibilities");
+      candidatesEl.appendChild(buildCard(c, i === 0));
     });
     if (data.candidates.length) {
       var none = document.createElement("button");
@@ -166,6 +215,62 @@
       current = null; // no-match cycles are already closed server-side
       refreshLog();
     }
+  }
+
+  function pressNote(text, isError) {
+    var note = document.createElement("div");
+    note.className = isError ? "pressnote error" : "pressnote";
+    note.textContent = text;
+    pressingsEl.appendChild(note);
+  }
+
+  function fetchPressings(c, btn) {
+    if (!current) return;
+    var scanId = current.scan_id;
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    fetch("/api/master-versions?scan_id=" + encodeURIComponent(scanId) +
+          "&master_id=" + encodeURIComponent(c.master_id))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!current || current.scan_id !== scanId) return; // superseded UI
+        if (!res.ok) {
+          if (res.j && res.j.error && res.j.error.code === "superseded") return;
+          // honest failure — existing results stay usable, retry allowed
+          pressingsEl.innerHTML = "";
+          pressNote(apiError(res.j, "Could not fetch other pressings."), true);
+          btn.disabled = false;
+          btn.textContent = "Show other pressings";
+          return;
+        }
+        btn.textContent = "Other pressings shown";
+        renderPressings(res.j);
+      })
+      .catch(function () {
+        if (!current || current.scan_id !== scanId) return;
+        pressingsEl.innerHTML = "";
+        pressNote("Network error — pressings not fetched. Try again.", true);
+        btn.disabled = false;
+        btn.textContent = "Show other pressings";
+      });
+  }
+
+  function renderPressings(data) {
+    pressingsEl.innerHTML = "";
+    if (!data.candidates.length) {
+      pressNote(data.message || "No other pressings of this master found on Discogs.");
+      return;
+    }
+    sectionHead(pressingsEl, "Other pressings of this master");
+    if (data.total_versions > data.candidates.length) {
+      // never imply completeness (FR-013): the master has more versions
+      // than this list (incl. ones already shown above)
+      pressNote("Showing " + data.candidates.length + " — this master has " +
+                data.total_versions + " versions in total on Discogs.");
+    }
+    data.candidates.forEach(function (c) {
+      pressingsEl.appendChild(buildCard(c, false));
+    });
   }
 
   function confirmAdd(c, actions, confirmDuplicate) {
@@ -238,6 +343,7 @@
     photo.value = "";
     setStatus("Identifying… (reading the photo, then searching Discogs)");
     candidatesEl.innerHTML = "";
+    pressingsEl.innerHTML = "";
     moreEl.textContent = "";
     var form = new FormData();
     form.append("photo", file);
