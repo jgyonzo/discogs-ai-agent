@@ -68,7 +68,12 @@ On-demand fetch of a displayed master's other pressings (spec FR-010–013).
   release itself is always dropped — it is a "version" of its own master);
   each carries the same `DuplicateStatus` overlay (explicit `unknown`
   degradation included) and both link fields. May be empty; then `message`
-  is an honest "no additional versions" text.
+  states WHICH empty it is (spec replay addendum 1): versions fetched but
+  all already displayed ("already shown above") vs. an empty versions page
+  ("no other pressings found") — computed from the fetched page, never
+  guessed. Clients surface the outcome at the point of interaction
+  (FR-015): the invoking control and primary status reflect it; a
+  no-change result never renders as success.
 - `total_versions`: verbatim `pagination.items` — clients MUST use it for
   honest truncation display ("showing N of T") and MUST NOT imply the list
   is complete when `total_versions` exceeds what was returned.

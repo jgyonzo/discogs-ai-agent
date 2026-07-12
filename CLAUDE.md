@@ -11,7 +11,15 @@ links and an owner-invoked "other pressings" fetch (closes 024's
 measured "right album, wrong pressing" miss class at pick time).
 `collection-agent` only, zero new deps, ONE new Settings field
 (`COLLECTION_AGENT_SCAN_VERSIONS_MAX`, default 25 = per_page AND
-display cap of the single versions request), ~43 new tests (492→535).
+display cap of the single versions request), ~44 new tests (492→536).
+Two same-day owner-replay fixes rode the PR: 022 replay addendum 3 /
+FR-024 (cancelling a card's add-confirm step backs out that card only —
+it used to journal `skipped` and reset the whole scan; "None of these"
+stays the only skip gesture) and 026 replay addendum 1 / FR-012
+sharpened + FR-015 (empty on-demand result says WHICH empty:
+all-versions-already-shown vs none-found, surfaced in the button +
+status line — a no-change tap never renders as success; both messages
+test-pinned).
 (1) **Selected/alternatives presentation** — `candidates[0]` IS the
 selected release (documented contract semantic, NOT a ranking change;
 ladder + 024 exact-catno re-rank already order best-first); master

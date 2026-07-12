@@ -253,3 +253,31 @@ master appear and one of them can be selected and added.
   pipeline, not the results presentation; since this feature's default view
   reorders nothing and the on-demand fetch is owner-invoked, eval results
   remain comparable.
+
+## Replay addendum 1 (2026-07-12) — "nothing new" must not look like success
+
+**Finding** (owner replay, first live use of US3). When every version
+the on-demand fetch returned was already on screen (small masters whose
+pressings all surfaced as original candidates), the dedup rule left the
+list honestly empty — but the action button read "Other pressings
+shown" over an unchanged screen, and the only signal was a dim note at
+the bottom of the page. The owner was left asking whether the tap
+worked. FR-012 required an honest message for the no-additional-versions
+case; it did not require the message to be *noticeable*, nor
+distinguish the two very different empty outcomes.
+
+**Requirement deltas.**
+
+- **FR-012 (sharpened)**: the empty on-demand result MUST state which
+  empty it is — versions fetched but all already displayed ("every
+  version … is already shown above") vs. Discogs listing no other
+  versions at all ("no other pressings … found"). The distinction is
+  computed server-side from the fetched page, never guessed.
+- **FR-015 (new)**: the outcome of the on-demand action MUST be visible
+  at the point of interaction: the invoking control reflects the result
+  state (pressings shown vs. nothing new) and the page's primary status
+  line announces it — success is never implied when the screen did not
+  change.
+
+**Shipped in**: PR #16 (server message differentiation + page
+button/status feedback; both empty-case messages test-pinned).
