@@ -166,11 +166,7 @@
       dupBadge(c.duplicate) + link +
       '<div class="actions"></div></div>';
     var actions = card.querySelector(".actions");
-    var addBtn = document.createElement("button");
-    addBtn.className = "secondary";
-    addBtn.textContent = "This one — add it";
-    addBtn.onclick = function () { confirmAdd(c, actions, false); };
-    actions.appendChild(addBtn);
+    resetActions(c, actions);
     if (isSelected && c.master_page_url) {
       // master row: the work's identity is the candidate's own title (R2);
       // the master page link is the verification path, no extra fetch
@@ -285,9 +281,20 @@
     var no = document.createElement("button");
     no.className = "secondary";
     no.textContent = "Cancel";
-    no.onclick = function () { skip(c.release_id); };
+    // Cancel backs out of THIS card's confirm step only — the scan cycle
+    // and every other candidate stay live ("None of these" is the skip)
+    no.onclick = function () { resetActions(c, actions); };
     actions.appendChild(yes);
     actions.appendChild(no);
+  }
+
+  function resetActions(c, actions) {
+    actions.innerHTML = "";
+    var addBtn = document.createElement("button");
+    addBtn.className = "secondary";
+    addBtn.textContent = "This one — add it";
+    addBtn.onclick = function () { confirmAdd(c, actions, false); };
+    actions.appendChild(addBtn);
   }
 
   function doAdd(c, actions, confirmDuplicate) {
