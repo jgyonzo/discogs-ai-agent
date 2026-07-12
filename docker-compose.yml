@@ -65,5 +65,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # collection-agent phone-scan server (027-dockerize-collection-agent).
+  # OPT-IN by profile: plain `docker compose up` must start exactly the
+  # demo stack above (guard-tested from collection-agent/tests). Start with
+  #   docker compose --profile collection up collection-agent
+  # One-off modes: docker compose run --rm collection-agent <sync|status|chat|eval-...>
+  # Deliberately NO restart policy: scan startup validates the Discogs
+  # folder LIVE and exits 2 on bad config — auto-restart would turn that
+  # into an unbounded live-API retry loop (spec FR-010). No depends_on in
+  # either direction; no healthcheck (nothing gates on this service).
+  collection-agent:
+    build:
+      context: ./collection-agent
+      dockerfile: Dockerfile
+    profiles: ["collection"]
+    env_file:
+      - .env
+    ports:
+      - "8022:8022"
+    volumes:
+      - ./collection-agent/data:/app/collection-agent/data
+
 volumes:
   postgres_data:

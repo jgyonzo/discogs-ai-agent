@@ -106,10 +106,14 @@ exactly as an all-host workflow does.
 
 - [ ] **SC-001** phone scan-and-add through the containerized server; journal
       line + stale mark verified on host *(date, session id)*
-- [ ] **SC-002** `docker compose up` with token-less `.env` → exactly the
-      three demo services *(date)*
-- [ ] **SC-003** container-sync → venv-status AND venv-sync →
-      container-status, identical counts *(date)*
-- [ ] **SC-004** image audit clean: no secrets, no data, no `.env` *(date)*
-- [ ] **SC-006** empty-token scan start exits 2, no restart loop *(date)*
-- [ ] Interrupt/resume across the boundary (step 7) *(date)*
+- [x] **SC-002** `docker compose up` with token-less `.env` → exactly the
+      three demo services *(2026-07-12, automated: ps listed agent-api/frontend/postgres, 0 collection-agent containers)*
+- [x] **SC-003** container-sync → venv-status AND venv-sync →
+      container-status, identical counts *(2026-07-12, automated: partial 398/397 and
+      complete 398/398 read identically from both forms)*
+- [x] **SC-004** image audit clean: no secrets, no data, no `.env`
+      *(2026-07-12, automated: allowlist-only contents, history grep clean, context 403B)*
+- [x] **SC-006** empty-token scan start exits 2, no restart loop
+      *(2026-07-12, automated: exit 2, single container, none leftover)*
+- [x] Interrupt/resume across the boundary (step 7) *(2026-07-12, automated:
+      container sync SIGINT at 5% enrichment → exit 3 → venv resume → complete 398/398)*

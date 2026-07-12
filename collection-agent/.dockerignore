@@ -1,0 +1,12 @@
+# Build-context hygiene (027, contract §1 / research R7).
+# data/ holds the owner's personal collection state and uploader-copyrighted
+# eval images (023 NOTICE.txt) — it must never reach the Docker daemon,
+# let alone an image layer. Guard-tested in tests/unit/test_docker_packaging.py.
+data/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+notebooks/
+tests/

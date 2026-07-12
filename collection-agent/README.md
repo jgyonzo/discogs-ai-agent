@@ -84,6 +84,47 @@ URLs built from the records' stored videos: they open as a temporary
 playlist you can save and name **on the YouTube site** — the agent never
 touches a YouTube account (no OAuth, no credentials, no quota).
 
+### Run with Docker (027)
+
+Every mode also runs containerized — no host Python needed. One image
+(`collection-agent/Dockerfile`), wired into the repo-root
+`docker-compose.yml` as an **opt-in** service behind the `collection`
+profile, so the demo stack's plain `docker compose up` is unaffected
+(guard-tested). Config comes from the same repo-root `.env`; state is the
+same host `collection-agent/data/` directory (bind-mounted), so container
+and venv runs are interchangeable mid-workflow in both directions — no
+migration, no fresh start.
+
+From the repo root:
+
+```bash
+docker compose --profile collection up collection-agent   # scan server on :8022
+docker compose run --rm collection-agent sync             # one-shot; Ctrl-C-resumable
+docker compose run --rm collection-agent status
+docker compose run --rm collection-agent chat             # interactive (TTY allocated)
+docker compose run --rm collection-agent eval-dataset
+docker compose run --rm collection-agent eval-run --source discogs
+```
+
+Notes:
+
+- **Phone URL**: open `http://<this-machine's-LAN-IP>:8022` on the phone.
+  The URL in the container's startup banner reflects the *container's*
+  interfaces, not the address phones can reach.
+- **Failure posture**: the service has deliberately **no restart policy** —
+  a failed startup folder validation (bad/missing `DISCOGS_USER_TOKEN`)
+  exits once, loudly, with code 2, instead of retry-looping against the
+  live Discogs API. Check `docker compose ps -a` + logs.
+- **Exit codes** (0/1/2/3, see below) pass through `docker compose run`
+  verbatim.
+- **Linux hosts**: on native Linux (not Docker Desktop), files created by
+  the container under `data/` are root-owned; `chown` them before mixing
+  with a venv workflow. On macOS Docker Desktop, ownership is mapped
+  transparently.
+- The image contains code only — no secrets, no `data/` contents; the
+  build context excludes them (`.dockerignore`, guard-tested). Contract:
+  `specs/027-dockerize-collection-agent/contracts/docker-packaging.md`.
+
 ### Record scan (022)
 
 `python -m collection_agent scan` serves a phone-friendly page on the
