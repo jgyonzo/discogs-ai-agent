@@ -42,7 +42,7 @@ Component-owned infra lives in `collection-agent/`; the only file touched outsid
 
 - [x] T004 [US1] Add the `collection-agent` service to `docker-compose.yml` exactly per contract §2: `build.context: ./collection-agent`; `profiles: ["collection"]`; `env_file: [.env]`; `ports: ["8022:8022"]`; `volumes: ["./collection-agent/data:/app/collection-agent/data"]`; **no** `depends_on`, **no** `restart:`, **no** `healthcheck` (R3 failure posture); zero edits to the `postgres`/`agent-api`/`frontend` blocks and to the top-level `volumes:` key.
 - [x] T005 [US1] Smoke-validate the service wiring (Docker, no phone): `docker compose --profile collection up collection-agent` with a valid `.env` → startup folder validation passes, uvicorn serves :8022, `curl -fs http://localhost:8022/` returns the scan page; stop; confirm any files created under `collection-agent/data/` are the pre-existing host files (mount, not copy). Then quickstart step 6: `docker compose --profile collection run --rm -e DISCOGS_USER_TOKEN= collection-agent scan` exits `2` once, no restart loop (SC-006, FR-010).
-- [ ] T006 [US1] **Owner-only (live validation)**: quickstart step 4 / SC-001 — phone scan-and-add through the containerized server on the LAN; record session id + date in quickstart's owner checklist.
+- [x] T006 [US1] **Owner-only (live validation)**: quickstart step 4 / SC-001 — phone scan-and-add through the containerized server on the LAN; record session id + date in quickstart's owner checklist.
 
 **Checkpoint**: scan service runs containerized against real host state; US1 deliverable complete (T006 may close post-merge per repo convention for owner-only live items).
 
@@ -83,7 +83,7 @@ Component-owned infra lives in `collection-agent/`; the only file touched outsid
 - [x] T013 [P] Update the repo-root `README.md` docker-compose section: mention the opt-in `collection` profile in one or two lines (demo stack instructions unchanged).
 - [x] T014 Full verification: `cd collection-agent && pytest` — all 536 pre-existing tests pass unmodified plus the new guards; `git diff main --stat -- collection-agent/src/` shows zero changes (SC-005); re-run the SC-004 image audit from quickstart step 2 on a fresh build.
 - [x] T015 Write the 027 merged-state block into `CLAUDE.md` (replace the in-flight pointer; single-PR flow — feature + post-merge CLAUDE.md state land in ONE PR, owner decision 2026-07-07) and tick completed items in `quickstart.md`'s owner checklist that were validated pre-merge.
-- [ ] T016 **Owner-only (live validation)**: remaining owner checklist items in `quickstart.md` — SC-001 phone scan (with T006), SC-003 bidirectional counts on the real collection, SC-004 audit sign-off, SC-006 loud-failure check; record dates/ids.
+- [x] T016 **Owner-only (live validation)**: remaining owner checklist items in `quickstart.md` — SC-001 phone scan (with T006), SC-003 bidirectional counts on the real collection, SC-004 audit sign-off, SC-006 loud-failure check; record dates/ids.
 
 ---
 

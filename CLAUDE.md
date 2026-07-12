@@ -3,13 +3,18 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
-**027-dockerize-collection-agent** (PR pending, implemented 2026-07-12 —
-owner-only live validation OPEN: quickstart T006/T016, the phone
-scan-and-add through the container and the owner checklist sign-offs;
-everything automatable validated pre-PR 2026-07-12: image audit clean,
-demo-stack service set verified live, containerized status byte-identical
-to venv status on the real snapshot, empty-token scan exits 2 once with no
-restart loop, EOF chat exits 0, container-sync SIGINT → host-venv resume) —
+**027-dockerize-collection-agent** (implemented + validated 2026-07-12 —
+live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
+SC-001..SC-006 all recorded, incl. SC-001's phone scan-and-add through the
+CONTAINERIZED server (session `20260712-200831Z`, two adds journaled:
+releases 36973368/36703081 — found only after applying R8's phone-URL
+caveat live: the banner printed the Docker bridge IP 172.19.0.2, the phone
+needed the host LAN IP) and the full SC-003 boundary loop: container-sync
+SIGINT at 5% enrichment → exit 3 → host-venv resume → 398/398 complete →
+containerized status reads complete byte-identically; also image audit
+clean, demo-stack service set verified live, empty-token scan exits 2 once
+with no restart loop, EOF chat exits 0; tasks T001–T016 ALL complete
+incl. owner-only T006/T016) —
 the collection-agent packaged as ONE image (all six CLI modes via
 `ENTRYPOINT python -m collection_agent`; `CMD ["scan"]` because the CLI's
 own default is `chat`, which would hang headless) plus an OPT-IN compose

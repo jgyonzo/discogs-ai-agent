@@ -104,8 +104,9 @@ exactly as an all-host workflow does.
 
 ## Owner live-validation checklist (T-owner)
 
-- [ ] **SC-001** phone scan-and-add through the containerized server; journal
-      line + stale mark verified on host *(date, session id)*
+- [x] **SC-001** phone scan-and-add through the containerized server; journal
+      line + stale mark verified on host *(2026-07-12, session 20260712-200831Z:
+      two adds journaled — releases 36973368, 36703081)*
 - [x] **SC-002** `docker compose up` with token-less `.env` → exactly the
       three demo services *(2026-07-12, automated: ps listed agent-api/frontend/postgres, 0 collection-agent containers)*
 - [x] **SC-003** container-sync → venv-status AND venv-sync →
