@@ -1073,7 +1073,9 @@ class TestMasterVersions026:
         ).json()
         assert second["status"] == "added"
 
-    def test_all_deduped_is_honest_empty_message(self, settings, store):
+    def test_all_deduped_says_already_shown(self, settings, store):
+        # every fetched version was already on screen — the message must
+        # say that, not a false-negative "found nothing"
         client, discogs, _ = make_client(
             settings, store, search_responses=MASTERED_TWO
         )
@@ -1087,6 +1089,21 @@ class TestMasterVersions026:
         ).json()
         assert body["candidates"] == []
         assert body["total_versions"] == 1
+        assert "already shown" in body["message"]
+
+    def test_genuinely_empty_versions_page_says_none_found(
+        self, settings, store
+    ):
+        # unscripted master ⇒ the fake serves an empty versions page
+        client, discogs, _ = make_client(
+            settings, store, search_responses=MASTERED_TWO
+        )
+        scan_id = self._scan(client)
+        body = client.get(
+            "/api/master-versions",
+            params={"scan_id": scan_id, "master_id": 5309},
+        ).json()
+        assert body["candidates"] == []
         assert "No other pressings" in body["message"]
 
     def test_scan_without_tap_issues_zero_versions_calls(self, settings, store):

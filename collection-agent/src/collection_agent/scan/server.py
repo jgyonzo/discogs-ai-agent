@@ -376,16 +376,23 @@ def create_app(
             for c in candidates:
                 ctx.titles[c.release_id] = c.title
             session.register_candidates([c.release_id for c in candidates])
+        # empty is honest either way, but say WHICH empty it is: versions
+        # that all deduped away are already on the owner's screen — very
+        # different from Discogs listing nothing else
+        message = None
+        if not candidates:
+            message = (
+                "Every version Discogs lists for this master is already "
+                "shown above."
+                if (payload.get("versions") or [])
+                else "No other pressings of this master found on Discogs."
+            )
         return VersionsResponse(
             scan_id=scan_id,
             master_id=master_id,
             candidates=candidates,
             total_versions=total,
-            message=(
-                None
-                if candidates
-                else "No other pressings of this master found on Discogs."
-            ),
+            message=message,
         )
 
     # -- write gate --------------------------------------------------------------

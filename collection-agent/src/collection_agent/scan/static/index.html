@@ -239,7 +239,17 @@
           btn.textContent = "Show other pressings";
           return;
         }
-        btn.textContent = "Other pressings shown";
+        if (res.j.candidates.length) {
+          btn.textContent = "Other pressings shown below";
+          setStatus(res.j.candidates.length + " other pressing" +
+                    (res.j.candidates.length === 1 ? "" : "s") +
+                    " added below the list.");
+        } else {
+          // nothing new appeared — say so where the owner is looking,
+          // instead of a success-shaped button over an unchanged screen
+          btn.textContent = "No new pressings";
+          setStatus(res.j.message || "No other pressings found.");
+        }
         renderPressings(res.j);
       })
       .catch(function () {
