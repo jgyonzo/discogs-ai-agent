@@ -49,19 +49,36 @@ drift), never vision.
 - [ ] **SC-001 — determinism**: run the replay command twice
   back-to-back; the per-image diff of the two replay runs (jq recipe
   above) is empty.
-- [ ] **SC-002 — barcode gate measured**: in the replay-vs-source diff of
+- [x] **SC-002 — barcode gate measured**: in the replay-vs-source diff of
   `20260711-222805Z-discogs`, `17859_secondary1.jpeg` (Cybotron) flips
   miss→hit via the `catno` rung; every other flipped image either has a
   sub-8-digit `evidence.barcode` in the source record or is explainable
   as catalog drift (check: `jq 'select(.evidence.barcode != null and
   (.evidence.barcode|length) < 8) | .image' $A` lists the gate-affected
   population).
-- [ ] **SC-003 — zero vision cost + latency**: the replay `summary.json`
+  **Validated 2026-07-12 (owner replay `20260712-001333Z-replay`)**: the
+  per-image diff contains exactly ONE line —
+  `17859_secondary1.jpeg  miss barcode → hit catno`. The gate-population
+  audit lists exactly that one image; zero drift, zero other changes
+  across the remaining 93 records. Catno-rung hits 17 → 18 (the flip),
+  strict 52.1% → 53.2%, practical 56.4% → 57.4%, miss split
+  4 same-master / 16 different / 14 unknown (the converted miss came out
+  of `different`). One recorded implausible barcode ⇒ exactly one
+  outcome change — the instrument and the fix, both working as
+  contracted.
+- [x] **SC-003 — zero vision cost + latency**: the replay `summary.json`
   has `"vision_calls": 0`; wall time under 5 minutes.
-- [ ] **SC-004 — denominator parity**: replay summary's `images_total`,
+  **Validated 2026-07-12**: `"vision_calls": 0` on the summary and every
+  record; summed search `elapsed_s` ≈ 89 s for 94 records — well under
+  the 5-minute bound (R8's arithmetic held).
+- [x] **SC-004 — denominator parity**: replay summary's `images_total`,
   `evaluated`, `no_evidence`, `unlabeled` (and `errors` unless a live
   search failed during the replay) match the source run's summary, so the
   strict/top-1/practical rates are directly comparable.
+  **Validated 2026-07-12**: 94/94 `images_total`, 94/94 `evaluated`,
+  10/10 `no_evidence`, 0/0 `errors`, 0/0 `unlabeled` — exact parity;
+  invariants 8–14 all hold on the replay summary
+  (`replay_of: 20260711-222805Z-discogs`).
 - [ ] **SC-005 — no scan regression**: one physical scan session
   (phone page) on a record with a real (8+ digit) barcode behaves exactly
   as before — barcode rung fires, dup overlay/add flow unchanged.
