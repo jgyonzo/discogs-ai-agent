@@ -1,4 +1,5 @@
-"""Eval run loop (023 US2, contracts/eval-results.md).
+"""Eval run loop (023 US2, contracts/eval-results.md; replay mode 025,
+contracts/amendment-023-eval-results-2.md).
 
 Per image, the PRODUCTION seams run unmodified (FR-011): scan/vision.py::
 extract_evidence (the injected LLM client comes from cli._build_llm_client,
@@ -7,6 +8,11 @@ find_candidates with the explicit-`unknown` pending_duplicate_checker.
 One image's failure is a recorded `error` result, never a run abort
 (FR-015). Results are appended incrementally so an interrupted run keeps
 every completed line; the summary lands at the end.
+
+Replay (025) enters the same pipeline one seam later: recorded evidence
+is re-materialized through ScanEvidence — current normalization
+deliberately applies, so normalization changes are A/B-able — and walks
+the same find_candidates ladder. Zero vision calls by construction.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from collection_agent.discogs.client import DiscogsError
+from collection_agent.eval.replay import ReplayItem, load_source_run
 from collection_agent.eval.scoring import (
     EvalItem,
     EvalResult,
@@ -29,6 +36,7 @@ from collection_agent.eval.sources import (
     load_discogs_source,
     load_retained_source,
 )
+from collection_agent.scan.models import ScanEvidence
 from collection_agent.scan.search import find_candidates, pending_duplicate_checker
 from collection_agent.scan.vision import VisionExtractionError, extract_evidence
 from collection_agent.settings import Settings
@@ -112,6 +120,96 @@ def evaluate_item(llm_client, discogs_client, settings: Settings, item: EvalItem
     )
 
 
+def replay_item(discogs_client, settings: Settings, item: ReplayItem) -> EvalResult:
+    """025: one replay record — carry-throughs cost nothing; replayable
+    items re-run the unmodified production ladder over the recorded
+    evidence. Every record carries `replayed` and bills zero vision calls
+    (amendment-023-eval-results-2 §Delta 3, invariants 11/12/14)."""
+    base = {
+        "image": item.image,
+        "source": item.source,
+        "truth_release_id": item.truth_release_id,
+    }
+    if item.carry_outcome is not None:
+        return EvalResult(
+            **base, outcome=item.carry_outcome,
+            error_kind=item.carry_error_kind, detail=item.carry_detail,
+            replayed=False,
+        )
+
+    start = time.monotonic()
+    # current normalization deliberately applies (research R2): a value the
+    # CURRENT rules gate away (e.g. an implausible barcode) is gone here,
+    # exactly as it would be in production — that is what gets measured
+    evidence = ScanEvidence(**item.evidence)
+    evidence_kinds = list(evidence.evidence_kinds)
+    evidence_dump = evidence.compact_dump() or None
+    if evidence.is_empty:
+        return EvalResult(
+            **base, outcome="no_evidence", replayed=True,
+            elapsed_s=time.monotonic() - start,
+        )
+
+    try:
+        candidates, _more, tried = find_candidates(
+            discogs_client, settings, evidence, pending_duplicate_checker
+        )
+    except DiscogsError as exc:
+        return EvalResult(
+            **base, outcome="error", error_kind="discogs_error",
+            detail=str(exc), evidence_kinds=evidence_kinds,
+            evidence=evidence_dump, replayed=True,
+            elapsed_s=time.monotonic() - start,
+        )
+
+    candidate_ids = [c.release_id for c in candidates]
+    scored = score_search_outcome(
+        item.truth_release_id, candidate_ids, tried,
+        truth_master_id=item.truth_master_id,
+        candidate_master_ids=[c.master_id for c in candidates],
+    )
+    return EvalResult(
+        **base,
+        outcome=scored["outcome"],
+        rank=scored["rank"],
+        rung=scored["rung"],
+        miss_master_relation=scored["miss_master_relation"],
+        rungs_tried=tried,
+        evidence_kinds=evidence_kinds,
+        candidate_ids=candidate_ids,
+        evidence=evidence_dump,
+        replayed=True,
+        elapsed_s=time.monotonic() - start,
+    )
+
+
+def _execute_run(
+    run_id: str,
+    settings: Settings,
+    items: list,
+    eval_one: Callable[[object], EvalResult],
+    notify: Callable[[str], None],
+) -> tuple[Path, list[EvalResult]]:
+    """Shared run plumbing (023 §1): one dir per invocation, results
+    appended incrementally with flush+fsync per line so an interrupted
+    run keeps every completed record."""
+    run_dir = settings.eval_results_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    results: list[EvalResult] = []
+    with (run_dir / RESULTS_NAME).open("a", encoding="utf-8") as fh:
+        for i, item in enumerate(items, start=1):
+            result = eval_one(item)
+            fh.write(result.model_dump_json(exclude_none=True) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+            results.append(result)
+            notify(
+                f"[{i}/{len(items)}] {result.image}: {result.outcome}"
+                + (f" (rank {result.rank}, {result.rung})" if result.outcome == "hit" else "")
+            )
+    return run_dir, results
+
+
 def run_eval(
     llm_client,
     discogs_client,
@@ -133,26 +231,53 @@ def run_eval(
         items = items[:limit]
 
     run_id = _run_id(source)
-    run_dir = settings.eval_results_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    results_path = run_dir / RESULTS_NAME
-
-    results: list[EvalResult] = []
-    with results_path.open("a", encoding="utf-8") as fh:
-        for i, item in enumerate(items, start=1):
-            result = evaluate_item(llm_client, discogs_client, settings, item)
-            fh.write(result.model_dump_json(exclude_none=True) + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
-            results.append(result)
-            notify(
-                f"[{i}/{len(items)}] {result.image}: {result.outcome}"
-                + (f" (rank {result.rank}, {result.rung})" if result.outcome == "hit" else "")
-            )
+    run_dir, results = _execute_run(
+        run_id, settings, items,
+        lambda item: evaluate_item(llm_client, discogs_client, settings, item),
+        notify,
+    )
 
     summary = summarize(
         results, run_id, source, limited,  # type: ignore[arg-type]
         dataset_snapshot_completeness=snapshot_completeness,
+    )
+    (run_dir / SUMMARY_NAME).write_text(
+        summary.model_dump_json(indent=1), encoding="utf-8"
+    )
+    return run_dir, summary
+
+
+def run_replay(
+    discogs_client,
+    settings: Settings,
+    replay_of: str,
+    limit: int | None = None,
+    notify: Callable[[str], None] = lambda _m: None,
+) -> tuple[Path, EvalSummary]:
+    """025: replay a prior run's recorded evidence through the current
+    search ladder — no images, no LLM client, zero vision calls. Raises
+    SourceError (fail-fast, before any run dir exists) when the source
+    run is missing, empty, or carries no evidence. The source run dir is
+    read-only input; output is a standard run named `..-replay` whose
+    summary carries `replay_of` (amendment-023-eval-results-2)."""
+    items = load_source_run(settings, replay_of)
+    source = items[0].source  # homogeneous per run (023 §1)
+
+    limited = limit is not None and len(items) > limit
+    if limited:
+        items = items[:limit]
+
+    run_id = _run_id("replay")
+    run_dir, results = _execute_run(
+        run_id, settings, items,
+        lambda item: replay_item(discogs_client, settings, item),
+        notify,
+    )
+
+    summary = summarize(
+        results, run_id, source, limited,
+        dataset_snapshot_completeness=None,  # a camera-eval-time property
+        replay_of=replay_of,
     )
     (run_dir / SUMMARY_NAME).write_text(
         summary.model_dump_json(indent=1), encoding="utf-8"

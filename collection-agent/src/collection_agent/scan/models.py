@@ -16,6 +16,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # FR-019 (addendum 1): a separator-stripped digit run this long is a
 # barcode, never a catalog number
 BARCODE_MIN_DIGITS = 10
+# 025 (amendment-022-scan-api-2): real UPC-E/EAN-8..EAN-13 barcodes are
+# 8-13 digits — anything shorter in the barcode field is not a barcode
+BARCODE_PLAUSIBLE_MIN_DIGITS = 8
 
 EvidenceKind = Literal["barcode", "catno", "artist_title", "text"]
 Outcome = Literal["added", "skipped", "no_match", "failed"]
@@ -65,6 +68,21 @@ class ScanEvidence(BaseModel):
                 if not self.barcode:
                     self.barcode = stripped
                 self.catno = None
+        return self
+
+    @model_validator(mode="after")
+    def _gate_implausible_barcode(self) -> "ScanEvidence":
+        """025 (amendment-022-scan-api-2, live finding: run
+        20260711-222805Z, Cybotron): vision emitted a 4-digit "barcode"
+        (3070) that hijacked the barcode rung and suppressed the correct
+        catno (D-216). A digits-only value under 8 digits can never be a
+        real UPC/EAN — clear it. Deliberately NOT moved to catno: unlike
+        FR-019's 10+-digit runs (definitively barcodes), a short digit
+        run is not definitively a catno, and injecting it could hijack
+        the catno rung the same way. Runs after the FR-019 validator, so
+        a reclassified value (>= 10 digits) is never gated."""
+        if self.barcode and len(self.barcode) < BARCODE_PLAUSIBLE_MIN_DIGITS:
+            self.barcode = None
         return self
 
     @property

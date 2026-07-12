@@ -3,10 +3,99 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**025-eval-replay-barcode-gate** (PR #15, merged to main 2026-07-12 —
+live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
+SC-001..SC-006 all recorded, incl. two byte-identical back-to-back
+replays (100% determinism, zero drift), the Cybotron flip as the ONLY
+diff line of the gate replay (strict 52.1%→53.2%, catno hits 17→18,
+run `20260712-001333Z-replay`), and one physical plausible-barcode
+scan) — the two follow-ups from 024's post-merge measured comparison
+(2026-07-11 run `20260711-222805Z-discogs` vs the 2026-07-07 baseline:
+strict 52.1% vs 56.4%, top-1 37.2%, practical 56.4%, 0 errors — but the
+per-image diff showed 20/94 images flipped outcome on vision
+nondeterminism alone (8 miss→hit, 12 hit→miss) while ALL of 024's target
+catno-drowning cases converted with zero re-rank regressions ⇒
+single-run strict-rate comparisons cannot resolve ladder changes; the
+run numbers live only in gitignored `data/eval/runs/` and 024's
+quickstart SC-002 note). `collection-agent` only, zero new deps, ZERO
+new Settings fields (first eval feature with none), ~42 new tests
+(450→492).
+(1) **Evidence-replay eval mode** — `eval-run --replay <run_id>`
+(mutually exclusive w/ `--source`, `--limit` applies): re-runs ONLY the
+production search ladder over the evidence recorded in a prior run's
+`results.jsonl` (024's `evidence` field = replayability predicate AND
+ladder input; the run's own records are ground truth — no images, no
+`summary.json` needed, interrupted source runs replayable, replays
+themselves replayable). Zero vision calls; no `OPENAI_API_KEY` needed
+(the key gate is camera-mode-only; `_build_llm_client` never called ⇒
+nothing traced). Evidence re-materialized via `ScanEvidence(**dump)` —
+CURRENT normalization deliberately applies, so normalization changes
+are A/B-able too (research R2); an evidence dict the current rules
+empty (e.g. gated barcode only) becomes an honest replayed
+`no_evidence`. Non-replayable records carried through exactly once
+each (no_evidence→no_evidence; pre-vision error→error, kind preserved;
+unlabeled→unlabeled — also any evidence-less truth-less record;
+defensive hit/miss-without-evidence carried + flagged in detail, never
+silently re-scored) so denominators match the source run exactly.
+Output = a standard run dir `<ts>-replay` (`eval/replay.py` loader +
+`harness.py::run_replay` reusing the factored `_execute_run` fsync
+loop): summary gains `replay_of`, every record gains `replayed`
+true/false, `dataset_snapshot_completeness` None; 023/024 readers
+unaffected (all fields default). Miss master buckets recomputed over
+the FRESH candidates; truth masters re-resolved from the local dataset
+manifest (newest-line-wins; absent/corrupt manifest ⇒ unknown,
+retained-source ⇒ always None, never fetched live). Fail-fast
+`EXIT_CONFIG` BEFORE any run dir exists: missing run/results.jsonl,
+zero records, zero evidence-carrying records (pre-024 runs),
+`--replay`+explicit `--source` (its default is now None, resolved to
+discogs); torn trailing line tolerated, corrupt mid-file line hard
+error (corrupt ≠ interrupted). Invariants 11–14 normative
+(vision_calls==0 summary+records; `replay_of` iff `replayed` on every
+record, never on camera runs; denominator parity w/ source; hits only
+from replayed records). Read-only: the 023 AST guard sweeps
+`eval/replay.py` automatically; the source run dir is read-only input
+(byte-identical after replay, tested).
+(2) **Barcode plausibility gate** (the one pipeline change; measured
+cause: vision emitted a 4-digit "barcode" `3070` on
+`17859_secondary1.jpeg` (Cybotron), hijacking the highest-precision
+barcode rung and suppressing the correctly-extracted catno `D-216` —
+a baseline hit): NEW `scan/models.py::BARCODE_PLAUSIBLE_MIN_DIGITS = 8`
+(UPC-E/EAN-8 are the shortest real forms; a domain constant like
+FR-019's `BARCODE_MIN_DIGITS = 10`, deliberately NOT a Settings knob) —
+a `ScanEvidence` model validator ordered AFTER FR-019's catno→barcode
+reclassification (so reclassified ≥10-digit values are never gated)
+clears sub-8-digit barcodes; the cleared value is NEVER moved to catno
+(a short digit run is not definitively a catno — it could hijack that
+rung the same way); `evidence_kinds`/journal/eval evidence dumps all
+reflect post-gate values (no ghost rung, derived at read time);
+8+-digit barcodes byte-identical to 024. One shared normalization site
+⇒ phone page + camera eval + replay inherit identically, vision prompt
+frozen. The gate is measured BY the replay (integration test: recorded
+`3070`+`D-216` evidence replays to a catno-rung hit with no `barcode=`
+param ever on the wire). Two pre-existing tests used incidental
+sub-8-digit fixture barcodes ("123456"/"12345" testing ladder order /
+rung suppression, not plausibility) — fixture values updated to
+plausible ones, intent preserved (T016 note).
+(3) **024 SC-002 closed honestly** (FR-013): 024's quickstart now
+records the inconclusive-aggregate reading (catno hits 17 vs baseline
+20, conversions all confirmed) and points at replay as the superseding
+instrument. Artifacts: `specs/025-eval-replay-barcode-gate/` (spec,
+plan, research R1–R8, data-model, quickstart + owner checklist, tasks
+T001–T022 all complete except owner-only T022, contracts: TWO second
+amendments — `amendment-023-eval-results-2.md` (replay CLI/layout/
+record+summary fields/carry-through semantics/invariants 11–14),
+`amendment-022-scan-api-2.md` (gate semantics appended to FR-019/020
+normalization)). Out of scope kept: vision prompt changes,
+recorded-response offline replay (would stop measuring live Discogs
+substring behavior — R8), threshold knob, upper-bound barcode gate,
+CI eval integration.
+
+Prior feature:
 **024-scan-accuracy-followups** (PR #14, merged to main 2026-07-07 —
-owner-only live validation open: quickstart SC-002 fresh eval vs the
-56.4% baseline after `--backfill-masters`, one physical short-catno
-scan) — three evidence-driven follow-ups from 023's FIRST MEASURED EVAL
+quickstart SC-002 fresh eval CLOSED by 025 on 2026-07-11: inconclusive
+aggregate under vision variance, all target conversions confirmed;
+the one physical short-catno scan remains open) — three
+evidence-driven follow-ups from 023's FIRST MEASURED EVAL
 (94 images: 56.4% strict / 76% per-release; 14-miss live catno
 spot-check 2026-07-07, ~30 read-only lookups). `collection-agent` only,
 zero new deps, ~40 new tests (410→450).
