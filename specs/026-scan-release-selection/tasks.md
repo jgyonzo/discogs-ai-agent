@@ -235,7 +235,7 @@ selected release has a master.
       `git diff --stat` confirms zero changes under
       `collection-agent/src/collection_agent/eval/` and to
       `scan/vision.py` (research R9); record the new test count
-- [ ] T022 Write the merged-state CLAUDE.md block for 026 on this branch
+- [x] T022 Write the merged-state CLAUDE.md block for 026 on this branch
       (single-PR flow — feature + post-merge CLAUDE.md state in ONE PR)
 - [ ] T023 Owner-only live validation: run
       `specs/026-scan-release-selection/quickstart.md` checklist
