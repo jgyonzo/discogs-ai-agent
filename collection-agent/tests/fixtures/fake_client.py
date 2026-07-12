@@ -52,6 +52,14 @@ class FakeDiscogsClient:
         # None (a failed/expired download); image_downloads records the order.
         self.image_bytes: dict[str, bytes] = {}
         self.image_downloads: list[str] = []
+        # -- 026 master versions -----------------------------------------------
+        # versions_responses: master_id -> versions_page payload; unscripted
+        # masters return an empty page. versions_failures: master_id ->
+        # Exception. versions_calls records (master_id, per_page) so tests
+        # can assert exactly when the on-demand fetch fired (SC-006).
+        self.versions_responses: dict[int, dict[str, Any]] = {}
+        self.versions_failures: dict[int, Exception] = {}
+        self.versions_calls: list[tuple[int, int]] = []
         self._next_instance_id = 90001
         self._next_folder_id = 100
         # live instance state for US4 re-validation: instance_id -> (release_id, folder_id)
@@ -109,6 +117,13 @@ class FakeDiscogsClient:
     def download_image(self, uri: str) -> bytes | None:
         self.image_downloads.append(uri)
         return self.image_bytes.get(uri)
+
+    def get_master_versions(self, master_id: int, per_page: int) -> dict[str, Any]:
+        self.versions_calls.append((master_id, per_page))
+        failure = self.versions_failures.get(master_id)
+        if failure is not None:
+            raise failure
+        return self.versions_responses.get(master_id, payloads.versions_page([]))
 
     def search_releases(self, params: dict[str, Any]) -> dict[str, Any]:
         self.searches.append(dict(params))

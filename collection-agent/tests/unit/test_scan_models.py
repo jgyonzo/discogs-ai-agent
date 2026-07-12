@@ -220,27 +220,72 @@ class TestCandidateMasterId:
     """024 T004: master_id is verbatim-optional (amendment-022-scan-api §1)."""
 
     @staticmethod
-    def _candidate(result):
+    def _candidate(result, settings):
         from collection_agent.scan.search import _candidate_from_result
         from collection_agent.scan.search import pending_duplicate_checker
 
-        return _candidate_from_result(result, pending_duplicate_checker)
+        return _candidate_from_result(result, settings, pending_duplicate_checker)
 
-    def test_master_id_carried_verbatim(self):
+    def test_master_id_carried_verbatim(self, settings):
         from tests.fixtures.discogs_payloads import search_result
 
-        c = self._candidate(search_result(101, master_id=5309))
+        c = self._candidate(search_result(101, master_id=5309), settings)
         assert c.master_id == 5309
 
-    def test_absent_master_id_stays_none(self):
+    def test_absent_master_id_stays_none(self, settings):
         from tests.fixtures.discogs_payloads import search_result
 
-        c = self._candidate(search_result(101))
+        c = self._candidate(search_result(101), settings)
         assert c.master_id is None
 
-    def test_zero_master_id_normalizes_to_none(self):
+    def test_zero_master_id_normalizes_to_none(self, settings):
         from tests.fixtures.discogs_payloads import search_result
 
         item = search_result(101)
         item["master_id"] = 0  # Discogs' "no master" sentinel
-        assert self._candidate(item).master_id is None
+        assert self._candidate(item, settings).master_id is None
+
+
+class TestCandidateLinks026:
+    """026 T004: additive server-built link fields + VersionsResponse
+    (amendment-022-scan-api-3 deltas 1/3)."""
+
+    def test_link_fields_default_none_old_constructions_valid(self):
+        # pre-026 Candidate constructions (no link kwargs) must stay valid
+        c = Candidate(
+            release_id=101,
+            title="Test Artist - Test Record",
+            duplicate=DuplicateStatus(state="unknown"),
+        )
+        assert c.release_page_url is None and c.master_page_url is None
+
+    def test_link_fields_serialize(self):
+        c = Candidate(
+            release_id=101,
+            title="T",
+            release_page_url="https://www.discogs.com/release/101",
+            master_page_url="https://www.discogs.com/master/5309",
+            master_id=5309,
+            duplicate=DuplicateStatus(state="unknown"),
+        )
+        dumped = c.model_dump()
+        assert dumped["release_page_url"] == "https://www.discogs.com/release/101"
+        assert dumped["master_page_url"] == "https://www.discogs.com/master/5309"
+
+    def test_versions_response_shape(self):
+        from collection_agent.scan.models import VersionsResponse
+
+        r = VersionsResponse(scan_id="s-1", master_id=5309)
+        assert r.candidates == [] and r.total_versions == 0 and r.message is None
+
+    def test_scan_versions_max_default_and_alias(self, settings, tmp_path):
+        from collection_agent.settings import Settings
+
+        assert settings.scan_versions_max == 25
+        overridden = Settings(
+            _env_file=None,
+            DISCOGS_USER_TOKEN="test-token-not-real",
+            SNAPSHOT_PATH=tmp_path / "snapshot.json",
+            COLLECTION_AGENT_SCAN_VERSIONS_MAX=7,
+        )
+        assert overridden.scan_versions_max == 7
