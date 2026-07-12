@@ -46,9 +46,16 @@ drift), never vision.
 
 ## Owner live-validation checklist (SC-001..SC-006)
 
-- [ ] **SC-001 — determinism**: run the replay command twice
+- [x] **SC-001 — determinism**: run the replay command twice
   back-to-back; the per-image diff of the two replay runs (jq recipe
   above) is empty.
+  **Validated 2026-07-12 (owner runs `20260712-001333Z-replay` and
+  `20260712-001920Z-replay`, both replaying
+  `20260711-222805Z-discogs`)**: the per-image outcome/rung diff is
+  empty, and a stricter full-record comparison (every field except
+  `elapsed_s`, including `rank`, `candidate_ids`, `evidence`, and
+  `miss_master_relation`) is byte-identical across all 94 records —
+  zero catalog drift between the runs, 100% determinism.
 - [x] **SC-002 — barcode gate measured**: in the replay-vs-source diff of
   `20260711-222805Z-discogs`, `17859_secondary1.jpeg` (Cybotron) flips
   miss→hit via the `catno` rung; every other flipped image either has a
