@@ -260,7 +260,7 @@ US1+US2 together make SC-002 (Cybotron flip) measurable by the owner.
 Tracked in `quickstart.md`'s checklist, requires the owner's Discogs
 token / dataset / phone:
 
-- [ ] T022 [OWNER] quickstart SC-001 (replay determinism, live),
+- [x] T022 [OWNER] quickstart SC-001 (replay determinism, live),
       SC-002 (Cybotron flip + gate-population audit), SC-003 (cost/
       latency), SC-004 (denominator parity vs source run), SC-005 (one
       physical plausible-barcode scan), SC-006 (read the 024 note).

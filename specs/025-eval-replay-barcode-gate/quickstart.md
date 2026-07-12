@@ -92,10 +92,14 @@ drift), never vision.
   **Validated 2026-07-12 (owner physical scan)**: real-barcode record
   identified via the barcode rung; scan flow unchanged — the gate is
   invisible to plausible barcodes, as contracted.
-- [ ] **SC-006 — 024 quickstart note**: `specs/024-scan-accuracy-followups/
+- [x] **SC-006 — 024 quickstart note**: `specs/024-scan-accuracy-followups/
   quickstart.md` SC-002 now records the 2026-07-11 inconclusive-aggregate
   reading (catno hits 17 vs 20; all target conversions confirmed) and
   points at this feature's replay mode.
+  **Validated 2026-07-12 (owner read-through)**: the note reads as an
+  honest, self-contained record. Full checklist SC-001..SC-006 complete —
+  live validation of 025 closed same-week as merge, with the replay
+  instrument itself producing the SC-002 evidence.
 
 ## What replay does / does not hold constant
 
