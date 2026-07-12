@@ -4,7 +4,8 @@
 
 ## Prerequisites
 
-- `cd collection-agent && uv sync` (or the venv you already use for 017/018)
+- `cd collection-agent && pip install -e ".[dev]"` in the component venv
+  (or the venv you already use for 017/018)
 - A synced snapshot at `collection-agent/data/snapshot.json` (for the live
   replay only; tests never touch the network)
 

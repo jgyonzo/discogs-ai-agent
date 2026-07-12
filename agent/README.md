@@ -161,6 +161,11 @@ pip install -e '.[test,dev]'
 pytest tests/unit/ tests/graph/
 ```
 
+`python -m venv` + `pip install -e` is the canonical install path
+(matching the Dockerfile). The tracked `uv.lock` is the pinned-version
+record only — refresh it with `uv lock` after changing dependencies in
+`pyproject.toml`; it is not consumed by any install or build step yet.
+
 Integration tests pull testcontainers (real Postgres) for the
 checks that need it; the rest fall back to file-backed SQLite:
 

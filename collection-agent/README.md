@@ -75,6 +75,12 @@ python -m collection_agent eval-dataset  # build the labeled eval image dataset 
 python -m collection_agent eval-run      # measure scan identification accuracy (023)
 ```
 
+`python -m venv` + `pip install -e` is the canonical install path
+(matching the Dockerfile, where the editable install is load-bearing for
+data paths — see 027). The tracked `uv.lock` is the pinned-version record
+only — refresh it with `uv lock` after changing dependencies in
+`pyproject.toml`; it is not consumed by any install or build step yet.
+
 Analytics, filtered listings, media links, and YouTube playlist links are
 answered instantly from the local snapshot (`data/snapshot.json`,
 gitignored); moving records / creating folders executes **live** against

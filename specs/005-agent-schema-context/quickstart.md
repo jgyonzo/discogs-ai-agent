@@ -5,7 +5,7 @@ End-to-end verification — no AWS, no production API key.
 ## Prerequisites
 
 - Local agent venv at `agent/.venv/` with the project deps
-  (`uv sync` or `pip install -e agent/`).
+  (`pip install -e 'agent/[test,dev]'` — see `agent/README.md`).
 - Local Postgres + agent stack running via Docker Compose
   (`agent/README.md` lines 30–32 are the canonical health
   check).

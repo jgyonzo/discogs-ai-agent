@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- `collection-agent` installed: `cd collection-agent && uv sync` (or
-  `pip install -e ".[dev]"`).
+- `collection-agent` installed: `cd collection-agent &&
+  pip install -e ".[dev]"` in the component venv.
 - Repo-root `.env` with `DISCOGS_USER_TOKEN` and `OPENAI_API_KEY`
   (both already required by the chat agent).
 - A collection snapshot for duplicate detection (optional but

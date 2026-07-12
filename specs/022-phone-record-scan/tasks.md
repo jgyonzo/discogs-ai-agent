@@ -29,8 +29,8 @@ All paths relative to repo root.
 
 - [x] T001 Add `fastapi`, `uvicorn`, `python-multipart` to
       `collection-agent/pyproject.toml` dependencies and refresh
-      `collection-agent/uv.lock` (`cd collection-agent && uv lock` or
-      `uv sync`); suite still passes untouched.
+      `collection-agent/uv.lock` (`cd collection-agent && uv lock`);
+      suite still passes untouched.
 - [x] T002 [P] Create the scan subpackage skeleton:
       `collection-agent/src/collection_agent/scan/__init__.py` and
       empty module stubs `models.py`, `vision.py`, `search.py`,
