@@ -677,6 +677,102 @@
   input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
   window._onChatTab = loadHistory;
 })();
+
+// -- collection tab (028 US2, contracts/web-ui-api.md §3) ---------------------
+(function () {
+  "use strict";
+  var esc = window._esc;
+  var statusEl = document.getElementById("colstatus");
+  var progEl = document.getElementById("syncprog");
+  var syncBtn = document.getElementById("syncBtn");
+  var linkEl = document.getElementById("collink");
+  var hintEl = document.getElementById("syncHint");
+  var POLL_MS = 2000; // UI pacing only — not runtime config
+  var pollTimer = null;
+
+  function row(label, value) {
+    return "<div><dt>" + esc(label) + "</dt><dd>" + esc(value) + "</dd></div>";
+  }
+
+  function renderStatus(body) {
+    var snap = body.snapshot;
+    if (!snap) {
+      statusEl.innerHTML = row("snapshot", "none yet") +
+        row("hint", "run a sync to enable chat answers and duplicate checks");
+    } else {
+      var v = snap.collection_value || {};
+      statusEl.innerHTML =
+        row("state", snap.completeness) +
+        row("records", snap.instance_count + " (" + snap.unique_release_count + " unique)") +
+        row("last sync", snap.synced_at + (snap.age_hours != null ? " (" + snap.age_hours + "h ago)" : "")) +
+        row("value (Discogs est.)", "min " + (v.minimum || "?") + " · median " +
+            (v.median || "?") + " · max " + (v.maximum || "?"));
+    }
+    linkEl.innerHTML = body.collection_url
+      ? '<a class="linkout" target="_blank" rel="noopener noreferrer" href="' +
+        esc(body.collection_url) + '">View your collection on Discogs ↗</a>'
+      : "";
+    renderSync(body.sync);
+  }
+
+  function renderSync(sync) {
+    hintEl.hidden = sync.state !== "running";
+    syncBtn.disabled = sync.state === "running";
+    progEl.className = sync.state === "failed" ? "syncprog error" : "syncprog";
+    if (sync.state === "running") {
+      var prog = sync.phase
+        ? sync.phase + (sync.total != null ? " — " + sync.done + "/" + sync.total : "")
+        : "starting…";
+      progEl.textContent = "⟳ syncing: " + prog +
+        " (scans and chat stay usable, just slower)";
+      schedulePoll();
+    } else if (sync.state === "failed") {
+      progEl.textContent = "✗ sync failed: " + (sync.error || "unknown error") +
+        " — Sync again to resume from where it stopped.";
+    } else if (sync.state === "partial") {
+      progEl.textContent = "⚠ sync ended partial — Sync again to resume.";
+    } else if (sync.state === "complete") {
+      progEl.textContent = "✓ last sync completed " + (sync.finished_at || "");
+    } else {
+      progEl.textContent = "";
+    }
+    if (sync.warnings && sync.warnings.length) {
+      progEl.textContent += " · " + sync.warnings[sync.warnings.length - 1];
+    }
+  }
+
+  function schedulePoll() {
+    if (pollTimer) return;
+    pollTimer = setTimeout(function () {
+      pollTimer = null;
+      loadStatus();
+    }, POLL_MS);
+  }
+
+  function loadStatus() {
+    fetch("/api/collection/status")
+      .then(function (r) { return r.json(); })
+      .then(renderStatus)
+      .catch(function () {});
+  }
+
+  syncBtn.onclick = function () {
+    fetch("/api/sync", { method: "POST" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok && res.j && res.j.error && res.j.error.code !== "sync_already_running") {
+          progEl.className = "syncprog error";
+          progEl.textContent = res.j.error.message;
+          return;
+        }
+        loadStatus();
+      })
+      .catch(function () {});
+  };
+
+  window._onCollectionTab = loadStatus;
+  loadStatus(); // header sync hint is live from page load, whatever the tab
+})();
 </script>
 </body>
 </html>
