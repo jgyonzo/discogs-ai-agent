@@ -81,7 +81,14 @@ verbatim; NO discogs-consumption amendment — zero new Discogs
 reads/writes, chat moves reuse 017 §4's contracted calls). Out of
 scope kept: TLS/auth (022 T041 stance), multi-user sessions, token
 streaming, persisted chat history, in-page collection browsing,
-web `--full`, AWS deploy.
+web `--full`, AWS deploy. Known follow-up candidate recorded during
+live validation (2026-07-13, owner incident; NOT a 028 defect —
+terminal chat fails identically): "most recent record" is unanswerable
+— `CollectionRecord.date_added` is synced on every record but exposed
+nowhere (not a registry attribute, not a top_n basis), so the LLM
+guesses; 029 candidate = date_added attribute + recency ranking
+(details + the related no-durable-chat-log observability gap in memory
+`project_029_date_added_recency_gap`).
 
 Prior feature:
 **027-dockerize-collection-agent** (PR #17, merged to main 2026-07-12 —
