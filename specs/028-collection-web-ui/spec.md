@@ -28,6 +28,26 @@ Collection status loader re-renders the header badge on every load
 trigger a status refresh; wiring guard-pinned in
 `test_web_page_guards.py`.
 
+### Addendum 2 — markdown answers + no in-flight feedback (2026-07-12, live validation)
+
+Two owner findings from the first live chat session: (1) answers arrived
+as markdown (asterisks, headings) rendered raw in the chat bubbles — the
+shared system prompt and the LLM's habits assume a terminal/markdown
+consumer; (2) after submitting a prompt the page gave no feedback until
+the reply landed (a turn can take tens of seconds).
+
+FR-003 is sharpened: the web runtime MUST present answers readable in its
+own medium — it appends a transient plain-text-format instruction to
+every LLM request (the 020 `LANGUAGE_REMINDER` decision-point pattern:
+sent after the language reminder, never persisted, terminal requests
+byte-identical), and the page renders bare URLs in assistant bubbles as
+tappable new-tab links (rendering LLM-relayed tool-built URLs — the page
+still never constructs one). FR-014/UX: the page MUST show a visible
+working indicator from submit until the reply, error, or plan-execution
+outcome arrives. Wiring guard-pinned in `test_web_page_guards.py`; the
+reminder's wire placement pinned in `test_web_agent_factory.py`;
+recorded as agent-tools delta 15.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)

@@ -71,6 +71,22 @@ def test_sync_running_hint_element_exists():
     assert "syncHint" in text.split("</style>")[1]  # actually driven by JS
 
 
+def test_chat_working_indicator_and_link_rendering():
+    """Replay addendum 2 (2026-07-12 live validation): no feedback after
+    submitting a prompt, and raw markdown in bubbles. Pin the wiring: a
+    typing indicator is shown for turns and plan execution, and the
+    linkified anchors built via createElement carry the same new-tab +
+    noopener discipline as every literal anchor on the page."""
+    text = _page()
+    chat_module = text.split("-- chat tab (028", 1)[1].split("-- collection tab", 1)[0]
+    assert "showWorking" in chat_module
+    assert 'showWorking("Thinking")' in chat_module
+    assert 'showWorking("Executing moves")' in chat_module
+    assert "msg.typing" in text  # the pulse style exists
+    assert 'a.target = "_blank"' in chat_module
+    assert 'a.rel = "noopener noreferrer"' in chat_module
+
+
 def test_header_snapshot_badge_refreshes_after_state_changes():
     """Replay addendum 1 (2026-07-12 live validation): the header badge was
     set once at page load and kept reading "stale" after a completed sync.

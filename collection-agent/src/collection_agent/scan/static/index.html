@@ -60,6 +60,10 @@
   .msg.assistant { background: var(--card); border: 1px solid var(--line); align-self: flex-start; }
   .msg.error { background: #3a2320; color: var(--err); align-self: flex-start; font-size: .9rem; }
   .msg.event { color: var(--dim); font-size: .8rem; align-self: center; background: none; padding: 2px; }
+  .msg.typing { color: var(--dim); }
+  .msg.typing::after { content: " ⋯"; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .msg a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
   .plancard { background: var(--card); border: 1px solid var(--warn); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
   .plancard h3 { font-size: .95rem; margin-bottom: 6px; }
   .plancard ul { margin: 0 0 10px 18px; font-size: .9rem; }
@@ -524,9 +528,39 @@
   var sendBtn = document.getElementById("chatsend");
   var busy = false;
 
+  // addendum 2: assistant text arrives plain (no markdown), with bare
+  // URLs — render them as tappable anchors. This renders LLM-relayed,
+  // tool-built URLs; the page still never CONSTRUCTS a URL itself.
+  function appendWithLinks(el, text) {
+    var re = /\bhttps?:\/\/[^\s<>"')\]]+/g;
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var a = document.createElement("a");
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.href = m[0];
+      a.textContent = m[0];
+      el.appendChild(a);
+      last = m.index + m[0].length;
+    }
+    el.appendChild(document.createTextNode(text.slice(last)));
+  }
+
   function addMsg(kind, text) {
     var div = document.createElement("div");
     div.className = "msg " + (kind === "plan_cancelled" ? "event" : kind);
+    if (kind === "assistant") appendWithLinks(div, text);
+    else div.textContent = text;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+    return div;
+  }
+
+  // addendum 2: visible feedback while the server works a turn/plan
+  function showWorking(text) {
+    var div = document.createElement("div");
+    div.className = "msg assistant typing";
     div.textContent = text;
     logEl.appendChild(div);
     div.scrollIntoView({ block: "end" });
@@ -584,6 +618,7 @@
   }
 
   function planAction(action, planId) {
+    var working = action === "confirm" ? showWorking("Executing moves") : null;
     fetch("/api/chat/plan/" + action, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -591,6 +626,7 @@
     })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
+        if (working) working.remove();
         planEl.innerHTML = "";
         if (!res.ok) {
           addMsg("error", res.j && res.j.error ? res.j.error.message :
@@ -609,6 +645,7 @@
         });
       })
       .catch(function () {
+        if (working) working.remove();
         addMsg("error", "Network error — check the conversation before retrying.");
       });
   }
@@ -655,6 +692,7 @@
     input.value = "";
     renderPlan(null); // a new turn supersedes the pending card server-side too
     setBusy(true);
+    var working = showWorking("Thinking");
     fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -662,6 +700,7 @@
     })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
+        working.remove();
         if (!res.ok) {
           addMsg("error", res.j && res.j.error ? res.j.error.message : "Turn failed.");
           return;
@@ -670,6 +709,7 @@
         renderPlan(res.j.pending_plan);
       })
       .catch(function () {
+        working.remove();
         addMsg("error", "Network error — the answer may not have arrived. Reload to re-check.");
       })
       .finally(function () {

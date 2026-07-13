@@ -65,6 +65,34 @@ def test_start_sync_reports_already_running(settings, store, complete_snapshot):
     assert payload["already_running"] is True
 
 
+def test_web_turns_carry_the_format_reminder_last_never_persisted(
+    settings, store, complete_snapshot
+):
+    """Replay addendum 2: web answers render in plain chat bubbles, so the
+    web runtime appends a transient plain-text-format instruction AFTER the
+    language reminder on every request (020 decision-point pattern). Wire
+    truth only — never in the persisted session. The terminal runtime pins
+    its own unchanged behavior in test_agent_loop."""
+    from collection_agent.agent import LANGUAGE_REMINDER
+    from collection_agent.web.agent_factory import WEB_FORMAT_REMINDER
+
+    store.save(complete_snapshot)
+    agent = make_web(
+        settings, store, lambda: True,
+        script=[("tool", "snapshot_status", {}), ("text", "plain answer")],
+    )
+    llm = agent.llm
+    agent.run_turn("¿cuántos discos tengo?")
+    assert len(llm.requests) == 2
+    for req in llm.requests:
+        contents = [m["content"] for m in req["messages"] if m["role"] == "system"]
+        assert contents[-1] == WEB_FORMAT_REMINDER
+        assert contents[-2] == LANGUAGE_REMINDER
+    persisted = [m.get("content") for m in agent.session.messages]
+    assert WEB_FORMAT_REMINDER not in persisted
+    assert "no markdown syntax" in WEB_FORMAT_REMINDER
+
+
 def test_start_sync_full_flag_ignored_with_honest_note(settings, store, complete_snapshot):
     store.save(complete_snapshot)
     agent = make_web(

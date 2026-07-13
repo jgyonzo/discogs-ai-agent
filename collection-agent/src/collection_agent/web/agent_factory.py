@@ -27,6 +27,18 @@ from collection_agent.tools.registration import register_story_tools
 
 from pydantic import BaseModel
 
+# 028 replay addendum 2 (live finding: markdown answers render raw in the
+# chat bubbles). Transient per-request instruction, the 020
+# LANGUAGE_REMINDER pattern — the web runtime's rendering constraint binds
+# at the decision point, never in the shared persisted prompt.
+WEB_FORMAT_REMINDER = (
+    "Reminder: this answer renders in a plain web chat bubble — not a "
+    "terminal, not a markdown viewer. Write plain conversational text: no "
+    "markdown syntax (no **bold**, no # headings, no tables, no backticks, "
+    "no [text](url) links). For lists use short plain lines starting with "
+    "'- '. Include URLs bare — the page makes them tappable."
+)
+
 
 def build_web_agent(
     settings: Settings,
@@ -45,6 +57,7 @@ def build_web_agent(
         model=settings.collection_agent_model,
         llm_client=llm_client,
         session=AgentSession(),
+        format_reminder=WEB_FORMAT_REMINDER,
     )
 
     def snapshot_status(_s: AgentSession, _a: BaseModel) -> dict[str, Any]:

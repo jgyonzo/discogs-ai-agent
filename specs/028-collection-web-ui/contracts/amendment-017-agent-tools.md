@@ -54,3 +54,16 @@ validation, live folder check, OPENAI_API_KEY gate), extended to build
 the web chat agent and the SyncRunner. `scan` remains a fully working
 alias with identical behavior (the 027 container `CMD ["scan"]` is
 unaffected). Exit codes unchanged (0/1/2/3).
+
+## Delta 15 — §3 transient web format reminder (replay addendum 2)
+
+The web runtime constructs its Agent with a transient
+`format_reminder` (`web/agent_factory.py::WEB_FORMAT_REMINDER`): a
+plain-text-format instruction appended as a system message AFTER 020's
+`LANGUAGE_REMINDER` on EVERY LLM request — wire truth (visible in
+tracing as-sent payloads), never persisted to the session. The terminal
+runtime passes no reminder; its requests remain byte-identical to 020's
+contract (language reminder last). Rationale: the web page renders
+answers in plain chat bubbles, where markdown arrives as raw syntax;
+the rendering constraint binds at the decision point, not in the shared
+persisted system prompt (which stays runtime-neutral per delta 13).
