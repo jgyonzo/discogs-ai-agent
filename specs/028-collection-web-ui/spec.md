@@ -48,6 +48,21 @@ outcome arrives. Wiring guard-pinned in `test_web_page_guards.py`; the
 reminder's wire placement pinned in `test_web_agent_factory.py`;
 recorded as agent-tools delta 15.
 
+### Addendum 3 — plan appeared "duplicated" at confirm time (2026-07-13, live validation)
+
+During the owner's first live folder-move via web chat (moves found and
+executed correctly), the plan appeared twice on screen. Code analysis:
+the confirm-card slot renders at most one card (cleared before every
+render), so the duplication is presentational — the `propose_moves`
+payload hands the LLM the full move list and the model echoes it in its
+reply bubble, immediately above the card rendering the same list. The
+terminal duplicates identically (LLM narration + the CLI's own plan
+table). Fix: the shared `propose_moves` payload `detail` now instructs
+the LLM to summarize (count + folder) and NOT re-list the moves — the
+app's rendering (card / CLI table) is the single presentation of the
+plan. Steering-level fix; if the duplication recurs, escalate per the
+018 ladder (e.g., withholding the display list from the LLM payload).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)
