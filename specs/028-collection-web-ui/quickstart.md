@@ -43,9 +43,13 @@ stubbed LLM/Discogs clients, like the scan suite.
 
 ## Owner live-validation checklist (fill during live validation; owner-only)
 
-- [ ] **SC-001 — web chat parity**: from the phone, ask a collection
+- [x] **SC-001 — web chat parity**: from the phone, ask a collection
   question in the Chat tab; answer matches terminal chat for the same
   snapshot. Ask one question in Spanish; reply is Spanish.
+  *Owner-validated 2026-07-12: asked in English then in Spanish — replies
+  matched the question language both times; CLI↔web parity confirmed
+  (same output content; only the rendering differs, per delta 15's
+  plain-text web format). Validated after replay addenda 1–2 landed.*
 - [ ] **SC-002 — write gate**: ask chat to move records to a folder; a
   confirmation card appears. First: Cancel → verify on Discogs nothing
   changed. Then repeat and Confirm → per-move outcomes shown, records
