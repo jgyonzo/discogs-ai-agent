@@ -244,49 +244,11 @@ def _build_agent(settings: Settings, store: SnapshotStore):
     )
     for tool in make_base_tools(store, lambda full: _run_sync_with_progress(settings, full)):
         agent.register(tool)
-    _register_story_tools(agent, settings, store)
+    # shared with the web runtime (028): both register the identical story set
+    from collection_agent.tools.registration import register_story_tools
+
+    register_story_tools(agent, settings, store)
     return agent
-
-
-def _register_story_tools(agent, settings: Settings, store: SnapshotStore) -> None:
-    """Register US1–US4 tools as their modules land (each module exposes
-    make_tools(...)); missing modules are skipped so the base CLI stays usable
-    mid-feature."""
-    try:
-        from collection_agent.tools.analytics import make_analytics_tools
-
-        for tool in make_analytics_tools(settings, store):
-            agent.register(tool)
-    except ImportError:
-        pass
-    try:
-        from collection_agent.tools.browse import make_browse_tools
-
-        for tool in make_browse_tools(settings, store):
-            agent.register(tool)
-    except ImportError:
-        pass
-    try:
-        from collection_agent.tools.media import make_media_tools
-
-        for tool in make_media_tools(settings, store):
-            agent.register(tool)
-    except ImportError:
-        pass
-    try:
-        from collection_agent.tools.organize import make_organize_tools
-
-        for tool in make_organize_tools(settings, store):
-            agent.register(tool)
-    except ImportError:
-        pass
-    try:
-        from collection_agent.tools.playlist import make_playlist_tools
-
-        for tool in make_playlist_tools(settings, store):
-            agent.register(tool)
-    except ImportError:
-        pass
 
 
 def _cmd_chat(settings: Settings) -> int:

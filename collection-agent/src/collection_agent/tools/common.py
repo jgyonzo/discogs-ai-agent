@@ -86,6 +86,14 @@ def master_page_url(settings: Settings, master_id: int) -> str:
     return f"{settings.discogs_web_base_url.rstrip('/')}/master/{master_id}"
 
 
+def collection_page_url(settings: Settings, username: str) -> str:
+    """The ONLY code site that knows the collection-page URL shape (028,
+    contracts/web-ui-api.md §3; 019 single-site discipline). Built from
+    the live-resolved identity username, served verbatim to the page —
+    the page never assembles Discogs URLs client-side."""
+    return f"{settings.discogs_web_base_url.rstrip('/')}/user/{username}/collection"
+
+
 def release_page_url(settings: Settings, record: CollectionRecord) -> str:
     """The record's Discogs release-page URL (019, agent-tools deltas 6–8).
 

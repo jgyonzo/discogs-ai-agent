@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Record Scan</title>
+<title>Collection</title>
 <style>
   :root {
     --bg: #111417; --card: #1c2126; --text: #e8e6e3; --dim: #9aa0a6;
@@ -13,10 +13,14 @@
   body { background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, system-ui, sans-serif; padding: 12px; max-width: 640px; margin: 0 auto; }
   h1 { font-size: 1.1rem; margin: 4px 0 12px; }
   h1 small { color: var(--dim); font-weight: normal; }
+  #syncHint { color: var(--warn); font-size: .8rem; margin-left: 8px; }
   button { font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
   .primary { background: var(--accent); color: #08130c; font-weight: 600; width: 100%; font-size: 1.15rem; padding: 16px; }
   .secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
   .danger-confirm { background: var(--warn); color: #1d1405; font-weight: 600; }
+  #tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  #tabs .tab { flex: 1; background: var(--card); color: var(--dim); border: 1px solid var(--line); padding: 10px 0; }
+  #tabs .tab.active { color: var(--text); border-color: var(--accent); font-weight: 600; }
   #status { margin: 12px 0; color: var(--dim); min-height: 1.4em; }
   #status.error { color: var(--err); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; gap: 10px; }
@@ -47,11 +51,40 @@
   .masterrow button { margin-left: 8px; font-size: .8rem; padding: 6px 10px; }
   .pressnote { color: var(--dim); font-size: .85rem; margin: 4px 0 10px; }
   .pressnote.error { color: var(--err); }
+  /* 028: chat + collection tabs */
+  .banner { background: #3b2f1a; color: var(--warn); border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; font-size: .9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .banner button { padding: 8px 12px; font-size: .85rem; flex: none; }
+  #chatlog { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .msg { border-radius: 12px; padding: 10px 12px; max-width: 88%; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .msg.user { background: #24313b; align-self: flex-end; }
+  .msg.assistant { background: var(--card); border: 1px solid var(--line); align-self: flex-start; }
+  .msg.error { background: #3a2320; color: var(--err); align-self: flex-start; font-size: .9rem; }
+  .msg.event { color: var(--dim); font-size: .8rem; align-self: center; background: none; padding: 2px; }
+  .plancard { background: var(--card); border: 1px solid var(--warn); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .plancard h3 { font-size: .95rem; margin-bottom: 6px; }
+  .plancard ul { margin: 0 0 10px 18px; font-size: .9rem; }
+  .planresult { font-size: .85rem; margin-top: 4px; }
+  .planresult .ok { color: var(--accent); }
+  .planresult .failed { color: var(--err); }
+  #chatrow { display: flex; gap: 8px; }
+  #chatrow input { flex: 1; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .statgrid { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: .95rem; }
+  .statgrid div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .statgrid dt { color: var(--dim); }
+  .syncprog { color: var(--dim); font-size: .9rem; margin: 8px 0; min-height: 1.3em; }
+  .syncprog.error { color: var(--err); }
 </style>
 </head>
 <body>
-<h1>Record Scan <small id="snapstate"></small></h1>
+<h1>Collection <small id="snapstate"></small><span id="syncHint" hidden>⟳ sync running…</span></h1>
 
+<nav id="tabs">
+  <button class="tab active" id="tabbtn-scan" data-tab="scan">Scan</button>
+  <button class="tab" id="tabbtn-chat" data-tab="chat">Chat</button>
+  <button class="tab" id="tabbtn-collection" data-tab="collection">Collection</button>
+</nav>
+
+<section id="tab-scan">
 <input type="file" id="photo" accept="image/*" capture="environment" hidden>
 <button class="primary" id="scanBtn">📷 Scan a record</button>
 
@@ -66,11 +99,51 @@
 </div>
 
 <div id="log"><h2>This session</h2><div id="entries"></div></div>
+</section>
+
+<section id="tab-chat" hidden>
+  <div id="chatbanner"></div>
+  <div id="chatlog"></div>
+  <div id="plancard"></div>
+  <div id="chatrow">
+    <input type="text" id="chatinput" placeholder="Ask about your collection… (es/en)" autocomplete="off">
+    <button class="secondary" id="chatsend">Send</button>
+  </div>
+</section>
+
+<section id="tab-collection" hidden>
+  <div id="colstatus" class="statgrid"></div>
+  <div id="syncprog" class="syncprog"></div>
+  <button class="primary" id="syncBtn">⟳ Sync collection</button>
+  <div id="collink" style="margin-top:12px"></div>
+</section>
+
 <footer id="foot"></footer>
 
 <script>
 (function () {
   "use strict";
+
+  // -- tabs (028): show/hide only — DOM state survives switching -----------
+  var sections = { scan: null, chat: null, collection: null };
+  Object.keys(sections).forEach(function (name) {
+    sections[name] = document.getElementById("tab-" + name);
+  });
+  function showTab(name) {
+    Object.keys(sections).forEach(function (n) {
+      sections[n].hidden = n !== name;
+      document.getElementById("tabbtn-" + n).className =
+        n === name ? "tab active" : "tab";
+    });
+    if (name === "chat" && window._onChatTab) window._onChatTab();
+    if (name === "collection" && window._onCollectionTab) window._onCollectionTab();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#tabs .tab"), function (btn) {
+    btn.onclick = function () { showTab(btn.getAttribute("data-tab")); };
+  });
+  window._showTab = showTab;
+
+  // -- scan (022/026, behavior unchanged) -----------------------------------
   var photo = document.getElementById("photo");
   var scanBtn = document.getElementById("scanBtn");
   var statusEl = document.getElementById("status");
@@ -435,6 +508,7 @@
     .catch(function () {});
 
   cameraReady();
+  window._esc = esc; // shared with the chat/collection modules below
 })();
 </script>
 </body>
