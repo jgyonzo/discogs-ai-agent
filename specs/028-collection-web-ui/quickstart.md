@@ -50,17 +50,17 @@ stubbed LLM/Discogs clients, like the scan suite.
   matched the question language both times; CLI↔web parity confirmed
   (same output content; only the rendering differs, per delta 15's
   plain-text web format). Validated after replay addenda 1–2 landed.*
-- [ ] **SC-002 — write gate**: ask chat to move records to a folder; a
+- [x] **SC-002 — write gate**: ask chat to move records to a folder; a
   confirmation card appears. First: Cancel → verify on Discogs nothing
   changed. Then repeat and Confirm → per-move outcomes shown, records
   moved on Discogs, Collection tab still reads `complete` (snapshot
   patched in place). Record the folder + record count used.
-  *Partially validated 2026-07-13: confirm leg done — records found and
-  moved correctly. Observed: plan appeared "duplicated" — round 1: LLM
-  reply re-listing the moves (addendum 3 steering fix); round 2 (owner
-  pinned it): the confirm card stayed on screen, buttons live, while
-  "Executing moves" ran — card now clears at tap time (addendum 3
-  round 2). Cancel leg (zero-changes verify) still open.*
+  *Owner-validated 2026-07-13: confirm leg — records found and moved
+  correctly; cancel leg — cancelled a plan and verified on Discogs that
+  nothing changed. Two presentation findings fixed during validation
+  (replay addendum 3, rounds 1–2): the LLM re-listing the plan above
+  the card, and the card staying tappable during "Executing moves" —
+  card now clears at tap time.*
 - [ ] **SC-003 — stale → sync → fresh, one process**: add a record via
   the Scan tab (snapshot goes stale, banner appears) → tap Sync → watch
   progress to completion → status reads `complete` with updated counts →
