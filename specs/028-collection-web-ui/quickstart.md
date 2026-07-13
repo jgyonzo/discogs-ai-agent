@@ -56,10 +56,11 @@ stubbed LLM/Discogs clients, like the scan suite.
   moved on Discogs, Collection tab still reads `complete` (snapshot
   patched in place). Record the folder + record count used.
   *Partially validated 2026-07-13: confirm leg done — records found and
-  moved correctly. Observed: plan appeared "duplicated" (LLM reply
-  re-listing the moves above the card — replay addendum 3 steering fix
-  applied; watch whether it recurs). Cancel leg (zero-changes verify)
-  still open.*
+  moved correctly. Observed: plan appeared "duplicated" — round 1: LLM
+  reply re-listing the moves (addendum 3 steering fix); round 2 (owner
+  pinned it): the confirm card stayed on screen, buttons live, while
+  "Executing moves" ran — card now clears at tap time (addendum 3
+  round 2). Cancel leg (zero-changes verify) still open.*
 - [ ] **SC-003 — stale → sync → fresh, one process**: add a record via
   the Scan tab (snapshot goes stale, banner appears) → tap Sync → watch
   progress to completion → status reads `complete` with updated counts →

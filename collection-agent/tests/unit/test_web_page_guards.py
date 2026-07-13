@@ -85,6 +85,14 @@ def test_chat_working_indicator_and_link_rendering():
     assert "msg.typing" in text  # the pulse style exists
     assert 'a.target = "_blank"' in chat_module
     assert 'a.rel = "noopener noreferrer"' in chat_module
+    # addendum 3 round 2: the confirm card is cleared SYNCHRONOUSLY when
+    # acted on (before the fetch), and failures re-render it from server
+    # truth — it must never sit tappable beside "Executing moves ⋯"
+    plan_action = chat_module.split("function planAction", 1)[1]
+    clear_pos = plan_action.index('planEl.innerHTML = ""')
+    fetch_pos = plan_action.index('fetch("/api/chat/plan/')
+    assert clear_pos < fetch_pos
+    assert "refreshPlanCard()" in plan_action
 
 
 def test_header_snapshot_badge_refreshes_after_state_changes():

@@ -617,7 +617,20 @@
     planEl.appendChild(card);
   }
 
+  // addendum 3 round 2 (2026-07-13 live): on failure, re-render the card
+  // from server truth — it returns iff the plan is genuinely still pending
+  function refreshPlanCard() {
+    fetch("/api/chat/history")
+      .then(function (r) { return r.json(); })
+      .then(function (h) { renderPlan(h.pending_plan); })
+      .catch(function () {});
+  }
+
   function planAction(action, planId) {
+    // addendum 3 round 2: the card leaves the screen the moment it is
+    // acted on — it used to stay (buttons live) for the seconds the
+    // per-move live re-validation takes, beside "Executing moves ⋯"
+    planEl.innerHTML = "";
     var working = action === "confirm" ? showWorking("Executing moves") : null;
     fetch("/api/chat/plan/" + action, {
       method: "POST",
@@ -627,10 +640,10 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (working) working.remove();
-        planEl.innerHTML = "";
         if (!res.ok) {
           addMsg("error", res.j && res.j.error ? res.j.error.message :
                  "Plan action failed — nothing was executed.");
+          refreshPlanCard();
           return;
         }
         if (action === "cancel") {
@@ -647,6 +660,7 @@
       .catch(function () {
         if (working) working.remove();
         addMsg("error", "Network error — check the conversation before retrying.");
+        refreshPlanCard();
       });
   }
 

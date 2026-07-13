@@ -63,6 +63,18 @@ app's rendering (card / CLI table) is the single presentation of the
 plan. Steering-level fix; if the duplication recurs, escalate per the
 018 ladder (e.g., withholding the display list from the LLM payload).
 
+**Round 2 (2026-07-13, owner re-observation)**: the steering helped but
+the owner pinned the real remaining cause — tapping Confirm showed the
+"Executing moves" indicator while the confirm card STAYED on screen
+(buttons live) for the seconds the per-move live re-validation takes;
+the card was only cleared when the response arrived. Fix: the card is
+removed synchronously at tap time (confirm AND cancel), before the
+request; on failure the card is re-rendered from server truth
+(`/api/chat/history`'s pending plan) so it returns exactly when the plan
+is genuinely still pending. Ordering guard-pinned in
+`test_web_page_guards.py`. (Server-side, a double-tap was always safe —
+lock + spent-plan 409 — this was purely a presentation bug.)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)
