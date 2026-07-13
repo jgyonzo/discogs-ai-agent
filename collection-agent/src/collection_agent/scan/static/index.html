@@ -405,6 +405,8 @@
         }
         if (res.j.status === "added") {
           setStatus("✓ Added: " + c.title + " — ready for the next record.");
+          // the add marked the snapshot stale — keep the header honest
+          if (window._refreshStatus) window._refreshStatus();
         } else {
           setStatus(res.j.detail || "Add failed — you can retry.", true);
         }
@@ -670,7 +672,12 @@
       .catch(function () {
         addMsg("error", "Network error — the answer may not have arrived. Reload to re-check.");
       })
-      .finally(function () { setBusy(false); });
+      .finally(function () {
+        setBusy(false);
+        // a turn can start a background sync (start_sync tool) or mark the
+        // snapshot stale — refresh the header badge + sync hint (addendum 1)
+        if (window._refreshStatus) window._refreshStatus();
+      });
   }
 
   sendBtn.onclick = send;
@@ -696,6 +703,11 @@
 
   function renderStatus(body) {
     var snap = body.snapshot;
+    // replay addendum 1 (2026-07-12): the header badge was set once at page
+    // load from /api/health and kept saying "stale" after a completed sync —
+    // every status (re)load now refreshes it, incl. each poll tick
+    document.getElementById("snapstate").textContent =
+      "· snapshot: " + (snap ? snap.completeness : "missing");
     if (!snap) {
       statusEl.innerHTML = row("snapshot", "none yet") +
         row("hint", "run a sync to enable chat answers and duplicate checks");
@@ -771,6 +783,7 @@
   };
 
   window._onCollectionTab = loadStatus;
+  window._refreshStatus = loadStatus; // chat pings this after each turn
   loadStatus(); // header sync hint is live from page load, whatever the tab
 })();
 </script>

@@ -11,6 +11,23 @@
 
 - Q: What should the web Sync button do — and should full re-sync (the terminal's `sync --full`) be reachable from the page? → A: Standard sync only. The button runs exactly what terminal `sync` (no flags) does: resume if interrupted, refresh otherwise. Full re-sync stays terminal-only in v1.
 
+## Replay Addenda
+
+### Addendum 1 — header snapshot badge went stale (2026-07-12, live validation)
+
+During owner live validation (SC-003 flow), a completed sync updated the
+Collection tab correctly but the page header kept reading
+"snapshot: stale": the badge was rendered once at page load (from the
+health check) and never refreshed. FR-011 is sharpened accordingly:
+**every on-page indication of snapshot state** — the Chat banner AND the
+header badge — must reflect the current state after any state-changing
+event in the same page session (sync completion, scan add marking the
+snapshot stale, chat-initiated sync), without a page reload. Fix: the
+Collection status loader re-renders the header badge on every load
+(including each progress poll), and the chat-turn and scan-add paths
+trigger a status refresh; wiring guard-pinned in
+`test_web_page_guards.py`.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)

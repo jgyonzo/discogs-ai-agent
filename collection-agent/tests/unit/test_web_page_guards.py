@@ -71,6 +71,22 @@ def test_sync_running_hint_element_exists():
     assert "syncHint" in text.split("</style>")[1]  # actually driven by JS
 
 
+def test_header_snapshot_badge_refreshes_after_state_changes():
+    """Replay addendum 1 (2026-07-12 live validation): the header badge was
+    set once at page load and kept reading "stale" after a completed sync.
+    Pin the wiring: the collection module re-renders `snapstate` on every
+    status load, and both the chat turn path and the scan add path ping
+    the shared refresh hook."""
+    text = _page()
+    collection_module = text.split("-- collection tab (028", 1)[1]
+    assert "snapstate" in collection_module
+    assert "_refreshStatus = loadStatus" in collection_module
+    chat_module = text.split("-- chat tab (028", 1)[1].split("-- collection tab", 1)[0]
+    assert "_refreshStatus" in chat_module
+    scan_module = text.split("-- chat tab (028", 1)[0]
+    assert "_refreshStatus" in scan_module  # post-add staleness, same class
+
+
 def test_chat_and_collection_anchors_follow_link_discipline():
     # the shared anchor guard in test_scan_page_links covers the whole
     # file; this pins that the NEW modules build anchors the same way
