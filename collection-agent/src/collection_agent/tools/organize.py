@@ -145,9 +145,11 @@ def make_organize_tools(
             "moves": [m.display for m in plan.moves],
             "move_count": len(plan.moves),
             "requires_confirmation": True,
-            "detail": "Plan prepared — NOT executed. The terminal will ask the "
-            "user to confirm (y/N); tell them to confirm there. Never state "
-            "the move already happened.",
+            # runtime-neutral (028 delta 13): the confirmation prompt is the
+            # terminal's y/N or the web page's confirm card — never name one
+            "detail": "Plan prepared — NOT executed. The app will now ask the "
+            "user to confirm; tell them to use the confirmation prompt. "
+            "Never state the move already happened.",
         }
         if notes:
             payload["notes"] = notes

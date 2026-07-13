@@ -510,6 +510,173 @@
   cameraReady();
   window._esc = esc; // shared with the chat/collection modules below
 })();
+
+// -- chat tab (028 US1, contracts/web-ui-api.md §2) ---------------------------
+(function () {
+  "use strict";
+  var esc = window._esc;
+  var logEl = document.getElementById("chatlog");
+  var planEl = document.getElementById("plancard");
+  var bannerEl = document.getElementById("chatbanner");
+  var input = document.getElementById("chatinput");
+  var sendBtn = document.getElementById("chatsend");
+  var busy = false;
+
+  function addMsg(kind, text) {
+    var div = document.createElement("div");
+    div.className = "msg " + (kind === "plan_cancelled" ? "event" : kind);
+    div.textContent = text;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+    return div;
+  }
+
+  function addPlanResult(e) {
+    var div = document.createElement("div");
+    div.className = "msg assistant";
+    var lines = (e.moves || []).map(function (m) {
+      return '<div class="planresult"><span class="' + esc(m.result) + '">' +
+        (m.result === "ok" ? "✓" : "✗") + "</span> " + esc(m.display) +
+        (m.error ? " — " + esc(m.error) : "") + "</div>";
+    }).join("");
+    div.innerHTML = "<b>" + esc(e.text) + "</b>" + lines;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+  }
+
+  function renderEntry(e) {
+    if (e.kind === "plan_result") addPlanResult(e);
+    else addMsg(e.kind, e.text);
+  }
+
+  function setBusy(b) {
+    busy = b;
+    input.disabled = b;
+    sendBtn.disabled = b;
+    sendBtn.textContent = b ? "…" : "Send";
+  }
+
+  function renderPlan(plan) {
+    planEl.innerHTML = "";
+    if (!plan) return;
+    var card = document.createElement("div");
+    card.className = "plancard";
+    card.innerHTML =
+      "<h3>Confirm: move " + plan.move_count + " record" +
+      (plan.move_count === 1 ? "" : "s") + " to " + esc(plan.target_folder) +
+      "?</h3><ul>" +
+      plan.moves.map(function (m) { return "<li>" + esc(m) + "</li>"; }).join("") +
+      "</ul>";
+    var yes = document.createElement("button");
+    yes.className = "danger-confirm";
+    yes.textContent = "Confirm moves";
+    yes.onclick = function () { planAction("confirm", plan.plan_id); };
+    var no = document.createElement("button");
+    no.className = "secondary";
+    no.textContent = "Cancel";
+    no.style.marginLeft = "8px";
+    no.onclick = function () { planAction("cancel", plan.plan_id); };
+    card.appendChild(yes);
+    card.appendChild(no);
+    planEl.appendChild(card);
+  }
+
+  function planAction(action, planId) {
+    fetch("/api/chat/plan/" + action, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: planId }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        planEl.innerHTML = "";
+        if (!res.ok) {
+          addMsg("error", res.j && res.j.error ? res.j.error.message :
+                 "Plan action failed — nothing was executed.");
+          return;
+        }
+        if (action === "cancel") {
+          addMsg("plan_cancelled", "Move plan cancelled — nothing sent to Discogs.");
+          return;
+        }
+        var ok = res.j.moves.filter(function (m) { return m.result === "ok"; }).length;
+        addPlanResult({
+          text: "Moved " + ok + "/" + res.j.moves.length + " record(s) to " +
+                res.j.target_folder,
+          moves: res.j.moves,
+        });
+      })
+      .catch(function () {
+        addMsg("error", "Network error — check the conversation before retrying.");
+      });
+  }
+
+  function renderBanner(state) {
+    bannerEl.innerHTML = "";
+    if (state === "complete") return;
+    var text = state === "missing"
+      ? "No collection snapshot yet — chat can't answer collection questions until you sync."
+      : "Snapshot is " + esc(state) + " — answers may lag your collection.";
+    var div = document.createElement("div");
+    div.className = "banner";
+    var span = document.createElement("span");
+    span.textContent = text;
+    var btn = document.createElement("button");
+    btn.className = "secondary";
+    btn.textContent = "Sync now";
+    btn.onclick = function () {
+      fetch("/api/sync", { method: "POST" }).finally(function () {
+        if (window._showTab) window._showTab("collection");
+      });
+    };
+    div.appendChild(span);
+    div.appendChild(btn);
+    bannerEl.appendChild(div);
+  }
+
+  function loadHistory() {
+    fetch("/api/chat/history")
+      .then(function (r) { return r.json(); })
+      .then(function (h) {
+        logEl.innerHTML = "";
+        h.entries.forEach(renderEntry);
+        renderPlan(h.pending_plan);
+        renderBanner(h.snapshot_state);
+      })
+      .catch(function () {});
+  }
+
+  function send() {
+    var text = input.value.trim();
+    if (!text || busy) return;
+    addMsg("user", text);
+    input.value = "";
+    renderPlan(null); // a new turn supersedes the pending card server-side too
+    setBusy(true);
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          addMsg("error", res.j && res.j.error ? res.j.error.message : "Turn failed.");
+          return;
+        }
+        addMsg("assistant", res.j.reply);
+        renderPlan(res.j.pending_plan);
+      })
+      .catch(function () {
+        addMsg("error", "Network error — the answer may not have arrived. Reload to re-check.");
+      })
+      .finally(function () { setBusy(false); });
+  }
+
+  sendBtn.onclick = send;
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
+  window._onChatTab = loadHistory;
+})();
 </script>
 </body>
 </html>

@@ -42,9 +42,15 @@ def main(argv: list[str] | None = None) -> int:
     sync_p = sub.add_parser("sync", help="run/resume the collection sync")
     sync_p.add_argument("--full", action="store_true", help="re-enrich all releases")
     sub.add_parser("status", help="print snapshot state")
-    scan_p = sub.add_parser(
-        "scan", help="serve the phone record-scan page on the LAN (022)"
+    serve_p = sub.add_parser(
+        "serve",
+        help="serve the collection web page — Scan · Chat · Collection "
+        "status/sync — on the LAN (028)",
     )
+    serve_p.add_argument("--host", default=None, help="bind address (default: settings)")
+    serve_p.add_argument("--port", type=int, default=None, help="port (default: settings)")
+    # `scan` stays a fully working alias (022 name; the 027 container CMD)
+    scan_p = sub.add_parser("scan", help="alias of serve (022 name, kept for compat)")
     scan_p.add_argument("--host", default=None, help="bind address (default: settings)")
     scan_p.add_argument("--port", type=int, default=None, help="port (default: settings)")
     evds_p = sub.add_parser(
@@ -100,8 +106,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_sync(settings, full=args.full)
         if command == "status":
             return _cmd_status(settings)
-        if command == "scan":
-            return _cmd_scan(settings, host=args.host, port=args.port)
+        if command in ("serve", "scan"):
+            return _cmd_serve(settings, host=args.host, port=args.port)
         if command == "eval-dataset":
             return _cmd_eval_dataset(
                 settings, limit=args.limit,
@@ -536,7 +542,7 @@ def _print_eval_summary(summary) -> None:
     console.print(t)
 
 
-# --- scan (022) --------------------------------------------------------------
+# --- serve (022 scan → 028 web page) -----------------------------------------
 
 
 def _lan_urls(port: int) -> list[str]:
@@ -557,21 +563,26 @@ def _lan_urls(port: int) -> list[str]:
     return [f"http://{h}:{port}/" for h in dict.fromkeys(hosts)]
 
 
-def _cmd_scan(settings: Settings, host: str | None, port: int | None) -> int:
-    """Serve the phone scan page (contracts/scan-api.md). The write gate is
-    the owner's tap on the page — the vision/search pipeline can only
-    propose candidates (research R9)."""
+def _cmd_serve(settings: Settings, host: str | None, port: int | None) -> int:
+    """Serve the collection web page (contracts/web-ui-api.md; scan-api.md
+    for the Scan tab). Write gates are the owner's taps on the page — the
+    vision/search pipeline can only propose candidates (022 research R9),
+    and chat's move plans execute only via the explicit confirm endpoint
+    (028 delta 12). The OPENAI_API_KEY gate covers vision AND chat."""
     if settings.openai_api_key is None:
         console.print(
             "[red]configuration error:[/red] OPENAI_API_KEY is not set "
-            "(needed for photo evidence extraction)."
+            "(needed for photo evidence extraction and chat)."
         )
         return EXIT_CONFIG
 
     from collection_agent.discogs.client import DiscogsAuthError, DiscogsClient
     from collection_agent.scan.journal import ScanJournal
-    from collection_agent.scan.server import create_app
     from collection_agent.scan.session import ScanSession
+    from collection_agent.web.agent_factory import build_web_agent
+    from collection_agent.web.chat import WebChat
+    from collection_agent.web.server import create_web_app
+    from collection_agent.web.syncrun import SyncRunner
 
     bind_host = host if host is not None else settings.scan_host
     bind_port = port if port is not None else settings.scan_port
@@ -608,18 +619,27 @@ def _cmd_scan(settings: Settings, host: str | None, port: int | None) -> int:
     session = ScanSession(
         ScanJournal(settings.scan_journal_dir, ScanSession.new_session_id())
     )
-    app = create_app(
+    llm_client = _build_llm_client(settings)
+    sync_runner = SyncRunner(settings, store)
+    agent = build_web_agent(
+        settings, store, llm_client, sync_starter=sync_runner.start
+    )
+    web_chat = WebChat(agent, settings, store)
+    app = create_web_app(
         settings=settings,
-        llm_client=_build_llm_client(settings),
+        llm_client=llm_client,
         discogs_client=client,
         store=store,
-        session=session,
+        scan_session=session,
         username=username,
+        web_chat=web_chat,
+        sync_runner=sync_runner,
     )
 
     console.print(
-        f"[bold]Record scan[/bold] — adds go to folder "
-        f"'{folders[folder_id]}' ({folder_id}) of [bold]{username}[/bold]."
+        f"[bold]Collection page[/bold] — Scan · Chat · Collection. Adds go "
+        f"to folder '{folders[folder_id]}' ({folder_id}) of "
+        f"[bold]{username}[/bold]."
     )
     console.print("Open on your phone (same Wi-Fi):")
     for url in _lan_urls(bind_port):

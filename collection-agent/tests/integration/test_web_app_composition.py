@@ -66,7 +66,11 @@ def make_web_client(
 
     chat_llm = StubLLM(chat_script if chat_script is not None else [])
     agent = build_web_agent(
-        settings, store, chat_llm, sync_starter=sync_runner.start
+        settings,
+        store,
+        chat_llm,
+        sync_starter=sync_runner.start,
+        organize_client_factory=lambda: discogs,
     )
     web_chat = WebChat(
         agent, settings, store, client_factory=lambda: discogs

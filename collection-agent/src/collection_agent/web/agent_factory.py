@@ -33,9 +33,12 @@ def build_web_agent(
     store: SnapshotStore,
     llm_client: Any,
     sync_starter: Callable[[], bool],
+    organize_client_factory: Callable[[], Any] | None = None,
 ) -> Agent:
     """`sync_starter` is `SyncRunner.start` (True = a run began;
-    False = one is already running)."""
+    False = one is already running). `organize_client_factory` feeds
+    `propose_moves`' live folder check (None ⇒ default live client,
+    exactly like the terminal runtime; tests inject a fake)."""
     registry = build_registry(settings)
     agent = Agent(
         registry=registry,
@@ -91,5 +94,7 @@ def build_web_agent(
             fn=start_sync,
         )
     )
-    register_story_tools(agent, settings, store)
+    register_story_tools(
+        agent, settings, store, organize_client_factory=organize_client_factory
+    )
     return agent
