@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Record Scan</title>
+<title>Collection</title>
 <style>
   :root {
     --bg: #111417; --card: #1c2126; --text: #e8e6e3; --dim: #9aa0a6;
@@ -13,10 +13,14 @@
   body { background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, system-ui, sans-serif; padding: 12px; max-width: 640px; margin: 0 auto; }
   h1 { font-size: 1.1rem; margin: 4px 0 12px; }
   h1 small { color: var(--dim); font-weight: normal; }
+  #syncHint { color: var(--warn); font-size: .8rem; margin-left: 8px; }
   button { font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
   .primary { background: var(--accent); color: #08130c; font-weight: 600; width: 100%; font-size: 1.15rem; padding: 16px; }
   .secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
   .danger-confirm { background: var(--warn); color: #1d1405; font-weight: 600; }
+  #tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  #tabs .tab { flex: 1; background: var(--card); color: var(--dim); border: 1px solid var(--line); padding: 10px 0; }
+  #tabs .tab.active { color: var(--text); border-color: var(--accent); font-weight: 600; }
   #status { margin: 12px 0; color: var(--dim); min-height: 1.4em; }
   #status.error { color: var(--err); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; gap: 10px; }
@@ -47,11 +51,44 @@
   .masterrow button { margin-left: 8px; font-size: .8rem; padding: 6px 10px; }
   .pressnote { color: var(--dim); font-size: .85rem; margin: 4px 0 10px; }
   .pressnote.error { color: var(--err); }
+  /* 028: chat + collection tabs */
+  .banner { background: #3b2f1a; color: var(--warn); border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; font-size: .9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .banner button { padding: 8px 12px; font-size: .85rem; flex: none; }
+  #chatlog { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .msg { border-radius: 12px; padding: 10px 12px; max-width: 88%; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .msg.user { background: #24313b; align-self: flex-end; }
+  .msg.assistant { background: var(--card); border: 1px solid var(--line); align-self: flex-start; }
+  .msg.error { background: #3a2320; color: var(--err); align-self: flex-start; font-size: .9rem; }
+  .msg.event { color: var(--dim); font-size: .8rem; align-self: center; background: none; padding: 2px; }
+  .msg.typing { color: var(--dim); }
+  .msg.typing::after { content: " ⋯"; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .msg a { color: var(--accent); text-decoration: underline; overflow-wrap: anywhere; }
+  .plancard { background: var(--card); border: 1px solid var(--warn); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .plancard h3 { font-size: .95rem; margin-bottom: 6px; }
+  .plancard ul { margin: 0 0 10px 18px; font-size: .9rem; }
+  .planresult { font-size: .85rem; margin-top: 4px; }
+  .planresult .ok { color: var(--accent); }
+  .planresult .failed { color: var(--err); }
+  #chatrow { display: flex; gap: 8px; }
+  #chatrow input { flex: 1; font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .statgrid { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: .95rem; }
+  .statgrid div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .statgrid dt { color: var(--dim); }
+  .syncprog { color: var(--dim); font-size: .9rem; margin: 8px 0; min-height: 1.3em; }
+  .syncprog.error { color: var(--err); }
 </style>
 </head>
 <body>
-<h1>Record Scan <small id="snapstate"></small></h1>
+<h1>Collection <small id="snapstate"></small><span id="syncHint" hidden>⟳ sync running…</span></h1>
 
+<nav id="tabs">
+  <button class="tab active" id="tabbtn-scan" data-tab="scan">Scan</button>
+  <button class="tab" id="tabbtn-chat" data-tab="chat">Chat</button>
+  <button class="tab" id="tabbtn-collection" data-tab="collection">Collection</button>
+</nav>
+
+<section id="tab-scan">
 <input type="file" id="photo" accept="image/*" capture="environment" hidden>
 <button class="primary" id="scanBtn">📷 Scan a record</button>
 
@@ -66,11 +103,51 @@
 </div>
 
 <div id="log"><h2>This session</h2><div id="entries"></div></div>
+</section>
+
+<section id="tab-chat" hidden>
+  <div id="chatbanner"></div>
+  <div id="chatlog"></div>
+  <div id="plancard"></div>
+  <div id="chatrow">
+    <input type="text" id="chatinput" placeholder="Ask about your collection… (es/en)" autocomplete="off">
+    <button class="secondary" id="chatsend">Send</button>
+  </div>
+</section>
+
+<section id="tab-collection" hidden>
+  <div id="colstatus" class="statgrid"></div>
+  <div id="syncprog" class="syncprog"></div>
+  <button class="primary" id="syncBtn">⟳ Sync collection</button>
+  <div id="collink" style="margin-top:12px"></div>
+</section>
+
 <footer id="foot"></footer>
 
 <script>
 (function () {
   "use strict";
+
+  // -- tabs (028): show/hide only — DOM state survives switching -----------
+  var sections = { scan: null, chat: null, collection: null };
+  Object.keys(sections).forEach(function (name) {
+    sections[name] = document.getElementById("tab-" + name);
+  });
+  function showTab(name) {
+    Object.keys(sections).forEach(function (n) {
+      sections[n].hidden = n !== name;
+      document.getElementById("tabbtn-" + n).className =
+        n === name ? "tab active" : "tab";
+    });
+    if (name === "chat" && window._onChatTab) window._onChatTab();
+    if (name === "collection" && window._onCollectionTab) window._onCollectionTab();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#tabs .tab"), function (btn) {
+    btn.onclick = function () { showTab(btn.getAttribute("data-tab")); };
+  });
+  window._showTab = showTab;
+
+  // -- scan (022/026, behavior unchanged) -----------------------------------
   var photo = document.getElementById("photo");
   var scanBtn = document.getElementById("scanBtn");
   var statusEl = document.getElementById("status");
@@ -332,6 +409,8 @@
         }
         if (res.j.status === "added") {
           setStatus("✓ Added: " + c.title + " — ready for the next record.");
+          // the add marked the snapshot stale — keep the header honest
+          if (window._refreshStatus) window._refreshStatus();
         } else {
           setStatus(res.j.detail || "Add failed — you can retry.", true);
         }
@@ -435,6 +514,331 @@
     .catch(function () {});
 
   cameraReady();
+  window._esc = esc; // shared with the chat/collection modules below
+})();
+
+// -- chat tab (028 US1, contracts/web-ui-api.md §2) ---------------------------
+(function () {
+  "use strict";
+  var esc = window._esc;
+  var logEl = document.getElementById("chatlog");
+  var planEl = document.getElementById("plancard");
+  var bannerEl = document.getElementById("chatbanner");
+  var input = document.getElementById("chatinput");
+  var sendBtn = document.getElementById("chatsend");
+  var busy = false;
+
+  // addendum 2: assistant text arrives plain (no markdown), with bare
+  // URLs — render them as tappable anchors. This renders LLM-relayed,
+  // tool-built URLs; the page still never CONSTRUCTS a URL itself.
+  function appendWithLinks(el, text) {
+    var re = /\bhttps?:\/\/[^\s<>"')\]]+/g;
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var a = document.createElement("a");
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.href = m[0];
+      a.textContent = m[0];
+      el.appendChild(a);
+      last = m.index + m[0].length;
+    }
+    el.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  function addMsg(kind, text) {
+    var div = document.createElement("div");
+    div.className = "msg " + (kind === "plan_cancelled" ? "event" : kind);
+    if (kind === "assistant") appendWithLinks(div, text);
+    else div.textContent = text;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+    return div;
+  }
+
+  // addendum 2: visible feedback while the server works a turn/plan
+  function showWorking(text) {
+    var div = document.createElement("div");
+    div.className = "msg assistant typing";
+    div.textContent = text;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+    return div;
+  }
+
+  function addPlanResult(e) {
+    var div = document.createElement("div");
+    div.className = "msg assistant";
+    var lines = (e.moves || []).map(function (m) {
+      return '<div class="planresult"><span class="' + esc(m.result) + '">' +
+        (m.result === "ok" ? "✓" : "✗") + "</span> " + esc(m.display) +
+        (m.error ? " — " + esc(m.error) : "") + "</div>";
+    }).join("");
+    div.innerHTML = "<b>" + esc(e.text) + "</b>" + lines;
+    logEl.appendChild(div);
+    div.scrollIntoView({ block: "end" });
+  }
+
+  function renderEntry(e) {
+    if (e.kind === "plan_result") addPlanResult(e);
+    else addMsg(e.kind, e.text);
+  }
+
+  function setBusy(b) {
+    busy = b;
+    input.disabled = b;
+    sendBtn.disabled = b;
+    sendBtn.textContent = b ? "…" : "Send";
+  }
+
+  function renderPlan(plan) {
+    planEl.innerHTML = "";
+    if (!plan) return;
+    var card = document.createElement("div");
+    card.className = "plancard";
+    card.innerHTML =
+      "<h3>Confirm: move " + plan.move_count + " record" +
+      (plan.move_count === 1 ? "" : "s") + " to " + esc(plan.target_folder) +
+      "?</h3><ul>" +
+      plan.moves.map(function (m) { return "<li>" + esc(m) + "</li>"; }).join("") +
+      "</ul>";
+    var yes = document.createElement("button");
+    yes.className = "danger-confirm";
+    yes.textContent = "Confirm moves";
+    yes.onclick = function () { planAction("confirm", plan.plan_id); };
+    var no = document.createElement("button");
+    no.className = "secondary";
+    no.textContent = "Cancel";
+    no.style.marginLeft = "8px";
+    no.onclick = function () { planAction("cancel", plan.plan_id); };
+    card.appendChild(yes);
+    card.appendChild(no);
+    planEl.appendChild(card);
+  }
+
+  // addendum 3 round 2 (2026-07-13 live): on failure, re-render the card
+  // from server truth — it returns iff the plan is genuinely still pending
+  function refreshPlanCard() {
+    fetch("/api/chat/history")
+      .then(function (r) { return r.json(); })
+      .then(function (h) { renderPlan(h.pending_plan); })
+      .catch(function () {});
+  }
+
+  function planAction(action, planId) {
+    // addendum 3 round 2: the card leaves the screen the moment it is
+    // acted on — it used to stay (buttons live) for the seconds the
+    // per-move live re-validation takes, beside "Executing moves ⋯"
+    planEl.innerHTML = "";
+    var working = action === "confirm" ? showWorking("Executing moves") : null;
+    fetch("/api/chat/plan/" + action, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: planId }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (working) working.remove();
+        if (!res.ok) {
+          addMsg("error", res.j && res.j.error ? res.j.error.message :
+                 "Plan action failed — nothing was executed.");
+          refreshPlanCard();
+          return;
+        }
+        if (action === "cancel") {
+          addMsg("plan_cancelled", "Move plan cancelled — nothing sent to Discogs.");
+          return;
+        }
+        var ok = res.j.moves.filter(function (m) { return m.result === "ok"; }).length;
+        addPlanResult({
+          text: "Moved " + ok + "/" + res.j.moves.length + " record(s) to " +
+                res.j.target_folder,
+          moves: res.j.moves,
+        });
+      })
+      .catch(function () {
+        if (working) working.remove();
+        addMsg("error", "Network error — check the conversation before retrying.");
+        refreshPlanCard();
+      });
+  }
+
+  function renderBanner(state) {
+    bannerEl.innerHTML = "";
+    if (state === "complete") return;
+    var text = state === "missing"
+      ? "No collection snapshot yet — chat can't answer collection questions until you sync."
+      : "Snapshot is " + esc(state) + " — answers may lag your collection.";
+    var div = document.createElement("div");
+    div.className = "banner";
+    var span = document.createElement("span");
+    span.textContent = text;
+    var btn = document.createElement("button");
+    btn.className = "secondary";
+    btn.textContent = "Sync now";
+    btn.onclick = function () {
+      fetch("/api/sync", { method: "POST" }).finally(function () {
+        if (window._showTab) window._showTab("collection");
+      });
+    };
+    div.appendChild(span);
+    div.appendChild(btn);
+    bannerEl.appendChild(div);
+  }
+
+  function loadHistory() {
+    fetch("/api/chat/history")
+      .then(function (r) { return r.json(); })
+      .then(function (h) {
+        logEl.innerHTML = "";
+        h.entries.forEach(renderEntry);
+        renderPlan(h.pending_plan);
+        renderBanner(h.snapshot_state);
+      })
+      .catch(function () {});
+  }
+
+  function send() {
+    var text = input.value.trim();
+    if (!text || busy) return;
+    addMsg("user", text);
+    input.value = "";
+    renderPlan(null); // a new turn supersedes the pending card server-side too
+    setBusy(true);
+    var working = showWorking("Thinking");
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        working.remove();
+        if (!res.ok) {
+          addMsg("error", res.j && res.j.error ? res.j.error.message : "Turn failed.");
+          return;
+        }
+        addMsg("assistant", res.j.reply);
+        renderPlan(res.j.pending_plan);
+      })
+      .catch(function () {
+        working.remove();
+        addMsg("error", "Network error — the answer may not have arrived. Reload to re-check.");
+      })
+      .finally(function () {
+        setBusy(false);
+        // a turn can start a background sync (start_sync tool) or mark the
+        // snapshot stale — refresh the header badge + sync hint (addendum 1)
+        if (window._refreshStatus) window._refreshStatus();
+      });
+  }
+
+  sendBtn.onclick = send;
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
+  window._onChatTab = loadHistory;
+})();
+
+// -- collection tab (028 US2, contracts/web-ui-api.md §3) ---------------------
+(function () {
+  "use strict";
+  var esc = window._esc;
+  var statusEl = document.getElementById("colstatus");
+  var progEl = document.getElementById("syncprog");
+  var syncBtn = document.getElementById("syncBtn");
+  var linkEl = document.getElementById("collink");
+  var hintEl = document.getElementById("syncHint");
+  var POLL_MS = 2000; // UI pacing only — not runtime config
+  var pollTimer = null;
+
+  function row(label, value) {
+    return "<div><dt>" + esc(label) + "</dt><dd>" + esc(value) + "</dd></div>";
+  }
+
+  function renderStatus(body) {
+    var snap = body.snapshot;
+    // replay addendum 1 (2026-07-12): the header badge was set once at page
+    // load from /api/health and kept saying "stale" after a completed sync —
+    // every status (re)load now refreshes it, incl. each poll tick
+    document.getElementById("snapstate").textContent =
+      "· snapshot: " + (snap ? snap.completeness : "missing");
+    if (!snap) {
+      statusEl.innerHTML = row("snapshot", "none yet") +
+        row("hint", "run a sync to enable chat answers and duplicate checks");
+    } else {
+      var v = snap.collection_value || {};
+      statusEl.innerHTML =
+        row("state", snap.completeness) +
+        row("records", snap.instance_count + " (" + snap.unique_release_count + " unique)") +
+        row("last sync", snap.synced_at + (snap.age_hours != null ? " (" + snap.age_hours + "h ago)" : "")) +
+        row("value (Discogs est.)", "min " + (v.minimum || "?") + " · median " +
+            (v.median || "?") + " · max " + (v.maximum || "?"));
+    }
+    linkEl.innerHTML = body.collection_url
+      ? '<a class="linkout" target="_blank" rel="noopener noreferrer" href="' +
+        esc(body.collection_url) + '">View your collection on Discogs ↗</a>'
+      : "";
+    renderSync(body.sync);
+  }
+
+  function renderSync(sync) {
+    hintEl.hidden = sync.state !== "running";
+    syncBtn.disabled = sync.state === "running";
+    progEl.className = sync.state === "failed" ? "syncprog error" : "syncprog";
+    if (sync.state === "running") {
+      var prog = sync.phase
+        ? sync.phase + (sync.total != null ? " — " + sync.done + "/" + sync.total : "")
+        : "starting…";
+      progEl.textContent = "⟳ syncing: " + prog +
+        " (scans and chat stay usable, just slower)";
+      schedulePoll();
+    } else if (sync.state === "failed") {
+      progEl.textContent = "✗ sync failed: " + (sync.error || "unknown error") +
+        " — Sync again to resume from where it stopped.";
+    } else if (sync.state === "partial") {
+      progEl.textContent = "⚠ sync ended partial — Sync again to resume.";
+    } else if (sync.state === "complete") {
+      progEl.textContent = "✓ last sync completed " + (sync.finished_at || "");
+    } else {
+      progEl.textContent = "";
+    }
+    if (sync.warnings && sync.warnings.length) {
+      progEl.textContent += " · " + sync.warnings[sync.warnings.length - 1];
+    }
+  }
+
+  function schedulePoll() {
+    if (pollTimer) return;
+    pollTimer = setTimeout(function () {
+      pollTimer = null;
+      loadStatus();
+    }, POLL_MS);
+  }
+
+  function loadStatus() {
+    fetch("/api/collection/status")
+      .then(function (r) { return r.json(); })
+      .then(renderStatus)
+      .catch(function () {});
+  }
+
+  syncBtn.onclick = function () {
+    fetch("/api/sync", { method: "POST" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok && res.j && res.j.error && res.j.error.code !== "sync_already_running") {
+          progEl.className = "syncprog error";
+          progEl.textContent = res.j.error.message;
+          return;
+        }
+        loadStatus();
+      })
+      .catch(function () {});
+  };
+
+  window._onCollectionTab = loadStatus;
+  window._refreshStatus = loadStatus; // chat pings this after each turn
+  loadStatus(); // header sync hint is live from page load, whatever the tab
 })();
 </script>
 </body>

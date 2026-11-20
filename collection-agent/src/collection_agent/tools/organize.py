@@ -145,9 +145,17 @@ def make_organize_tools(
             "moves": [m.display for m in plan.moves],
             "move_count": len(plan.moves),
             "requires_confirmation": True,
-            "detail": "Plan prepared — NOT executed. The terminal will ask the "
-            "user to confirm (y/N); tell them to confirm there. Never state "
-            "the move already happened.",
+            # runtime-neutral (028 delta 13): the confirmation prompt is the
+            # terminal's y/N or the web page's confirm card — never name one.
+            # 028 replay addendum 3: the app RENDERS the full plan itself
+            # (CLI table / web card), so the LLM re-listing every move reads
+            # as a duplicated plan — summarize instead.
+            "detail": "Plan prepared — NOT executed. The app will now show "
+            "the full plan and ask the user to confirm; tell them to use the "
+            "confirmation prompt. Do NOT repeat the list of moves in your "
+            "reply — the app displays it; summarize in one sentence (how "
+            "many records, which folder). Never state the move already "
+            "happened.",
         }
         if notes:
             payload["notes"] = notes

@@ -101,11 +101,17 @@ class Agent:
         model: str,
         llm_client: Any,
         session: AgentSession | None = None,
+        format_reminder: str | None = None,
     ):
         self.registry = registry
         self.model = model
         self.llm = llm_client
         self.session = session or AgentSession()
+        # 028 replay addendum 2: an optional runtime-supplied transient
+        # formatting instruction, sent AFTER the language reminder on every
+        # request and never persisted (the 020 decision-point pattern). The
+        # terminal runtime passes None — its requests are byte-identical.
+        self.format_reminder = format_reminder
         self._tools: dict[str, ToolDef] = {}
         self.session.messages.append(
             {"role": "system", "content": render_system_prompt(registry)}
@@ -132,15 +138,17 @@ class Agent:
         """One user turn: may involve several tool rounds; returns final text."""
         self.session.messages.append({"role": "user", "content": user_text})
         tool_schemas = [t.openai_schema() for t in self._tools.values()]
+        # transient decision-point reminders — sent, never stored
+        transient: list[dict[str, str]] = [
+            {"role": "system", "content": LANGUAGE_REMINDER}
+        ]
+        if self.format_reminder:
+            transient.append({"role": "system", "content": self.format_reminder})
 
         for _ in range(MAX_TOOL_ROUNDS):
             response = self.llm.chat.completions.create(
                 model=self.model,
-                # transient decision-point reminder — sent, never stored
-                messages=[
-                    *self.session.messages,
-                    {"role": "system", "content": LANGUAGE_REMINDER},
-                ],
+                messages=[*self.session.messages, *transient],
                 tools=tool_schemas or None,
             )
             msg = response.choices[0].message
