@@ -159,8 +159,13 @@ same Wi-Fi) with three tabs:
   resumes on the next tap; `sync --full` stays terminal-only), and a
   "View your collection on Discogs ↗" link. While a sync runs, scanning
   and chat stay usable — just slower (shared Discogs rate budget) — and
-  a header hint shows on every tab. When the snapshot is stale or
-  missing, the Chat tab shows a banner with a Sync action.
+  a header hint shows on every tab. If you add a record (or confirm a
+  folder move) *while* a sync runs, that sync may have listed your
+  collection before the change, so it finishes **stale** instead of
+  complete and asks you to Sync again — the second run is quick (only new
+  releases are fetched) and includes the change. This applies to a
+  terminal `sync` running alongside the server too. When the snapshot is
+  stale or missing, the Chat tab shows a banner with a Sync action.
 
 The same no-auth trusted-LAN posture as 022 applies to the whole page —
 now including folder moves (owner decision 2026-07-12); do not expose it
@@ -248,7 +253,9 @@ rate governor. The output is a standard run whose summary names the
 source run (`replay_of`); replays are themselves replayable.
 
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
-(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
+(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume)
+— or stale, because a scan add / folder move landed while it ran (re-run
+`sync` to include it; quick).
 
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;

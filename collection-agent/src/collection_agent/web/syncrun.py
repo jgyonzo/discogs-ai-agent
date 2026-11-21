@@ -4,7 +4,9 @@ A thin occupancy + observability shell over the UNCHANGED
 `snapshot.sync.run_sync`: one daemon thread, its own DiscogsClient
 (closed in `finally`), progress mirrored from the existing
 `on_progress(phase, done, total)` callback into a lock-guarded status
-snapshot, `notify` messages collected as warnings.
+snapshot, `notify` messages collected as warnings. (Replay addendum 4:
+`run_sync` itself now ends `stale` when a live write lands mid-run —
+FR-017 — mapped here to the `stale` terminal state.)
 
 The web sync is ALWAYS the standard sync (`full=False` — 028
 clarification 2026-07-12): resume if interrupted, refresh otherwise.
@@ -128,11 +130,13 @@ class SyncRunner:
                 notify=self._notify,
             )
             with self._mutex:
-                self._state = (
-                    "complete"
-                    if meta.completeness == Completeness.COMPLETE
-                    else "partial"
-                )
+                # stale = every release enriched but a live write landed
+                # mid-run (028 replay addendum 4, FR-017): its own state, so
+                # the page says "Sync again to include it", not "resume"
+                self._state = {
+                    Completeness.COMPLETE: "complete",
+                    Completeness.STALE: "stale",
+                }.get(meta.completeness, "partial")
                 self._finished_at = utcnow_iso()
         except Exception as exc:  # typed data for the page, never a crash
             with self._mutex:

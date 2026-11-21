@@ -75,6 +75,58 @@ is genuinely still pending. Ordering guard-pinned in
 `test_web_page_guards.py`. (Server-side, a double-tap was always safe —
 lock + spent-plan 409 — this was purely a presentation bug.)
 
+### Addendum 4 — scan add during a sync lost; snapshot claimed complete (2026-11-20, live validation)
+
+During the owner's block-C validation (SC-005/SC-006, server session
+`20261120-214751Z`), a record was scanned and added while a page sync
+was running. Timeline: the sync started ~21:58:18Z (406.2 s run) and
+finished its instance pass within seconds; the add (release `29147545`,
+journaled `added` at 22:00:29Z) succeeded on Discogs and flipped the
+on-disk snapshot to `stale`; at 22:05:04Z the sync wrote ITS snapshot —
+built from the pre-add instance listing — as `complete`, overwriting the
+stale mark. Result: the record exists on Discogs, is absent from the
+local snapshot, and the snapshot claimed `complete` (verified: 400
+instances, `29147545` absent).
+
+Root cause — a lost update: the only "a live write happened" signal
+(`SnapshotStore.mark_stale`, and implicitly `patch_moved_instances` for
+chat moves) lives inside the very file the running sync replaces
+unconditionally at its end; the sync never learns a write landed after
+its instance pass. Consequences: the 018-class confident wrong answer
+(chat: "not in your collection" while status reads complete), and after
+a restart the scan duplicate overlay would treat the record as not owned
+— letting a second copy be added WITHOUT the duplicate double-confirm.
+A chat-confirmed move during a sync is lost the same way (the snapshot
+reverts to the pre-move folder while claiming complete). The race
+existed in principle since 022 (terminal `sync` in one process, scan
+server in another), but 028's FR-013 made scan/chat-during-sync a
+supported, advertised flow; the original edge case only considered the
+shared rate budget.
+
+New **FR-017** (below). Fix shape (owner-approved 2026-11-21 — mutual
+exclusion rejected, it contradicts FR-013): a durable live-write marker
+beside the snapshot, bumped by every snapshot-affecting live write
+(`mark_stale`, `patch_moved_instances` — the only two writers; both
+record the marker even when no snapshot exists yet); `run_sync` reads it
+before its first Discogs request and again under the store's write lock
+right before its final save — a changed marker downgrades a would-be
+`complete` result to `stale` (with a warning), and the enrichment
+journal is KEPT so the follow-up standard sync re-lists instances and
+enriches only the new releases (seconds, not a full re-enrichment). The
+store's read-modify-write paths and the sync's final compare-and-save
+are serialized by a per-path in-process lock, closing the
+milliseconds-wide window where a patch could overwrite the sync's fresh
+snapshot with an older one. `scan/server.py` diff stays zero (R1
+composition rule preserved — the fix lives in the shared snapshot core,
+so the terminal sync benefits identically: cross-process detection via
+the on-disk marker). The SyncRunner gains a `stale` terminal state; the
+page tells the owner to Sync again. Recorded as
+`contracts/amendment-017-snapshot-schema.md` (FIRST amendment to 017's
+snapshot-schema contract) + web-ui-api §3 sync-state delta. Known
+trade-off: a kept journal is reused by the next standard sync whenever
+it runs (pre-existing interrupted-sync semantics; `sync --full` ignores
+it).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)
@@ -138,6 +190,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **Pending move plan superseded**: A new user message while a plan is pending cancels the plan (mirrors the terminal behavior where anything but "y" cancels, and the session expires pending plans on the next turn). A confirm arriving for an already-expired/cancelled plan is refused with a clear message and executes nothing.
 - **Server restart with a pending plan**: The pending plan is in-memory and lost; a confirm after restart is refused. No write can occur without a live, server-held plan.
 - **Sync and scan at the same time**: Both consume the same Discogs per-token rate budget. Accepted for v1: scanning during a sync stays functional but slower; the UI notes that a sync is running. No mutual exclusion.
+- **Live write during a sync** (addendum 4): A scan add or chat-confirmed move that succeeds while a sync is running may be missing from that sync's snapshot (its instance pass already ran). The sync MUST NOT then claim `complete`: it ends `stale` and the page asks for another Sync, which is quick (enrichment reused) and includes the write (FR-017).
 - **Chat turn fails (LLM/provider error, missing key)**: The failure is reported in the conversation as an error message; the session and page remain usable. A missing OpenAI key is surfaced when chat is used, not by crashing the server (scan startup validation semantics are unchanged).
 - **Sync fails mid-run (network, rate-limit exhaustion, Discogs error)**: Progress stops, the failure is reported on the page, snapshot state shows partial, and re-triggering resumes (existing journal/resume semantics).
 - **Move confirm partially fails**: Per-item live re-validation means some moves may execute and others be skipped; the per-item outcome is reported honestly (matching terminal behavior).
@@ -163,6 +216,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **FR-014**: Chat turn failures (provider errors, timeouts, missing credentials for chat) MUST surface as readable error messages in the conversation without crashing the server, the session, or the other views. Server startup semantics for the existing scan validation are unchanged.
 - **FR-015**: The way the owner launches the server today — the existing subcommand, the container image, and the compose service from 027 — MUST keep working unchanged. If the launch command gains a new name, the existing name MUST remain a working alias (the 027 container default command must not break).
 - **FR-016**: The web conversation transcript lives for the duration of the server process (parity with a terminal chat session); persistence of chat history across restarts is out of scope. Reloading the page MUST NOT wipe the server-side conversation; the page reflects the current server-side conversation state on load.
+- **FR-017** (addendum 4): A sync during which any snapshot-affecting live write succeeded (scan add, chat-confirmed folder move — from this process or another) MUST NOT persist its result as `complete`: it persists `stale` with a warning naming the cause, keeps its enrichment journal so the next standard sync only enriches new releases, and reports a distinct `stale` terminal state so the page tells the owner to Sync again. A sync with no concurrent write behaves exactly as before. No live write is ever lost from the snapshot's honesty: either it is in the snapshot, or the snapshot is not `complete`.
 
 ### Key Entities
 
@@ -193,5 +247,5 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **Collection browsing stays on Discogs**: the v1 Collection view is status + sync + a link to the owner's Discogs collection page; no in-page record table.
 - **Full re-sync stays in the terminal**: the page exposes only the standard sync (clarified 2026-07-12); `--full` remains a terminal-only recovery action.
 - **Component scope**: `collection-agent` only. The demo-stack `frontend/`, `agent/`, and `etl/` components are untouched. Eval pipeline and vision prompt untouched. Target zero new dependencies.
-- **Existing machinery is reused, not rebuilt**: the journaled resumable sync, the snapshot store, the agent tool loop, the scan pipeline, and the rate-limit governor are consumed as-is; this feature adds a web surface over them.
+- **Existing machinery is reused, not rebuilt**: the journaled resumable sync, the snapshot store, the agent tool loop, the scan pipeline, and the rate-limit governor are consumed as-is; this feature adds a web surface over them. Sole exception (addendum 4): the snapshot store and `run_sync` gain the live-write marker + write lock (FR-017), because concurrent writes during a sync — newly a supported flow — exposed a lost update in the shared core.
 - **Rate-budget sharing accepted**: sync and scan/chat may compete for the Discogs per-token rate budget; v1 accepts slower responses during a sync with a visible hint rather than mutual exclusion.

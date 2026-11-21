@@ -795,6 +795,11 @@
     } else if (sync.state === "failed") {
       progEl.textContent = "✗ sync failed: " + (sync.error || "unknown error") +
         " — Sync again to resume from where it stopped.";
+    } else if (sync.state === "stale") {
+      // replay addendum 4 (FR-017): a record was added/moved while syncing;
+      // the cause is already in the warning below, keep this line short
+      progEl.textContent = "⚠ sync finished, but a change landed mid-sync — Sync again to include it (quick).";
+      progEl.className = "syncprog";
     } else if (sync.state === "partial") {
       progEl.textContent = "⚠ sync ended partial — Sync again to resume.";
     } else if (sync.state === "complete") {
@@ -802,7 +807,9 @@
     } else {
       progEl.textContent = "";
     }
-    if (sync.warnings && sync.warnings.length) {
+    // stale: the last warning IS the mid-sync-change cause the line above
+    // already states — don't repeat it on a phone-width line
+    if (sync.state !== "stale" && sync.warnings && sync.warnings.length) {
       progEl.textContent += " · " + sync.warnings[sync.warnings.length - 1];
     }
   }

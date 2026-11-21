@@ -72,6 +72,20 @@ def test_partial_meta_reports_partial_state(settings, store):
     assert runner.status().state == "partial"
 
 
+def test_stale_meta_reports_stale_state_and_restart_is_allowed(settings, store):
+    """Replay addendum 4 (FR-017): a live write landed mid-sync ⇒ the run's
+    snapshot is `stale`, reported as its own terminal state (not `partial`,
+    whose page copy says "resume"), and Sync can be triggered again."""
+    runner, _ = make_runner(
+        settings, store, lambda *a, **k: completed_meta(Completeness.STALE)
+    )
+    runner.start()
+    runner.join(timeout=5)
+    assert runner.status().state == "stale"
+    assert runner.start() is True
+    runner.join(timeout=5)
+
+
 def test_exception_reports_failed_with_message_and_closes_client(settings, store):
     def boom(*a, **k):
         raise RuntimeError("Discogs 5xx after retries")

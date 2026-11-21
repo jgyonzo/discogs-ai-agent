@@ -67,7 +67,7 @@ class PlanConfirmResponse(BaseModel):
 
 
 class SyncStatusView(BaseModel):
-    state: Literal["idle", "running", "complete", "partial", "failed"]
+    state: Literal["idle", "running", "complete", "stale", "partial", "failed"]
     phase: str | None = None
     done: int | None = None
     total: int | None = None

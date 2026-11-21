@@ -102,6 +102,18 @@
 
 ---
 
+## Phase 7: Replay Addendum 4 — live write during a sync (FR-017, 2026-11-21)
+
+Owner incident 2026-11-20 (spec addendum 4): a scan add during a page sync was overwritten by the sync's `complete` snapshot. Contract: `contracts/amendment-017-snapshot-schema.md` + web-ui-api §3 `stale` sync state.
+
+- [X] T030 [P] Store tests in `collection-agent/tests/unit/test_snapshot_live_writes.py` (fail first): marker absent until a write; `mark_stale` and `patch_moved_instances` each bump it (distinct tokens), including with NO snapshot on disk; patch with no sync keeps `complete` (unchanged); the write lock is per-path and shared across `SnapshotStore` instances of the same path; a patch blocked on the lock cannot overwrite a snapshot saved inside the lock.
+- [X] T031 [P] Sync tests in `collection-agent/tests/integration/test_sync_concurrent_writes.py` (fail first): add (`mark_stale`) during enrichment ⇒ meta + persisted `stale`, cause warning, journal KEPT; move (`patch_moved_instances`) during enrichment ⇒ `stale`; write during the first-ever sync (no snapshot) ⇒ `stale`; write before the sync started ⇒ `complete` (no false positive); concurrent write + 5xx ⇒ stays `partial` + warning; follow-up standard sync re-lists and enriches ONLY the new release ⇒ `complete`, journal cleared.
+- [X] T032 Incident reproduction through the composed app in `collection-agent/tests/integration/test_web_sync_live_write.py`: real `run_sync` held open mid-enrichment; `/api/search` → `/api/add` during the sync ⇒ sync state `stale` + warning, snapshot `stale`; second `POST /api/sync` (Discogs now lists the add) ⇒ `complete`, record present, only that release enriched. SyncRunner unit test for the `stale` terminal state added to 028's own `test_sync_runner.py` (no pre-028 test file modified). Suite 617 → 633 (+16).
+- [X] T033 Implementation: `snapshot/store.py` — `.live-writes` marker (`record_live_write`, `live_write_marker`), per-path `write_lock()`, `mark_stale`/`patch_moved_instances` bump-then-RMW under the lock; `snapshot/sync.py` — capture before the first request, compare-and-save under the lock, `complete→stale` + warning + journal kept; `web/syncrun.py` + `web/models.py` — `stale` terminal state; `scan/static/index.html` — stale-run message ("Sync again to include it"). `scan/server.py` diff stays zero.
+- [X] T034 Docs: spec addendum 4 + FR-017 + edge case; `amendment-017-snapshot-schema.md` (NEW, first amendment to that contract); web-ui-api §3 + data-model state machines; README sync note; quickstart revalidation step for SC-003 incl. the live-write leg.
+
+---
+
 ## Dependencies & Execution Order
 
 - **Phase 1 → Phase 2 → stories**: T001 first; T002–T007 next (T002/T003/T004/T006 parallel; T005 after T004; T007 after T003+T006).

@@ -65,7 +65,7 @@ Single-occupancy background executor over the existing
 
 | Field | Type | Notes |
 |---|---|---|
-| `state` | `"idle" \| "running" \| "complete" \| "partial" \| "failed"` | see state machine |
+| `state` | `"idle" \| "running" \| "complete" \| "stale" \| "partial" \| "failed"` | see state machine (`stale`: replay addendum 4) |
 | `phase` | `str \| null` | verbatim from `on_progress` (e.g. "collection pages", "enriching releases") |
 | `done`, `total` | `int \| null` | verbatim from `on_progress` |
 | `warnings` | `list[str]` | `notify` messages (rate-limit notices etc.) |
@@ -76,10 +76,10 @@ State machine:
 
 ```
 idle ──start()──▶ running ──meta.completeness==complete──▶ complete
-                   │  │
-                   │  └──meta returned but not complete──▶ partial
+                   │  │  └──meta.completeness==stale──▶ stale   (live write landed mid-sync — FR-017)
+                   │  └──meta returned partial──▶ partial
                    └──exception──▶ failed
-complete|partial|failed ──start()──▶ running   (journal resumes a partial)
+complete|stale|partial|failed ──start()──▶ running   (journal resumes a partial; a stale run's kept journal ⇒ only new releases enriched)
 running ──start()──▶ REFUSED (409 sync_already_running / already_running tool payload)
 server killed while running ⇒ enrichment journal survives ⇒ next run resumes
 ```

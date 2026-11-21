@@ -90,7 +90,7 @@ Request: `{"plan_id": "<id>"}`. Same 409s as confirm; `200 →
 `200` → `{
   "snapshot": <snapshot_status_payload shape> | null,
   "collection_url": "<server-built owner collection page URL>",
-  "sync": {"state": "idle"|"running"|"complete"|"partial"|"failed",
+  "sync": {"state": "idle"|"running"|"complete"|"stale"|"partial"|"failed",
             "phase": str|null, "done": int|null, "total": int|null,
             "warnings": [str], "error": str|null, "finished_at": str|null}
 }`
@@ -123,6 +123,13 @@ Failure posture: a failed/interrupted run leaves `sync.state`
 `failed`/`partial` with honest detail; re-POST resumes via the existing
 enrichment journal. Killing the server mid-run equals the existing
 interrupted-sync case (journal survives; next run resumes).
+
+`sync.state == "stale"` (replay addendum 4, FR-017): the run finished
+every enrichment but a live write (scan add / confirmed move) landed
+while it ran, so the persisted snapshot is `stale`, not `complete`
+(rule in `amendment-017-snapshot-schema.md`). The warning naming the
+cause is in `sync.warnings`; the page tells the owner to Sync again
+(quick — the kept journal means only new releases are enriched).
 
 ### Chat-initiated sync
 
