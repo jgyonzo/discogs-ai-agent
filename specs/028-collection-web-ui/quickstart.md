@@ -61,28 +61,55 @@ stubbed LLM/Discogs clients, like the scan suite.
   (replay addendum 3, rounds 1–2): the LLM re-listing the plan above
   the card, and the card staying tappable during "Executing moves" —
   card now clears at tap time.*
-- [ ] **SC-003 — stale → sync → fresh, one process**: add a record via
+- [x] **SC-003 — stale → sync → fresh, one process**: add a record via
   the Scan tab (snapshot goes stale, banner appears) → tap Sync → watch
   progress to completion → status reads `complete` with updated counts →
   ask chat about the newly added record; it answers from the fresh
   snapshot. No server restart anywhere.
+  *2026-11-20 attempt (session `20261120-214751Z`) NOT a pass: the only
+  add (release `29147545`, 22:00:29Z) landed 2 min INTO a running sync,
+  and the sync saved its pre-add listing as `complete` — the record was
+  missing locally → replay addendum 4 / FR-017. Re-run after the fix
+  with the live-write leg:* (1) add record X with NO sync running → stale
+  banner; (2) tap Sync; while it runs, add record Y → the run ends
+  `⚠ sync finished, but a change landed mid-sync — Sync again…`, status
+  `stale` (never `complete`); (3) tap Sync again → finishes in seconds,
+  `complete`, counts include X and Y; (4) chat finds both. Note: the
+  first post-fix Sync also picks up `29147545` (already on Discogs).
+  *Owner-validated 2026-11-21 after addendum 4 (session
+  `20261121-192627Z`): X = `29147545` added 19:29:13Z with no sync
+  running → stale; Sync; Y = `7722776` added 19:33:35Z mid-sync (marker
+  bumped 19:33Z) → run 1 ended **partial** (not stale) with the
+  "run sync again … quick" cause warning — legitimately: one release's
+  enrichment also failed in that run (follow-up fetched 2 releases, not
+  1: 10 requests = 5 pages + 2 + 3), and per the FR-017 table partial
+  outranks stale; nothing claimed `complete`. Follow-up Sync: 4.4 s,
+  `complete`, 402 instances / 402 unique; chat found X and Y; both
+  confirmed on the Discogs account. No server restart between steps.*
 - [ ] **SC-004 — scan regression**: run the 022/026 quickstart flow
   (photo scan → selected match + alternatives → add; manual search;
   other pressings; duplicate double-confirm) inside the tabbed page.
-- [ ] **SC-005 — sync single-occupancy**: with a sync running, tap Sync
+- [x] **SC-005 — sync single-occupancy**: with a sync running, tap Sync
   again (ideally from a second device) → clear "already running"
   refusal, no second run. Also ask chat to sync during the run → honest
   `already_running` answer.
-- [ ] **SC-006 — scan during sync**: with a sync running, complete a
+  *Owner-validated 2026-11-20 (session `20261120-214751Z`, block C).*
+- [x] **SC-006 — scan during sync**: with a sync running, complete a
   photo scan; it succeeds (slower is fine) and the page indicates the
   sync is in progress.
+  *Owner-validated 2026-11-20 (same session). Going one step further —
+  ADDING the scanned record mid-sync — surfaced replay addendum 4
+  (FR-017), see SC-003.*
 - [ ] **SC-007 — container parity**: run `docker compose --profile
   collection up collection-agent` unchanged; the tabbed page serves on
   :8022, chat works, sync-from-page works, exit behavior unchanged.
-- [ ] **Busy signal**: send a chat message while a turn is in flight
+- [x] **Busy signal**: send a chat message while a turn is in flight
   (second device) → clear busy refusal, conversation not corrupted.
-- [ ] **Plan expiry**: get a move card, then send another message
+  *Owner-validated 2026-11-20 (block A).*
+- [x] **Plan expiry**: get a move card, then send another message
   instead of confirming → card cleared, nothing written; confirm from a
   stale card (if reproducible) → refused.
-- [ ] **Reload**: reload the page mid-conversation → transcript and any
+  *Owner-validated 2026-11-20 (block A, phone + laptop).*
+- [x] **Reload**: reload the page mid-conversation → transcript and any
   pending card reappear (server-side history).
+  *Owner-validated 2026-11-20 (block A).*
