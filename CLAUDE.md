@@ -3,9 +3,11 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
-**028-collection-web-ui** (PR pending — owner-only live validation OPEN:
-quickstart SC-001..SC-007 + busy/expiry/reload checks, tasks T029; all
-code tasks T001–T028 complete) —
+**028-collection-web-ui** (PR #18, DRAFT — owner-only live validation
+OPEN, task T029: recorded so far SC-001/SC-002 (2026-07-12/13),
+SC-005/SC-006 + busy/expiry/reload (2026-11-20), SC-003 incl. addendum
+4's live-write leg (2026-11-21); still open SC-004, SC-007; all code
+tasks T001–T028 + addendum-4 tasks T030–T034 complete) —
 ONE tabbed LAN page (Scan | Chat | Collection) served by the scan
 server, grown per owner decisions 2026-07-12: no new component,
 `frontend/` untouched; v1 = scan + chat + status + sync-trigger
@@ -13,7 +15,7 @@ server, grown per owner decisions 2026-07-12: no new component,
 behind 022's no-auth trusted-LAN posture (explicitly extended). Web sync
 is standard-only (`--full` stays terminal — clarify session).
 `collection-agent` only, ZERO new deps, ZERO new Settings fields,
-69 new tests (545→614), zero pre-028 test files modified.
+88 new tests (545→633), zero pre-028 test files modified.
 (1) **Composition, not modification** (R1): NEW `web/` package;
 `web/server.py::create_web_app` calls the UNTOUCHED
 `scan.server.create_app` and registers `/api/chat`,
@@ -73,12 +75,30 @@ packaging guards pass unmodified); same startup gates (token/identity,
 live folder check, OPENAI_API_KEY now covering vision AND chat).
 Artifacts: `specs/028-collection-web-ui/` (spec + clarify session
 2026-07-12, plan, research R1–R10, data-model, quickstart + owner
-checklist incl. busy/expiry/reload checks, tasks T001–T029, contracts:
+checklist incl. busy/expiry/reload checks, tasks T001–T034, contracts:
 `web-ui-api.md` NEW; `amendment-017-agent-tools.md` deltas 12–14 —
 fourth amendment, after 018's 1–5/019's 6–8/020's 9–11;
 `amendment-022-scan-api-4.md` — tabbed page, all scan endpoints
-verbatim; NO discogs-consumption amendment — zero new Discogs
-reads/writes, chat moves reuse 017 §4's contracted calls). Out of
+verbatim; `amendment-017-snapshot-schema.md` — FIRST amendment to 017's
+snapshot-schema contract (addendum 4, below); NO discogs-consumption
+amendment — zero new Discogs reads/writes, chat moves reuse 017 §4's
+contracted calls). (7) **Replay addendum 4 / FR-017** (owner incident
+2026-11-20, session `20261120-214751Z`): a scan add 2 min INTO a page
+sync was lost — the sync saved its pre-add instance listing as
+`complete`, overwriting the add's stale mark (lost update; the race
+existed since 022 cross-process, 028's FR-013 made it a supported
+flow). Fix in the shared snapshot core (`scan/server.py` diff still
+zero): durable `<snapshot>.live-writes` marker bumped by the only two
+live-write store paths (`mark_stale`, `patch_moved_instances` — even
+with no snapshot yet); `run_sync` captures it before its first request
+and compare-and-saves under a per-path in-process `write_lock()` — a
+changed marker downgrades `complete→stale` (partial stays partial) +
+cause warning, and KEEPS the enrichment journal so the follow-up sync
+only enriches new releases (seconds). SyncRunner gains a `stale`
+terminal state (web-ui-api §3); page says "Sync again to include it";
+terminal sync exits 3. Mutual exclusion rejected (contradicts FR-013).
+Incident reproduced end to end in `test_web_sync_live_write.py` (real
+`run_sync` held open mid-enrichment + `/api/add`). Out of
 scope kept: TLS/auth (022 T041 stance), multi-user sessions, token
 streaming, persisted chat history, in-page collection browsing,
 web `--full`, AWS deploy. Known follow-up candidate recorded during
