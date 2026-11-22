@@ -6,8 +6,8 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 **028-collection-web-ui** (PR #18, DRAFT — owner-only live validation
 OPEN, task T029: recorded so far SC-001/SC-002 (2026-07-12/13),
 SC-005/SC-006 + busy/expiry/reload (2026-11-20), SC-003 incl. addendum
-4's live-write leg (2026-11-21); still open SC-004, SC-007; all code
-tasks T001–T028 + addendum-4 tasks T030–T034 complete) —
+4's live-write leg + SC-004 (2026-11-21); still open SC-007 only; all
+code tasks T001–T028 + addenda 4–5 tasks T030–T037 complete) —
 ONE tabbed LAN page (Scan | Chat | Collection) served by the scan
 server, grown per owner decisions 2026-07-12: no new component,
 `frontend/` untouched; v1 = scan + chat + status + sync-trigger
@@ -15,7 +15,7 @@ server, grown per owner decisions 2026-07-12: no new component,
 behind 022's no-auth trusted-LAN posture (explicitly extended). Web sync
 is standard-only (`--full` stays terminal — clarify session).
 `collection-agent` only, ZERO new deps, ZERO new Settings fields,
-88 new tests (545→633), zero pre-028 test files modified.
+94 new tests (545→639), zero pre-028 test files modified.
 (1) **Composition, not modification** (R1): NEW `web/` package;
 `web/server.py::create_web_app` calls the UNTOUCHED
 `scan.server.create_app` and registers `/api/chat`,
@@ -75,7 +75,7 @@ packaging guards pass unmodified); same startup gates (token/identity,
 live folder check, OPENAI_API_KEY now covering vision AND chat).
 Artifacts: `specs/028-collection-web-ui/` (spec + clarify session
 2026-07-12, plan, research R1–R10, data-model, quickstart + owner
-checklist incl. busy/expiry/reload checks, tasks T001–T034, contracts:
+checklist incl. busy/expiry/reload checks, tasks T001–T037, contracts:
 `web-ui-api.md` NEW; `amendment-017-agent-tools.md` deltas 12–14 —
 fourth amendment, after 018's 1–5/019's 6–8/020's 9–11;
 `amendment-022-scan-api-4.md` — tabbed page, all scan endpoints
@@ -98,7 +98,21 @@ only enriches new releases (seconds). SyncRunner gains a `stale`
 terminal state (web-ui-api §3); page says "Sync again to include it";
 terminal sync exits 3. Mutual exclusion rejected (contradicts FR-013).
 Incident reproduced end to end in `test_web_sync_live_write.py` (real
-`run_sync` held open mid-enrichment + `/api/add`). Out of
+`run_sync` held open mid-enrichment + `/api/add`). (8) **Replay addendum
+5 / FR-018** (SC-004, 2026-11-21): the scan duplicate badge read "2
+copies (incl. this session)" for ONE owned copy — 022's overlay sums
+snapshot instances + session adds, double-counting an add a same-process
+page sync had already absorbed (latent since 022; 028 made add → Sync →
+re-scan the standard flow). Fix confined to
+`scan/search.py::snapshot_duplicate_checker`: session adds whose Discogs
+`instance_id` (already on the session log since 022) is a snapshot
+record are subtracted; unknown instance_id ⇒ conservative old sum;
+state / `added_this_session` / double-confirm gate unchanged (delta in
+`amendment-022-scan-api-4.md`). Owner-deferred UX follow-up from the
+same session: "Show other pressings" renders a second list whose rows
+LOOK repeated (distinct releases — dedup by release_id — sibling
+pressings alike); future = one list grouped by master emphasizing
+country/catno/format. Out of
 scope kept: TLS/auth (022 T041 stance), multi-user sessions, token
 streaming, persisted chat history, in-page collection browsing,
 web `--full`, AWS deploy. Known follow-up candidate recorded during

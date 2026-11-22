@@ -86,9 +86,19 @@ stubbed LLM/Discogs clients, like the scan suite.
   outranks stale; nothing claimed `complete`. Follow-up Sync: 4.4 s,
   `complete`, 402 instances / 402 unique; chat found X and Y; both
   confirmed on the Discogs account. No server restart between steps.*
-- [ ] **SC-004 — scan regression**: run the 022/026 quickstart flow
+- [x] **SC-004 — scan regression**: run the 022/026 quickstart flow
   (photo scan → selected match + alternatives → add; manual search;
   other pressings; duplicate double-confirm) inside the tabbed page.
+  *Owner-validated 2026-11-21 (block B, same server run as the SC-003
+  re-validation; the add leg = SC-003's two adds through the tabbed
+  page). Two observations: (1) the duplicate badge read "2 copies (incl.
+  this session)" for ONE owned copy — the same-process sync had absorbed
+  the session's add and the overlay counted it again → fixed as replay
+  addendum 5 / FR-018 (count reconciled by instance_id); (2) "Show other
+  pressings" rows look repeated next to "Other possibilities" — distinct
+  releases by construction (dedup by release_id), sibling pressings that
+  look alike → owner-deferred UX follow-up (group by master, emphasize
+  country/catno/format), NOT fixed in 028.*
 - [x] **SC-005 — sync single-occupancy**: with a sync running, tap Sync
   again (ideally from a second device) → clear "already running"
   refusal, no second run. Also ask chat to sync during the run → honest
