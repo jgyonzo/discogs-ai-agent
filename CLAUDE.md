@@ -3,11 +3,13 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
-**028-collection-web-ui** (PR #18, DRAFT — owner-only live validation
-OPEN, task T029: recorded so far SC-001/SC-002 (2026-07-12/13),
-SC-005/SC-006 + busy/expiry/reload (2026-11-20), SC-003 incl. addendum
-4's live-write leg + SC-004 (2026-11-21); still open SC-007 only; all
-code tasks T001–T028 + addenda 4–5 tasks T030–T037 complete) —
+**028-collection-web-ui** (PR #18 — live validation CLOSED pre-merge,
+owner-validated: SC-001/SC-002 (2026-07-12/13), SC-005/SC-006 +
+busy/expiry/reload (2026-11-20), SC-003 incl. addendum 4's live-write
+leg + SC-004 (2026-11-21), SC-007 container parity (2026-11-22; its
+sync-from-page leg WAIVED by owner — same SyncRunner path validated on
+the host in SC-003, in-container mount writes proven by 027); tasks
+T001–T037 ALL complete incl. owner-only T029) —
 ONE tabbed LAN page (Scan | Chat | Collection) served by the scan
 server, grown per owner decisions 2026-07-12: no new component,
 `frontend/` untouched; v1 = scan + chat + status + sync-trigger

@@ -98,7 +98,7 @@
 - [X] T026 [P] Update `collection-agent/README.md`: `serve` mode (with `scan` alias note), the three tabs, sync-from-page semantics (standard sync only; `--full` stays terminal), trust-model note (owner decision 2026-07-12), container invocation unchanged.
 - [X] T027 Full-suite + guard sweep: `cd collection-agent && pytest` green with no live API calls; verify the 027 packaging guards (`test_docker_packaging.py`) and ALL pre-028 scan tests pass unmodified (except wording pins updated in T013/T006 with intent preserved — list them in the PR description).
 - [X] T028 Write the post-merge CLAUDE.md state block for 028 on this branch (single-PR flow: feature + CLAUDE.md merged-state in one PR), replacing the in-flight pointer.
-- [ ] T029 Owner-only: execute the live-validation checklist in `specs/028-collection-web-ui/quickstart.md` (SC-001..SC-007 + busy/expiry/reload checks) and record results in quickstart.md.
+- [X] T029 Owner-only: execute the live-validation checklist in `specs/028-collection-web-ui/quickstart.md` (SC-001..SC-007 + busy/expiry/reload checks) and record results in quickstart.md. *(Closed 2026-11-22: all items recorded; SC-007's sync-from-page leg waived by owner decision — see quickstart.)*
 
 ---
 

@@ -110,9 +110,21 @@ stubbed LLM/Discogs clients, like the scan suite.
   *Owner-validated 2026-11-20 (same session). Going one step further —
   ADDING the scanned record mid-sync — surfaced replay addendum 4
   (FR-017), see SC-003.*
-- [ ] **SC-007 — container parity**: run `docker compose --profile
+- [x] **SC-007 — container parity**: run `docker compose --profile
   collection up collection-agent` unchanged; the tabbed page serves on
   :8022, chat works, sync-from-page works, exit behavior unchanged.
+  *Owner-validated 2026-11-22 (container session `20261122-001319Z`,
+  image rebuilt with `--build` incl. addenda 4–5): unchanged compose
+  invocation; tabbed page served on :8022 via the host LAN IP (027 R8
+  caveat — banner showed the 172.19.0.2 bridge IP); chat works; a
+  re-scan of an owned record showed the correct duplicate badge (fresh
+  session — this does NOT exercise addendum 5's add→sync→re-scan path,
+  which is pinned by `test_web_duplicate_after_sync.py`); Ctrl-C ⇒
+  container `Exited (0)`, no restart. **Sync-from-page leg WAIVED by
+  owner decision** (not run in the container): the identical SyncRunner
+  → `run_sync` path was validated live on the host venv the same day
+  (SC-003, incl. addendum 4), and in-container sync writes to the bind
+  mount were proven by 027 SC-003.*
 - [x] **Busy signal**: send a chat message while a turn is in flight
   (second device) → clear busy refusal, conversation not corrupted.
   *Owner-validated 2026-11-20 (block A).*
