@@ -27,3 +27,23 @@ semantics, 026's link fields + selected semantic + versions endpoint).
 - The serving process may now also run a background sync thread; scan
   endpoints remain available during it (shared Discogs rate budget —
   slower is in-contract, unavailable is not).
+
+## Delta — duplicate overlay counts a synced session add once (replay addendum 5, FR-018)
+
+Amends 022 data-model `DuplicateStatus.copies` ("snapshot instance count
++ session adds") — the response SHAPE is unchanged; only the count's
+arithmetic is corrected:
+
+- `copies` = snapshot instances of the release + session adds of the
+  release **not yet in the snapshot**. A session add is "in the
+  snapshot" iff the `instance_id` Discogs returned for it (recorded on
+  the session's `added` outcome since 022) is the `instance_id` of a
+  snapshot record. Adds with no recorded `instance_id` are always
+  counted (conservative — the pre-amendment arithmetic).
+- Unchanged: `state` (`in_collection` whenever a session add exists,
+  regardless of snapshot state), `added_this_session` (true iff the
+  release was added in this server run), `reason`, every degradation
+  rule, and the `/api/add` duplicate double-confirmation gate.
+- Why now: 028's same-process page sync made "add → Sync → scan the
+  same record again" the standard flow; the old sum then counted the
+  absorbed add twice ("2 copies" for one owned copy).

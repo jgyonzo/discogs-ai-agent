@@ -127,6 +127,38 @@ trade-off: a kept journal is reused by the next standard sync whenever
 it runs (pre-existing interrupted-sync semantics; `sync --full` ignores
 it).
 
+### Addendum 5 — duplicate badge double-counted a synced session add (2026-11-21, live validation)
+
+During SC-004 (block B, same server run as the SC-003 re-validation),
+scanning a record added earlier in that run showed "already in your
+collection — 2 copies (incl. this session)" — the owner has ONE copy.
+Cause: the 022 duplicate overlay computes `copies = snapshot instances +
+session adds`; that sum is right only while the session's adds are NOT
+yet in the snapshot. A same-process page sync (SC-003's standard flow:
+add → Sync → scan again) absorbs the add into the snapshot, and the
+session counted it a second time. Latent since 022 (only reachable with
+a terminal sync while the scan server kept running); 028 made it the
+normal path — the same session↔snapshot reconciliation family as
+addendum 4. Errs high only (never lets a duplicate through without the
+double-confirm), but displays a false count.
+
+New **FR-018** (below). Fix: the overlay subtracts session adds already
+absorbed by the snapshot, matched exactly by the `instance_id` Discogs
+returned for each add (already on the session's in-memory log/journal
+lines since 022). An add whose `instance_id` is unknown stays counted
+(conservative, pre-fix behavior); `added_this_session` and the
+`in_collection` state are unchanged, so the duplicate double-confirm
+gate behaves exactly as before. Confined to
+`scan/search.py::snapshot_duplicate_checker` — `scan/server.py` diff
+stays zero; recorded as a delta in `amendment-022-scan-api-4.md`.
+Owner-deferred UX follow-up observed in the same session (NOT fixed
+here): "Show other pressings" results render as a second list under
+"Other possibilities" with rows that look repeated — they are distinct
+releases (the endpoint dedupes by release_id against everything shown
+in the cycle) whose versions-payload fields make sibling pressings look
+alike; candidate future UX = one list grouped by master with the
+distinguishing fields (country/catno/format) emphasized.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Chat with the collection from any LAN device (Priority: P1)
@@ -217,6 +249,7 @@ The owner navigates one page with three tabs — Scan, Chat, Collection. The Sca
 - **FR-015**: The way the owner launches the server today — the existing subcommand, the container image, and the compose service from 027 — MUST keep working unchanged. If the launch command gains a new name, the existing name MUST remain a working alias (the 027 container default command must not break).
 - **FR-016**: The web conversation transcript lives for the duration of the server process (parity with a terminal chat session); persistence of chat history across restarts is out of scope. Reloading the page MUST NOT wipe the server-side conversation; the page reflects the current server-side conversation state on load.
 - **FR-017** (addendum 4): A sync during which any snapshot-affecting live write succeeded (scan add, chat-confirmed folder move — from this process or another) MUST NOT persist its result as `complete`: it persists `stale` with a warning naming the cause, keeps its enrichment journal so the next standard sync only enriches new releases, and reports a distinct `stale` terminal state so the page tells the owner to Sync again. A sync with no concurrent write behaves exactly as before. No live write is ever lost from the snapshot's honesty: either it is in the snapshot, or the snapshot is not `complete`.
+- **FR-018** (addendum 5): The scan duplicate overlay's copy count MUST count each owned copy once: a release added in the current server run MUST NOT be counted again once the snapshot already contains that add's instance (matched by the `instance_id` Discogs returned). Adds not (yet) in the snapshot, or whose `instance_id` is unknown, stay counted. The `in_collection` state, `added_this_session` flag, and the duplicate double-confirmation gate are unchanged.
 
 ### Key Entities
 

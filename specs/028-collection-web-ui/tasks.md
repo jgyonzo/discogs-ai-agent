@@ -114,6 +114,16 @@ Owner incident 2026-11-20 (spec addendum 4): a scan add during a page sync was o
 
 ---
 
+## Phase 8: Replay Addendum 5 — duplicate badge double-count (FR-018, 2026-11-21)
+
+Owner observation during SC-004: "2 copies (incl. this session)" for one owned copy after a same-process sync absorbed the session's add. Contract: delta appended to `contracts/amendment-022-scan-api-4.md`.
+
+- [X] T035 [P] Tests in `collection-agent/tests/unit/test_duplicate_session_reconcile.py` (fail first): session add absorbed by the snapshot (matching `instance_id`) ⇒ counted once; add not yet in the snapshot ⇒ still stacks; two adds, one absorbed ⇒ snapshot + 1; add with unknown `instance_id` ⇒ conservative count; `added_this_session`/state unchanged. 022's `TestDuplicateStatus` (log-less fake session) passes unmodified.
+- [X] T036 [P] Owner flow through the composed app in `collection-agent/tests/integration/test_web_duplicate_after_sync.py`: search → add → page sync whose snapshot contains the add's instance → search again ⇒ `copies == 1`, `added_this_session` true; re-add without confirm ⇒ still `needs_duplicate_confirmation` (gate unchanged).
+- [X] T037 Implementation in `collection-agent/src/collection_agent/scan/search.py::snapshot_duplicate_checker` (subtract absorbed session adds by `instance_id`; `scan/server.py` diff zero) + docs (spec addendum 5 + FR-018, contract delta, quickstart SC-004 record + deferred pressings-list UX note).
+
+---
+
 ## Dependencies & Execution Order
 
 - **Phase 1 → Phase 2 → stories**: T001 first; T002–T007 next (T002/T003/T004/T006 parallel; T005 after T004; T007 after T003+T006).
