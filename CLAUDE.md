@@ -3,6 +3,130 @@ Repo identity: the GitHub origin is `jgyonzo/discogs-ai-agent`
 (renamed from `discogs-analytics-agent` on 2026-07-05).
 
 **No feature is currently in flight.** Most recently merged:
+**028-collection-web-ui** (PR #18 — live validation CLOSED pre-merge,
+owner-validated: SC-001/SC-002 (2026-07-12/13), SC-005/SC-006 +
+busy/expiry/reload (2026-11-20), SC-003 incl. addendum 4's live-write
+leg + SC-004 (2026-11-21), SC-007 container parity (2026-11-22; its
+sync-from-page leg WAIVED by owner — same SyncRunner path validated on
+the host in SC-003, in-container mount writes proven by 027); tasks
+T001–T037 ALL complete incl. owner-only T029) —
+ONE tabbed LAN page (Scan | Chat | Collection) served by the scan
+server, grown per owner decisions 2026-07-12: no new component,
+`frontend/` untouched; v1 = scan + chat + status + sync-trigger
+(collection browsing = a Discogs link); folder-move execution allowed
+behind 022's no-auth trusted-LAN posture (explicitly extended). Web sync
+is standard-only (`--full` stays terminal — clarify session).
+`collection-agent` only, ZERO new deps, ZERO new Settings fields,
+94 new tests (545→639), zero pre-028 test files modified.
+(1) **Composition, not modification** (R1): NEW `web/` package;
+`web/server.py::create_web_app` calls the UNTOUCHED
+`scan.server.create_app` and registers `/api/chat`,
+`/api/chat/history`, `/api/chat/plan/confirm|cancel`,
+`/api/collection/status`, `POST /api/sync` on the same app;
+`scan/server.py` diff = zero; a bare-vs-composed BYTE-EQUALITY
+regression test drives the full 022/026 scan cycle through both apps
+(`test_web_scan_regression.py`). The static page (same guard-tested
+path `scan/static/index.html`) became the three-tab shell; Scan tab
+markup/JS functionally unchanged; all 022/026 page grep-guards pass
+unmodified. (2) **Web chat over the run_turn seam** (R2/R3):
+`web/chat.py::WebChat` — ONE shared conversation per process
+(single-user v1), non-blocking lock ⇒ 409 `chat_busy` (never queued),
+process-lived transcript (reload-safe via history endpoint; restart
+starts empty), and the LOAD-BEARING message-rewind: `Agent.run_turn`
+can leave a dangling `tool_calls` assistant message on an LLM
+exception, so the wrapper truncates `session.messages` to its pre-turn
+length on any failure (typed 502 `chat_error`, session stays usable —
+test-pinned). Write gate = 022-R9 over the existing WritePlan
+(agent-tools delta 12, SECOND sanctioned runtime gate): plan stays on
+`AgentSession.pending_plan`; confirm requires matching `plan_id` +
+`PROPOSED`, executes the unchanged runtime-only `execute_plan`
+(per-move live re-validation; snapshot PATCHED in place, stays
+complete — analyze-phase fix: the spec originally said mark-stale,
+wrong; only scan adds mark stale); request bodies can never inject
+move data (pinned); decline/new-turn/supersede/restart all void the
+plan (409 `no_pending_plan`/`plan_mismatch`). `propose_moves.detail` +
+system.md rule 5 made runtime-neutral (delta 13 — old text steered the
+LLM to say "confirm at the terminal" on the web). (3) **Web
+`start_sync` tool variant** (R4, delta 13): CLI's inline-sync ToolDef
+NOT registered; `web/agent_factory.py::build_web_agent` registers a
+same-name/same-schema variant delegating non-blocking to the
+SyncRunner (`started`/`already_running`; `full=true` ignored w/ honest
+note); `snapshot_status` shared verbatim; story-tool registration
+extracted from cli.py to `tools/registration.py` (both runtimes
+register the identical set; `organize_client_factory` param added for
+test injection). (4) **SyncRunner** (R5): `web/syncrun.py` — one
+DAEMON thread over the unchanged `run_sync(full=False)`, own client
+closed in finally, atomic check-and-start (409
+`sync_already_running`), states idle/running/complete/partial/failed
++ phase/done/total/warnings from the existing callbacks; kill-mid-sync
+= the already-designed interrupted case (journal resumes — 027 SC-003
+precedent). Post-sync freshness is STRUCTURAL (R6):
+`SnapshotStore.load()` re-reads per call, so chat/status/scan-dup all
+see the fresh snapshot with no reload bus — pinned by
+`test_web_freshness.py` against a future cache. (5) **One polling
+endpoint** (R7): `GET /api/collection/status` = snapshot block
+(`snapshot_status_payload` shape, null when absent) + `collection_url`
++ sync view; `collection_page_url` in `tools/common.py` is the ONLY
+`/user/` URL site (019 discipline, grep-guarded); page polls ~2s only
+while running. Chat tab shows a stale/missing banner + Sync action;
+header `syncHint` shows on every tab during a sync (scan/chat stay
+usable, slower — shared rate budget accepted, FR-013). (6) **CLI**
+(R9, delta 14): NEW `serve` subcommand; `scan` = fully working alias
+(027 container `CMD ["scan"]` + compose service byte-identical;
+packaging guards pass unmodified); same startup gates (token/identity,
+live folder check, OPENAI_API_KEY now covering vision AND chat).
+Artifacts: `specs/028-collection-web-ui/` (spec + clarify session
+2026-07-12, plan, research R1–R10, data-model, quickstart + owner
+checklist incl. busy/expiry/reload checks, tasks T001–T037, contracts:
+`web-ui-api.md` NEW; `amendment-017-agent-tools.md` deltas 12–14 —
+fourth amendment, after 018's 1–5/019's 6–8/020's 9–11;
+`amendment-022-scan-api-4.md` — tabbed page, all scan endpoints
+verbatim; `amendment-017-snapshot-schema.md` — FIRST amendment to 017's
+snapshot-schema contract (addendum 4, below); NO discogs-consumption
+amendment — zero new Discogs reads/writes, chat moves reuse 017 §4's
+contracted calls). (7) **Replay addendum 4 / FR-017** (owner incident
+2026-11-20, session `20261120-214751Z`): a scan add 2 min INTO a page
+sync was lost — the sync saved its pre-add instance listing as
+`complete`, overwriting the add's stale mark (lost update; the race
+existed since 022 cross-process, 028's FR-013 made it a supported
+flow). Fix in the shared snapshot core (`scan/server.py` diff still
+zero): durable `<snapshot>.live-writes` marker bumped by the only two
+live-write store paths (`mark_stale`, `patch_moved_instances` — even
+with no snapshot yet); `run_sync` captures it before its first request
+and compare-and-saves under a per-path in-process `write_lock()` — a
+changed marker downgrades `complete→stale` (partial stays partial) +
+cause warning, and KEEPS the enrichment journal so the follow-up sync
+only enriches new releases (seconds). SyncRunner gains a `stale`
+terminal state (web-ui-api §3); page says "Sync again to include it";
+terminal sync exits 3. Mutual exclusion rejected (contradicts FR-013).
+Incident reproduced end to end in `test_web_sync_live_write.py` (real
+`run_sync` held open mid-enrichment + `/api/add`). (8) **Replay addendum
+5 / FR-018** (SC-004, 2026-11-21): the scan duplicate badge read "2
+copies (incl. this session)" for ONE owned copy — 022's overlay sums
+snapshot instances + session adds, double-counting an add a same-process
+page sync had already absorbed (latent since 022; 028 made add → Sync →
+re-scan the standard flow). Fix confined to
+`scan/search.py::snapshot_duplicate_checker`: session adds whose Discogs
+`instance_id` (already on the session log since 022) is a snapshot
+record are subtracted; unknown instance_id ⇒ conservative old sum;
+state / `added_this_session` / double-confirm gate unchanged (delta in
+`amendment-022-scan-api-4.md`). Owner-deferred UX follow-up from the
+same session: "Show other pressings" renders a second list whose rows
+LOOK repeated (distinct releases — dedup by release_id — sibling
+pressings alike); future = one list grouped by master emphasizing
+country/catno/format. Out of
+scope kept: TLS/auth (022 T041 stance), multi-user sessions, token
+streaming, persisted chat history, in-page collection browsing,
+web `--full`, AWS deploy. Known follow-up candidate recorded during
+live validation (2026-07-13, owner incident; NOT a 028 defect —
+terminal chat fails identically): "most recent record" is unanswerable
+— `CollectionRecord.date_added` is synced on every record but exposed
+nowhere (not a registry attribute, not a top_n basis), so the LLM
+guesses; 029 candidate = date_added attribute + recency ranking
+(details + the related no-durable-chat-log observability gap in memory
+`project_029_date_added_recency_gap`).
+
+Prior feature:
 **027-dockerize-collection-agent** (PR #17, merged to main 2026-07-12 —
 live validation CLOSED pre-merge, owner-validated 2026-07-12: quickstart
 SC-001..SC-006 all recorded, incl. SC-001's phone scan-and-add through the

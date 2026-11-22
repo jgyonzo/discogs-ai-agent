@@ -11,9 +11,12 @@ them):
   extended by 018–022): sync-to-snapshot analytics, filtered listings,
   media links, click-to-play YouTube playlist links
   (`specs/020-youtube-playlist-integration/`), confirmation-gated
-  folder organization, from a terminal chat — plus a phone
-  **record-scan** mode (`specs/022-phone-record-scan/`) that adds
-  physical records to the collection from photos.
+  folder organization, from a terminal chat — plus a LAN **web page**
+  (`specs/028-collection-web-ui/`, grown from 022's phone record-scan
+  page) with three tabs: **Scan** (add physical records from photos,
+  `specs/022-phone-record-scan/`), **Chat** (the same conversation in
+  the browser, with an on-page confirm card for folder moves), and
+  **Collection** (snapshot status, one-tap sync, Discogs link).
 
 ## Environment variables (collection_agent)
 
@@ -70,7 +73,8 @@ pip install -e ".[dev]"
 python -m collection_agent sync      # first sync: minutes-scale, resumable (Ctrl-C safe)
 python -m collection_agent status    # snapshot age / completeness / counts / value
 python -m collection_agent chat      # conversation (es/en); /refresh /status /exit
-python -m collection_agent scan      # phone record-scan server (022); --host/--port
+python -m collection_agent serve     # LAN web page: Scan · Chat · Collection (028); --host/--port
+python -m collection_agent scan      # alias of serve (022 name; the 027 container CMD)
 python -m collection_agent eval-dataset  # build the labeled eval image dataset (023)
 python -m collection_agent eval-run      # measure scan identification accuracy (023)
 ```
@@ -104,7 +108,7 @@ migration, no fresh start.
 From the repo root:
 
 ```bash
-docker compose --profile collection up collection-agent   # scan server on :8022
+docker compose --profile collection up collection-agent   # web page (Scan·Chat·Collection) on :8022
 docker compose run --rm collection-agent sync             # one-shot; Ctrl-C-resumable
 docker compose run --rm collection-agent status
 docker compose run --rm collection-agent chat             # interactive (TTY allocated)
@@ -131,10 +135,46 @@ Notes:
   build context excludes them (`.dockerignore`, guard-tested). Contract:
   `specs/027-dockerize-collection-agent/contracts/docker-packaging.md`.
 
+### The web page (028): Scan · Chat · Collection
+
+`python -m collection_agent serve` (alias: `scan`) serves ONE
+phone-friendly page on the home LAN (the banner prints the URL to open —
+same Wi-Fi) with three tabs:
+
+- **Scan** — the 022/026 record-scan flow, unchanged (next section).
+- **Chat** — the terminal conversation in the browser: same tools, same
+  bilingual behavior, same tracing. One shared conversation per server
+  run (single-user v1); a turn in flight refuses a second one with a
+  clear busy signal, and the transcript survives page reloads (it lives
+  on the server until the process exits). Folder-move proposals render
+  as an explicit **confirmation card** — only tapping Confirm executes
+  (per-move live re-validation, per-item outcomes; successful moves are
+  patched into the snapshot in place). Cancelling, sending another
+  message, or restarting the server all void the plan; nothing is ever
+  written without the tap. Asking chat to "sync my collection" starts
+  the same background sync as the Collection tab's button.
+- **Collection** — snapshot status (state, counts, last sync, value), a
+  **Sync** button running the standard journaled sync in the background
+  with live progress (one sync at a time; a failed/interrupted run
+  resumes on the next tap; `sync --full` stays terminal-only), and a
+  "View your collection on Discogs ↗" link. While a sync runs, scanning
+  and chat stay usable — just slower (shared Discogs rate budget) — and
+  a header hint shows on every tab. If you add a record (or confirm a
+  folder move) *while* a sync runs, that sync may have listed your
+  collection before the change, so it finishes **stale** instead of
+  complete and asks you to Sync again — the second run is quick (only new
+  releases are fetched) and includes the change. This applies to a
+  terminal `sync` running alongside the server too. When the snapshot is
+  stale or missing, the Chat tab shows a banner with a Sync action.
+
+The same no-auth trusted-LAN posture as 022 applies to the whole page —
+now including folder moves (owner decision 2026-07-12); do not expose it
+beyond the LAN. Secrets never reach the browser. Contract:
+`specs/028-collection-web-ui/contracts/web-ui-api.md`.
+
 ### Record scan (022)
 
-`python -m collection_agent scan` serves a phone-friendly page on the
-home LAN (the banner prints the URL to open on the phone — same Wi-Fi).
+The Scan tab (phone-first: it is the default tab).
 Photograph a sleeve, center label, or barcode: a vision model extracts
 printed evidence, Discogs is searched in precision order (barcode →
 catalog number → artist+title → a free-text query composed from
@@ -160,14 +200,10 @@ additional selectable candidates with the same duplicate markers and
 confirmation flow; if more versions exist than are shown, the page says
 so. **Nothing is written until you tap a candidate and confirm** (duplicates ask twice;
 enforced server-side). Adds go to the configured folder; the snapshot
-is marked stale so the chat agent re-syncs before trusting counts.
+is marked stale so the chat agent re-syncs before trusting counts (the
+Collection tab's Sync button clears it without leaving the page).
 Every outcome lands in an append-only session journal
 (`data/scan-sessions/<session>.jsonl`) for post-session review.
-
-Plain-HTTP LAN service with **no page auth** (v1 assumption: trusted
-single-occupant network — anyone on the LAN who finds the port can
-trigger adds); do not expose it beyond the LAN. Secrets never reach the
-browser.
 
 ### Identification eval (023)
 
@@ -217,11 +253,14 @@ rate governor. The output is a standard run whose summary names the
 source run (`replay_of`); replays are themselves replayable.
 
 Exit codes: `0` ok · `1` unexpected error · `2` configuration error
-(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume).
+(missing/invalid token) · `3` sync ended partial (re-run `sync` to resume)
+— or stale, because a scan add / folder move landed while it ran (re-run
+`sync` to include it; quick).
 
 Full walkthrough: `specs/017-discogs-collection-agent/quickstart.md`
 (playlists: `specs/020-youtube-playlist-integration/quickstart.md`;
 record scan: `specs/022-phone-record-scan/quickstart.md`;
+web page: `specs/028-collection-web-ui/quickstart.md`;
 eval: `specs/023-scan-eval-harness/quickstart.md`;
 replay: `specs/025-eval-replay-barcode-gate/quickstart.md`) ·
 API notes: `docs/discogs_api_reference.md` ·

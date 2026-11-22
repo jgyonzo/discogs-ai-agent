@@ -61,6 +61,12 @@ def snapshot_duplicate_checker(store, session) -> DuplicateChecker:
     snapshot — a partial/stale snapshot's absence degrades to unknown,
     never to a false "not in your collection". A release added this
     session is always `in_collection` regardless of snapshot state.
+
+    Copies count each owned copy once (028 replay addendum 5, FR-018): a
+    session add whose Discogs `instance_id` is already a snapshot record
+    (absorbed by a sync in this same server run) is not counted again.
+    Adds with no recorded instance_id — or a session without a log — keep
+    the conservative pre-028 sum (may over-count, never under-count).
     """
     from collection_agent.models import Completeness
 
@@ -71,19 +77,33 @@ def snapshot_duplicate_checker(store, session) -> DuplicateChecker:
         snapshot = None
 
     counts: dict[int, int] = {}
+    snapshot_instance_ids: set[int] = set()
     completeness = None
     if snapshot is not None:
         completeness = snapshot.meta.completeness
         for record in snapshot.records:
             counts[record.release_id] = counts.get(record.release_id, 0) + 1
+            snapshot_instance_ids.add(record.instance_id)
+
+    # FR-018: this run's adds the snapshot already contains, per release
+    absorbed: dict[int, int] = {}
+    for entry in getattr(session, "log", None) or []:
+        if (
+            entry.outcome == "added"
+            and entry.release_id is not None
+            and entry.instance_id is not None
+            and entry.instance_id in snapshot_instance_ids
+        ):
+            absorbed[entry.release_id] = absorbed.get(entry.release_id, 0) + 1
 
     def check(release_id: int) -> DuplicateStatus:
         session_copies = session.added_release_ids.get(release_id, 0)
         snap_copies = counts.get(release_id, 0)
         if session_copies:
+            unsynced = max(session_copies - absorbed.get(release_id, 0), 0)
             return DuplicateStatus(
                 state="in_collection",
-                copies=snap_copies + session_copies,
+                copies=snap_copies + unsynced,
                 added_this_session=True,
             )
         if snapshot is None:

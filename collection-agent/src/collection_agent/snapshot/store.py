@@ -8,6 +8,13 @@
 - Completeness lifecycle: complete | partial | stale (see data-model.md
   state machine). A partial snapshot is never presented as complete —
   that's enforced at the serving layer (tools/common.py) using `meta`.
+- Live-write marker at `<path>.live-writes` (028 replay addendum 4,
+  FR-017; contracts/amendment-017-snapshot-schema.md): an opaque token
+  rewritten on every snapshot-affecting live write (`mark_stale`,
+  `patch_moved_instances`) so a running sync — this process or another —
+  can tell a write landed after its instance pass and refuse to claim
+  `complete`. `write_lock()` (per path, in-process) serializes those
+  read-modify-writes with the sync's final compare-and-save.
 """
 
 from __future__ import annotations
@@ -15,16 +22,34 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
 from collection_agent.models import Completeness, Snapshot
 
 
+# One lock per snapshot path, shared by every SnapshotStore instance on it
+# (the scan server, chat tools and the SyncRunner may hold different ones).
+_WRITE_LOCKS: dict[Path, threading.RLock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _write_lock_for(path: Path) -> threading.RLock:
+    key = path.resolve()
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(key)
+        if lock is None:
+            lock = _WRITE_LOCKS[key] = threading.RLock()
+        return lock
+
+
 class SnapshotStore:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.journal_path = self.path.with_name(self.path.name + ".sync.tmp.json")
+        self.live_writes_path = self.path.with_name(self.path.name + ".live-writes")
 
     # -- snapshot ------------------------------------------------------------
 
@@ -48,13 +73,18 @@ class SnapshotStore:
         os.replace(tmp, self.path)
 
     def mark_stale(self) -> None:
-        """Flip a complete snapshot to stale (after a live write succeeded)."""
-        snap = self.load()
-        if snap is None:
-            return
-        if snap.meta.completeness == Completeness.COMPLETE:
-            snap.meta.completeness = Completeness.STALE
-            self.save(snap)
+        """Flip a complete snapshot to stale (after a live write succeeded).
+
+        Bumps the live-write marker first, unconditionally — even with no
+        snapshot yet — so a sync running right now ends stale (FR-017)."""
+        with self.write_lock():
+            self.record_live_write()
+            snap = self.load()
+            if snap is None:
+                return
+            if snap.meta.completeness == Completeness.COMPLETE:
+                snap.meta.completeness = Completeness.STALE
+                self.save(snap)
 
     def patch_moved_instances(
         self, moves: list[tuple[int, int]], new_folder: tuple[int, str] | None = None
@@ -64,8 +94,17 @@ class SnapshotStore:
         moves: list of (instance_id, target_folder_id).
         new_folder: (folder_id, name) when the write created a folder.
         Keeps the snapshot `complete` (patched in place, per data-model
-        state machine: "or patched in place: stays complete").
+        state machine: "or patched in place: stays complete") — but bumps
+        the live-write marker, so a sync running right now ends stale
+        instead of overwriting the move with its pre-move listing (FR-017).
         """
+        with self.write_lock():
+            self.record_live_write()
+            self._patch_moved_instances_locked(moves, new_folder)
+
+    def _patch_moved_instances_locked(
+        self, moves: list[tuple[int, int]], new_folder: tuple[int, str] | None
+    ) -> None:
         snap = self.load()
         if snap is None:
             return
@@ -87,6 +126,27 @@ class SnapshotStore:
             if f.folder_id != 0:  # folder 0 = All (virtual)
                 f.count = counts.get(f.folder_id, 0)
         self.save(snap)
+
+    # -- live-write marker + write lock (028 addendum 4, FR-017) ---------------
+
+    def write_lock(self) -> threading.RLock:
+        """Per-path in-process lock: snapshot read-modify-writes and the
+        sync's final compare-and-save never interleave."""
+        return _write_lock_for(self.path)
+
+    def record_live_write(self) -> None:
+        """Atomically rewrite the marker with a fresh opaque token."""
+        self.live_writes_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.live_writes_path.with_name(self.live_writes_path.name + ".tmp")
+        tmp.write_text(uuid.uuid4().hex, encoding="utf-8")
+        os.replace(tmp, self.live_writes_path)
+
+    def live_write_marker(self) -> str | None:
+        """Current token (compare for equality only), None if never written."""
+        try:
+            return self.live_writes_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
 
     # -- enrichment journal ----------------------------------------------------
 

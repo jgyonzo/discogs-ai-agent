@@ -13,6 +13,12 @@ The final snapshot is written once, atomically, at the end. Completeness:
 - complete: every unique release enriched or 404-warned
 - partial:  some enrichments failed (server errors) or the sync was
             interrupted before finishing (journal survives for resume)
+- stale:    every release enriched, but a live write (scan add / folder
+            move) landed while the sync ran — its instance pass may predate
+            it (028 replay addendum 4, FR-017). Detected via the store's
+            live-write marker, captured before the first request and
+            re-checked under the store's write lock at save time; the
+            journal is kept so the follow-up sync only enriches new releases.
 
 Progress reporting is callback-based (`on_progress(phase, done, total)`) so
 the CLI can render rich bars and tests can stay silent.
@@ -61,6 +67,9 @@ def run_sync(
     warnings: list[str] = []
     started = time.monotonic()
     requests_before = 0  # governor doesn't count; we count coarse steps
+    # FR-017: captured BEFORE the first Discogs request, so any live write
+    # whose effect the instance pass could have missed changes it
+    live_writes_at_start = store.live_write_marker()
 
     # --- phase 1: identity, folders, value, instances -----------------------
     identity = client.get_identity()
@@ -150,23 +159,38 @@ def run_sync(
         else Completeness.PARTIAL
     )
 
-    meta = SnapshotMeta(
-        username=username,
-        synced_at=enriched_at,
-        completeness=completeness,
-        instance_count=len(records),
-        unique_release_count=len(unique_ids),
-        enriched_count=enriched_count,
-        collection_value=value,
-        sync_stats=SyncStats(
-            requests=requests_before + len(pending) + 3,
-            duration_s=round(time.monotonic() - started, 1),
-            warnings=warnings,
-        ),
-    )
-    store.save(Snapshot(meta=meta, folders=folders, records=records))
-    if completeness == Completeness.COMPLETE:
-        store.clear_journal()  # everything is in the snapshot now
+    # compare-and-save under the store's write lock: a live write either
+    # lands before this block (marker changed ⇒ stale) or after it (its own
+    # mark_stale/patch then applies on top of this snapshot) — never lost
+    with store.write_lock():
+        if store.live_write_marker() != live_writes_at_start:
+            message = (
+                "a record was added or moved on Discogs during this sync and "
+                "may be missing from this snapshot — run sync again to include "
+                "it (quick: only new releases are fetched)"
+            )
+            warnings.append(message)
+            say(message)
+            if completeness == Completeness.COMPLETE:
+                completeness = Completeness.STALE  # partial stays partial
+
+        meta = SnapshotMeta(
+            username=username,
+            synced_at=enriched_at,
+            completeness=completeness,
+            instance_count=len(records),
+            unique_release_count=len(unique_ids),
+            enriched_count=enriched_count,
+            collection_value=value,
+            sync_stats=SyncStats(
+                requests=requests_before + len(pending) + 3,
+                duration_s=round(time.monotonic() - started, 1),
+                warnings=warnings,
+            ),
+        )
+        store.save(Snapshot(meta=meta, folders=folders, records=records))
+        if completeness == Completeness.COMPLETE:
+            store.clear_journal()  # everything is in the snapshot now
     return meta
 
 
