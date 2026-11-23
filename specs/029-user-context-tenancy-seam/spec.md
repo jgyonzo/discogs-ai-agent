@@ -35,6 +35,28 @@ Terms used throughout:
 - **Deployment configuration** — settings that describe the running app as a
   whole (models, limits, URLs), as opposed to values that belong to one user.
 
+## Clarifications
+
+### Session 2026-11-23 (owner review and plan-time findings)
+
+- The owner accepted the three recorded assumptions: the implicit local user
+  keeps today's data paths; pre-existing tests pass unmodified; the shared
+  rate budget applies to the local serving runtime too.
+- Scope of "the process" (FR-005, FR-015): the seam and the shared budget
+  cover the serving runtime. The one-shot terminal commands are
+  single-threaded owner tools that already act for the implicit local user;
+  routing them through the context would add risk and no behavior, so they
+  are untouched.
+- Secrets audit (FR-007, FR-020): planning found that the personal-token
+  unwrap can stay where it is, so the audit passes unmodified and the
+  exception FR-007 anticipated is not needed.
+- Per-user configuration (FR-019, FR-024): the existing test suite builds the
+  configuration object with per-user fields, so those fields cannot leave it.
+  The requirement is therefore on *assignment* (one composition point) and on
+  a fail-closed view for other users, not on forbidding reads.
+- Throttling (FR-015): a throttling response to one user holds back all
+  users, because the limit it signals is shared.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - The owner's local workflow is provably unchanged (Priority: P1)
@@ -282,15 +304,17 @@ defaults.
   `scan`, `eval-dataset`, `eval-run`) MUST operate as the implicit local user
   built from `.env`, with unchanged arguments, output, exit codes, startup
   checks (including their order) and file effects. Every HTTP endpoint
-  published by 022, 026 and 028 MUST keep its contract verbatim.
+  published by 022, 026 and 028 MUST keep its contract verbatim. The serving
+  runtime (`serve`/`scan`) MUST be composed through the implicit local user's
+  context. The one-shot terminal commands already act for that user by
+  construction and are left as they are.
 - **FR-006**: The implicit local user's data MUST stay at today's locations
   with today's file names and formats. The feature MUST NOT migrate, move or
   copy existing data, and the 027 host/container interchangeability MUST hold
   unchanged.
 - **FR-007**: All pre-existing tests MUST pass unmodified. Any change to a
   pre-existing test is an exception that MUST be individually justified and
-  recorded in the feature's task notes (the secrets-audit allowlist in
-  FR-020 is the one anticipated case).
+  recorded in the feature's task notes. None is anticipated.
 - **FR-008**: No entry point shipped by this feature may serve any user other
   than the implicit local user, and no request input — parameter, header,
   cookie, body field or path segment — may select a user. Selecting a user
@@ -324,10 +348,13 @@ defaults.
 
 **Resources shared by all users**
 
-- **FR-015**: All Discogs requests made by the process, for every user and
-  every purpose, MUST be paced by one shared rate-limit budget that reflects
-  the most recent budget reported by Discogs, whichever user's response
-  reported it. The shared pacing MUST be correct under concurrent use.
+- **FR-015**: All Discogs requests made by the serving runtime, for every
+  user and every purpose, MUST be paced by one shared rate-limit budget that
+  reflects the most recent budget reported by Discogs, whichever user's
+  response reported it. A throttling response to one user MUST hold back
+  every user for the duration of its backoff. The shared pacing MUST be
+  correct under concurrent use. Pacing of the one-shot terminal commands is
+  unchanged.
 - **FR-016**: This feature MUST NOT introduce prioritization or queuing of
   Discogs traffic. Concurrent syncs by different users are allowed and simply
   share the budget. Scheduling is a later feature.
@@ -348,14 +375,15 @@ defaults.
   and per-user values. Per-user values are: Discogs credential, Discogs
   username, snapshot location, scan journal location and scan target folder.
   Photo retention and the eval directories stay deployment-level and apply to
-  the implicit local user only. Per-user values MUST be read in one
-  composition point, not scattered through the code.
+  the implicit local user only. Per-user values MUST be assigned at one
+  composition point and reach the rest of the code only as part of that
+  user's effective configuration. A non-implicit user's effective
+  configuration MUST NOT contain the implicit user's credential or username,
+  so that no code path can act as the owner on another user's behalf.
 - **FR-020**: Discogs credentials MUST never appear in logs, exceptions,
   snapshots, journals, traces or HTTP responses. The existing secrets audit
-  MUST keep passing; if the sanctioned place where a secret is unwrapped
-  moves, the audit's allowlist is updated deliberately and the number of
-  sanctioned places MUST NOT grow beyond what the new composition point
-  requires.
+  MUST keep passing unmodified: the number and location of the sanctioned
+  places where a secret is unwrapped do not change.
 - **FR-021**: Deployment configuration MUST be loadable without any Discogs
   credential present, so that contexts for other users can be composed.
   Commands that act as the implicit local user MUST still fail with the
@@ -370,9 +398,11 @@ defaults.
   scan, add, chat, move and sync cycle for two contexts in one process and
   assert the isolation and concurrency properties of FR-009 through FR-013.
 - **FR-024**: Structural guards MUST pin the seam so it cannot erode
-  silently: per-user configuration values are read only at the composition
-  point (FR-019), and LLM and Discogs access for a user is obtained only
-  through that user's context (FR-017, FR-018).
+  silently: per-user configuration values are assigned only at the
+  composition point and the set of places that read them cannot grow
+  unnoticed (FR-019); LLM and Discogs access for a user is obtained only
+  through that user's context (FR-017, FR-018); and no entry point or request
+  input can select a user (FR-008).
 - **FR-025**: Contract documents that describe a process-wide singleton — the
   one shared conversation and one sync runner of 028, the one session per
   server run of 022, the per-client governor of 017 — MUST be amended to
@@ -450,13 +480,11 @@ defaults.
   the per-user data root. This costs a small asymmetry between the implicit
   user and every other user, and buys zero migration, zero risk to the
   owner's live data, and unchanged 027 container behavior.
-- How the seam is built is a planning decision, including whether the scan
-  server's per-run state is extracted into a per-user object or the existing
-  app is instantiated once per user. Source changes under
-  `collection-agent/src/` are expected, including in `scan/server.py`: 028's
-  "zero diff in `scan/server.py`" was that feature's constraint, not a
-  standing rule. What is fixed is the outcome: contracts verbatim and tests
-  unmodified.
+- How the seam is built was left to planning and is resolved in
+  `research.md` R1–R2: the existing web app is instantiated once per user
+  context, and per-user values travel as an effective settings view. The
+  `scan/` and `web/` packages are not edited. What the spec fixes is the
+  outcome: contracts verbatim and tests unmodified.
 - Sharing one rate-limit budget is correct for the single local user too:
   today the scan server, the sync runner and the folder-move tools each pace
   independently against the same per-IP allowance. Unifying them changes

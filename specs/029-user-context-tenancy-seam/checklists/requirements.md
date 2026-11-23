@@ -41,7 +41,7 @@
   authentication, the OAuth signer, scheduling and metering to later items.
 - Three choices were made as recorded assumptions rather than questions,
   because each has a default the roadmap or the repo's precedent supports.
-  The owner may want to revisit them in `/speckit.clarify`:
+  The owner accepted all three on 2026-11-23 (spec, Clarifications):
   1. The implicit local user keeps today's data paths (no migration) instead
      of moving under the per-user data root.
   2. Pre-existing tests must pass unmodified, with individually justified
@@ -49,7 +49,8 @@
      refactor that touches constructor boundaries.
   3. Unifying the rate-limit governor applies to local mode as well, accepted
      as a marginal pacing change with no contract effect.
-- Deliberately deferred to planning as design decisions, not spec
-  ambiguities: the mechanism for per-user scan state (extract an engine vs.
-  one app instance per user), the user-id grammar, the name and default of
-  the per-user data root setting, and the exact form of the structural guards.
+- Deferred to planning as design decisions and since resolved in
+  `research.md`: the mechanism for per-user scan state (R1), per-user
+  configuration (R2), the user-id grammar and data root setting (R7), and the
+  structural guards (R11). Plan-time findings that refined requirement wording
+  are recorded in the spec's Clarifications section.
